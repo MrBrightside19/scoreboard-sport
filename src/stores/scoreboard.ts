@@ -9,7 +9,7 @@ import {
   getStorageKey,
   writeMatchIdToStorage,
 } from '@/utils/localSync'
-import { tickDown } from '@/utils/clock'
+import { tickDown, interpolateClock } from '@/utils/clock'
 
 export const useScoreboardStore = defineStore('scoreboard', () => {
   const matchId = ref<string | null>(null)
@@ -84,6 +84,27 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     }
 
     state.value = createDefaultScoreboardState()
+    persistLocal()
+  }
+
+  function syncElapsedAndPause(): void {
+    if (state.value.isPaused) {
+      patch({ updatedAt: new Date().toISOString() })
+      return
+    }
+
+    const syncedTime = interpolateClock(
+      state.value.timeGame,
+      state.value.isPaused,
+      state.value.updatedAt,
+    )
+
+    state.value = {
+      ...state.value,
+      timeGame: syncedTime,
+      isPaused: true,
+      updatedAt: new Date().toISOString(),
+    }
     persistLocal()
   }
 
@@ -204,5 +225,6 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     stopWriterTick,
     replaceState,
     persistLocal,
+    syncElapsedAndPause,
   }
 })

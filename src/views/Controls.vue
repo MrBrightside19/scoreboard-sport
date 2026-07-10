@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
+import { Modal } from 'ant-design-vue'
 import { useScoreboardStore } from '@/stores/scoreboard'
 import { useAuthStore } from '@/stores/auth'
 import { fetchMatchState, publishMatchState } from '@/services/matchSync'
@@ -41,8 +42,29 @@ const advancing = ref(false)
 const advanceError = ref<string | null>(null)
 const tournamentContext = ref<{ tournamentId: string; court: string } | null>(null)
 const hasNextMatch = ref(false)
+const skipLeaveGuard = ref(false)
 
 let publishTimer: number | null = null
+
+async function finalizeOnExit(): Promise<void> {
+  store.stopWriterTick()
+  if (publishTimer) {
+    clearInterval(publishTimer)
+    publishTimer = null
+  }
+  if (!matchId.value || !hydrated.value || !isSupabaseConfigured) return
+  hydrated.value = false
+  store.syncElapsedAndPause()
+  await publish()
+}
+
+function onBeforeUnload(event: BeforeUnloadEvent): void {
+  if (!matchId.value || !hydrated.value || skipLeaveGuard.value) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+
+let leaveModalOpen = false
 
 async function loadTournamentContext(id: string): Promise<void> {
   tournamentContext.value = null
@@ -99,6 +121,7 @@ async function goToNextMatch(): Promise<void> {
       return
     }
 
+    skipLeaveGuard.value = true
     await router.replace({
       name: 'controls',
       query: {
@@ -172,6 +195,7 @@ watch(
 )
 
 onMounted(() => {
+  window.addEventListener('beforeunload', onBeforeUnload)
   if (matchId.value) {
     publishTimer = window.setInterval(() => {
       if (hydrated.value) void publish()
@@ -179,9 +203,44 @@ onMounted(() => {
   }
 })
 
+onBeforeRouteLeave((_to, _from, next) => {
+  if (skipLeaveGuard.value || !matchId.value || !hydrated.value) {
+    skipLeaveGuard.value = false
+    next()
+    return
+  }
+
+  if (leaveModalOpen) {
+    next(false)
+    return
+  }
+
+  leaveModalOpen = true
+  Modal.confirm({
+    title: '¿Cerrar la mesa de control?',
+    content:
+      'Si sales, el reloj se pausará y dejarás de operar el partido. El overlay seguirá mostrando el marcador pausado.',
+    okText: 'Salir',
+    cancelText: 'Quedarme',
+    okType: 'danger',
+    onOk: async () => {
+      skipLeaveGuard.value = true
+      await finalizeOnExit()
+      leaveModalOpen = false
+      next()
+    },
+    onCancel: () => {
+      leaveModalOpen = false
+      next(false)
+    },
+  })
+})
+
 onUnmounted(() => {
-  store.stopWriterTick()
-  if (publishTimer) clearInterval(publishTimer)
+  window.removeEventListener('beforeunload', onBeforeUnload)
+  if (!skipLeaveGuard.value) {
+    void finalizeOnExit()
+  }
 })
 </script>
 
