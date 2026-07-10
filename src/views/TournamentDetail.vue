@@ -7,11 +7,8 @@ import {
   fetchTournamentMatches,
   importTournamentCsv,
   startTournamentMatch,
-  finishTournamentMatch,
-  getNextScheduledMatch,
   updateTournamentStatus,
 } from '@/services/tournamentService'
-import { fetchMatchState } from '@/services/matchSync'
 import { parseCsv, buildCsvTemplate } from '@/utils/csv'
 import { calculateStandings } from '@/utils/standings'
 import { writeMatchIdToStorage } from '@/utils/localSync'
@@ -51,6 +48,15 @@ async function load(): Promise<void> {
   }
 }
 
+function openControls(matchId: string): void {
+  writeMatchIdToStorage(matchId)
+  window.open(
+    router.resolve({ name: 'controls', query: { matchId } }).href,
+    '_blank',
+    'noopener',
+  )
+}
+
 function downloadTemplate(): void {
   const blob = new Blob([buildCsvTemplate()], { type: 'text/csv' })
   const url = URL.createObjectURL(blob)
@@ -79,21 +85,7 @@ async function onCsvUpload(file: File): Promise<void> {
 async function startMatch(tm: TournamentMatch): Promise<void> {
   if (!auth.profile) return
   const matchId = await startTournamentMatch(tm, auth.profile.id)
-  writeMatchIdToStorage(matchId)
-  window.open(router.resolve({ name: 'board', query: { matchId } }).href, '_blank')
-  await router.push({ name: 'controls', query: { matchId } })
-}
-
-async function nextMatch(tm: TournamentMatch): Promise<void> {
-  if (!tournament.value || !tm.match_id) return
-  const record = await fetchMatchState(tm.match_id)
-  if (record?.state) {
-    await finishTournamentMatch(tm, record.state)
-  }
-  const next = await getNextScheduledMatch(tournament.value.id, tm.court)
-  if (next) {
-    await startMatch(next)
-  }
+  openControls(matchId)
   await load()
 }
 
@@ -150,31 +142,26 @@ onMounted(() => void load())
           <a-table-column title="Cancha" data-index="court" width="80" />
           <a-table-column title="Tiempo" data-index="game_time" width="80" />
           <a-table-column title="Estado" data-index="status" width="100" />
-          <a-table-column title="Acciones" width="200">
+          <a-table-column title="Acciones" width="140">
             <template #default="{ record }">
-              <a-button
-                v-if="record.status === 'scheduled'"
-                type="link"
-                size="small"
-                @click="startMatch(record)"
-              >
-                Iniciar
-              </a-button>
-              <a-button
-                v-if="record.status === 'live'"
-                type="link"
-                size="small"
-                @click="nextMatch(record)"
-              >
-                Siguiente
-              </a-button>
-              <router-link
-                v-if="tournament"
-                :to="`/live/torneo/${tournament.id}/${record.court}`"
-                target="_blank"
-              >
-                <a-button type="link" size="small">Live cancha</a-button>
-              </router-link>
+              <div class="detail__match-actions">
+                <a-button
+                  v-if="record.status === 'scheduled'"
+                  type="primary"
+                  size="small"
+                  @click="startMatch(record)"
+                >
+                  Iniciar
+                </a-button>
+                <a-button
+                  v-if="record.status === 'live' && record.match_id"
+                  type="primary"
+                  size="small"
+                  @click="openControls(record.match_id)"
+                >
+                  Controles
+                </a-button>
+              </div>
             </template>
           </a-table-column>
         </a-table>
@@ -218,5 +205,12 @@ onMounted(() => void load())
     margin: 0 0 1rem;
     font-size: 1.1rem;
   }
+}
+
+.detail__match-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
 }
 </style>
