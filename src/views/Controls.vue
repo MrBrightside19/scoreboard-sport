@@ -10,6 +10,7 @@ import {
 } from '@/services/tournamentService'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
 import { readMatchIdFromStorage } from '@/utils/localSync'
+import { normalizeGameTime } from '@/utils/clock'
 import { MAX_PERIODS } from '@/types/hockeyScoreboard'
 
 const route = useRoute()
@@ -29,7 +30,7 @@ const matchFallback = computed((): Pick<
   const visit = route.query.visit as string | undefined
   const time = route.query.time as string | undefined
   if (!local || !visit) return undefined
-  return { localTeam: local, visitTeam: visit, timeGame: time ?? '20:00' }
+  return { localTeam: local, visitTeam: visit, timeGame: normalizeGameTime(time ?? '20:00') }
 })
 
 const publishing = ref(false)

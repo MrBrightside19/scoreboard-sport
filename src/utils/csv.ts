@@ -1,4 +1,5 @@
 import type { CsvMatchRow } from '@/types/tournament'
+import { normalizeGameTime } from '@/utils/clock'
 
 const REQUIRED_COLUMNS = ['local', 'visita', 'tiempo_juego', 'cancha'] as const
 
@@ -33,7 +34,7 @@ export function parseCsv(text: string): CsvMatchRow[] {
     return {
       local: row.local,
       visita: row.visita,
-      tiempo_juego: row.tiempo_juego,
+      tiempo_juego: normalizeGameTime(row.tiempo_juego),
       cancha: row.cancha,
       fecha_programada: row.fecha_programada || undefined,
     }

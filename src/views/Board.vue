@@ -5,6 +5,7 @@ import ScoreBoard from '@/components/ScoreBoard.vue'
 import { useScoreboardStore } from '@/stores/scoreboard'
 import { useLocalScoreboardSync } from '@/composables/useLocalScoreboardSync'
 import { readMatchIdFromStorage } from '@/utils/localSync'
+import { normalizeGameTime } from '@/utils/clock'
 
 const route = useRoute()
 const store = useScoreboardStore()
@@ -22,7 +23,7 @@ const matchFallback = computed((): Pick<
   const visit = route.query.visit as string | undefined
   const time = route.query.time as string | undefined
   if (!local || !visit) return undefined
-  return { localTeam: local, visitTeam: visit, timeGame: time ?? '20:00' }
+  return { localTeam: local, visitTeam: visit, timeGame: normalizeGameTime(time ?? '20:00') }
 })
 
 useLocalScoreboardSync(() => matchId.value)

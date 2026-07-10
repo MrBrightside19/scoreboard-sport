@@ -1,5 +1,24 @@
+export function normalizeGameTime(time: string): string {
+  const trimmed = time.trim()
+  if (!trimmed) return '20:00'
+
+  if (trimmed.includes(':')) {
+    const [minsPart, secsPart = '0'] = trimmed.split(':')
+    const mins = Number.parseInt(minsPart, 10)
+    const secs = Number.parseInt(secsPart, 10)
+    if (Number.isNaN(mins)) return '20:00'
+    const total = mins * 60 + (Number.isNaN(secs) ? 0 : secs)
+    return formatSecondsToTime(total)
+  }
+
+  const minutes = Number.parseInt(trimmed, 10)
+  if (Number.isNaN(minutes)) return '20:00'
+  return formatSecondsToTime(minutes * 60)
+}
+
 export function parseTimeToSeconds(time: string): number {
-  const [mins, secs] = time.split(':').map((part) => Number.parseInt(part, 10))
+  const normalized = normalizeGameTime(time)
+  const [mins, secs] = normalized.split(':').map((part) => Number.parseInt(part, 10))
   if (Number.isNaN(mins) || Number.isNaN(secs)) return 0
   return mins * 60 + secs
 }

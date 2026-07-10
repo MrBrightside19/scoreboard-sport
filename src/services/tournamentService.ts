@@ -7,6 +7,7 @@ import type {
 import type { ScoreboardState } from '@/types/hockeyScoreboard'
 import { createDefaultScoreboardState } from '@/types/hockeyScoreboard'
 import { generateMatchId } from '@/utils/matchId'
+import { normalizeGameTime } from '@/utils/clock'
 import { supabaseRest } from './supabaseRest'
 import { createMatch, finishMatch } from './matchSync'
 import { upsertCourtStream } from './tournamentCourtStream'
@@ -81,7 +82,7 @@ export async function importTournamentCsv(
     tournament_id: tournamentId,
     local_team: row.local,
     visit_team: row.visita,
-    game_time: row.tiempo_juego,
+    game_time: normalizeGameTime(row.tiempo_juego),
     court: row.cancha,
     scheduled_at: row.fecha_programada
       ? new Date(row.fecha_programada.replace(' ', 'T')).toISOString()
@@ -105,7 +106,7 @@ export async function startTournamentMatch(
   const state = createDefaultScoreboardState(
     tournamentMatch.local_team,
     tournamentMatch.visit_team,
-    tournamentMatch.game_time,
+    normalizeGameTime(tournamentMatch.game_time),
   )
 
   await createMatch(matchId, state, organizerId)
@@ -189,7 +190,7 @@ export async function advanceToNextTournamentMatch(
     matchId: newMatchId,
     localTeam: next.local_team,
     visitTeam: next.visit_team,
-    timeGame: next.game_time,
+    timeGame: normalizeGameTime(next.game_time),
     tournamentId: current.tournament_id,
     court: current.court,
   }

@@ -10,6 +10,7 @@ import {
   updateTournamentStatus,
 } from '@/services/tournamentService'
 import { parseCsv, buildCsvTemplate } from '@/utils/csv'
+import { normalizeGameTime } from '@/utils/clock'
 import { calculateStandings } from '@/utils/standings'
 import { writeMatchIdToStorage } from '@/utils/localSync'
 import type { Tournament, TournamentMatch } from '@/types/tournament'
@@ -58,7 +59,7 @@ function openControls(tm: TournamentMatch): void {
         matchId: tm.match_id,
         local: tm.local_team,
         visit: tm.visit_team,
-        time: tm.game_time,
+        time: normalizeGameTime(tm.game_time),
         tournamentId: tm.tournament_id,
       },
     }).href,
@@ -150,7 +151,11 @@ onMounted(() => void load())
           <a-table-column title="Local" data-index="local_team" />
           <a-table-column title="Visita" data-index="visit_team" />
           <a-table-column title="Cancha" data-index="court" width="80" />
-          <a-table-column title="Tiempo" data-index="game_time" width="80" />
+          <a-table-column title="Tiempo" width="80">
+            <template #default="{ record }">
+              {{ normalizeGameTime(record.game_time) }}
+            </template>
+          </a-table-column>
           <a-table-column title="Estado" data-index="status" width="100" />
           <a-table-column title="Acciones" width="140">
             <template #default="{ record }">
