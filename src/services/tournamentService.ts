@@ -153,6 +153,48 @@ export async function finishTournamentMatch(
   })
 }
 
+export async function fetchTournamentMatchByMatchId(
+  matchId: string,
+): Promise<TournamentMatch | null> {
+  const rows = await supabaseRest<TournamentMatch[]>(
+    `tournament_matches?match_id=eq.${matchId}&select=*&limit=1`,
+  )
+  return rows[0] ?? null
+}
+
+export async function advanceToNextTournamentMatch(
+  currentMatchId: string,
+  state: ScoreboardState,
+  organizerId: string,
+): Promise<{
+  matchId: string
+  localTeam: string
+  visitTeam: string
+  timeGame: string
+  tournamentId: string
+  court: string
+} | null> {
+  const current = await fetchTournamentMatchByMatchId(currentMatchId)
+  if (!current) {
+    throw new Error('Este partido no pertenece a un torneo.')
+  }
+
+  await finishTournamentMatch(current, state)
+
+  const next = await getNextScheduledMatch(current.tournament_id, current.court)
+  if (!next) return null
+
+  const newMatchId = await startTournamentMatch(next, organizerId)
+  return {
+    matchId: newMatchId,
+    localTeam: next.local_team,
+    visitTeam: next.visit_team,
+    timeGame: next.game_time,
+    tournamentId: current.tournament_id,
+    court: current.court,
+  }
+}
+
 export async function getNextScheduledMatch(
   tournamentId: string,
   court: string,

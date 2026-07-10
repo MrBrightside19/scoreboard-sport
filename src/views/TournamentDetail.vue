@@ -59,6 +59,7 @@ function openControls(tm: TournamentMatch): void {
         local: tm.local_team,
         visit: tm.visit_team,
         time: tm.game_time,
+        tournamentId: tm.tournament_id,
       },
     }).href,
     '_blank',

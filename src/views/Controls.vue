@@ -1,14 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useScoreboardStore } from '@/stores/scoreboard'
 import { useAuthStore } from '@/stores/auth'
-import { publishMatchState } from '@/services/matchSync'
+import { fetchMatchState, publishMatchState } from '@/services/matchSync'
+import {
+  advanceToNextTournamentMatch,
+  getNextScheduledMatch,
+} from '@/services/tournamentService'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
 import { readMatchIdFromStorage } from '@/utils/localSync'
 import { MAX_PERIODS } from '@/types/hockeyScoreboard'
 
 const route = useRoute()
+const router = useRouter()
 const store = useScoreboardStore()
 const auth = useAuthStore()
 
@@ -30,15 +35,84 @@ const matchFallback = computed((): Pick<
 const publishing = ref(false)
 const copied = ref<string | null>(null)
 const hydrated = ref(false)
+const advancing = ref(false)
+const advanceError = ref<string | null>(null)
+const tournamentContext = ref<{ tournamentId: string; court: string } | null>(null)
+const hasNextMatch = ref(false)
 
 let publishTimer: number | null = null
 
+async function loadTournamentContext(id: string): Promise<void> {
+  tournamentContext.value = null
+  hasNextMatch.value = false
+
+  if (!isSupabaseConfigured) return
+
+  try {
+    const record = await fetchMatchState(id)
+    if (!record?.tournament_id || !record.court) return
+
+    tournamentContext.value = {
+      tournamentId: record.tournament_id,
+      court: record.court,
+    }
+    const next = await getNextScheduledMatch(record.tournament_id, record.court)
+    hasNextMatch.value = Boolean(next)
+  } catch {
+    tournamentContext.value = null
+  }
+}
+
 async function initMatch(id: string): Promise<void> {
   hydrated.value = false
+  advanceError.value = null
   await store.hydrateMatch(id, matchFallback.value)
+  await loadTournamentContext(id)
   hydrated.value = true
   if (!store.isWriter) {
     store.startWriterTick()
+  }
+}
+
+async function goToNextMatch(): Promise<void> {
+  if (!matchId.value || !auth.profile) return
+
+  advancing.value = true
+  advanceError.value = null
+  hydrated.value = false
+  store.stopWriterTick()
+
+  try {
+    const result = await advanceToNextTournamentMatch(
+      matchId.value,
+      store.state,
+      auth.profile.id,
+    )
+
+    if (!result) {
+      advanceError.value = 'No hay más partidos programados en esta cancha.'
+      hasNextMatch.value = false
+      hydrated.value = true
+      store.startWriterTick()
+      return
+    }
+
+    await router.replace({
+      name: 'controls',
+      query: {
+        matchId: result.matchId,
+        local: result.localTeam,
+        visit: result.visitTeam,
+        time: result.timeGame,
+        tournamentId: result.tournamentId,
+      },
+    })
+  } catch (err) {
+    advanceError.value = err instanceof Error ? err.message : 'Error al avanzar al siguiente partido'
+    hydrated.value = true
+    store.startWriterTick()
+  } finally {
+    advancing.value = false
   }
 }
 
@@ -225,6 +299,38 @@ onUnmounted(() => {
           <a-button @click="store.resetPenalty()">Reset 2:00</a-button>
         </div>
       </a-card>
+
+      <a-card v-if="tournamentContext" title="Torneo" class="controls__card controls__card--wide">
+        <p class="controls__tournament-meta">
+          Cancha {{ tournamentContext.court }}
+        </p>
+        <a-alert
+          v-if="advanceError"
+          type="error"
+          :message="advanceError"
+          show-icon
+          style="margin-bottom: 0.75rem"
+        />
+        <a-popconfirm
+          title="¿Finalizar este partido e iniciar el siguiente de la cancha?"
+          ok-text="Sí, continuar"
+          cancel-text="Cancelar"
+          :disabled="!hasNextMatch || advancing"
+          @confirm="goToNextMatch"
+        >
+          <a-button
+            type="primary"
+            block
+            :loading="advancing"
+            :disabled="!hasNextMatch"
+          >
+            Siguiente partido
+          </a-button>
+        </a-popconfirm>
+        <p v-if="!hasNextMatch" class="controls__tournament-hint">
+          No quedan partidos programados en esta cancha.
+        </p>
+      </a-card>
     </div>
 
     <p v-if="publishing" class="controls__sync">Sincronizando…</p>
@@ -265,6 +371,23 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 1rem;
+}
+
+.controls__card--wide {
+  grid-column: 1 / -1;
+}
+
+.controls__tournament-meta {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+  opacity: 0.7;
+}
+
+.controls__tournament-hint {
+  margin: 0.75rem 0 0;
+  font-size: 0.8rem;
+  opacity: 0.55;
+  text-align: center;
 }
 
 .controls__score-row {
