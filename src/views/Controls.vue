@@ -3,7 +3,6 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useScoreboardStore } from '@/stores/scoreboard'
 import { useAuthStore } from '@/stores/auth'
-import { useLocalScoreboardSync } from '@/composables/useLocalScoreboardSync'
 import { publishMatchState } from '@/services/matchSync'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
 import { readMatchIdFromStorage } from '@/utils/localSync'
@@ -16,12 +15,32 @@ const auth = useAuthStore()
 const matchId = computed(
   () => (route.query.matchId as string) || readMatchIdFromStorage() || '',
 )
+
+const matchFallback = computed((): Pick<
+  import('@/types/hockeyScoreboard').ScoreboardState,
+  'localTeam' | 'visitTeam' | 'timeGame'
+> | undefined => {
+  const local = route.query.local as string | undefined
+  const visit = route.query.visit as string | undefined
+  const time = route.query.time as string | undefined
+  if (!local || !visit) return undefined
+  return { localTeam: local, visitTeam: visit, timeGame: time ?? '20:00' }
+})
+
 const publishing = ref(false)
 const copied = ref<string | null>(null)
-
-useLocalScoreboardSync(() => matchId.value)
+const hydrated = ref(false)
 
 let publishTimer: number | null = null
+
+async function initMatch(id: string): Promise<void> {
+  hydrated.value = false
+  await store.hydrateMatch(id, matchFallback.value)
+  hydrated.value = true
+  if (!store.isWriter) {
+    store.startWriterTick()
+  }
+}
 
 async function publish(): Promise<void> {
   if (!matchId.value || !isSupabaseConfigured) return
@@ -50,21 +69,25 @@ function copyLink(type: 'live' | 'overlay'): void {
 watch(
   matchId,
   (id) => {
-    if (id) store.setMatch(id)
+    if (id) void initMatch(id)
   },
   { immediate: true },
 )
 
 watch(
   () => store.state,
-  () => { void publish() },
+  () => {
+    if (!hydrated.value) return
+    void publish()
+  },
   { deep: true },
 )
 
 onMounted(() => {
   if (matchId.value) {
-    store.startWriterTick()
-    publishTimer = window.setInterval(() => void publish(), 5000)
+    publishTimer = window.setInterval(() => {
+      if (hydrated.value) void publish()
+    }, 5000)
   }
 })
 
@@ -82,7 +105,18 @@ onUnmounted(() => {
         <p v-if="matchId" class="controls__match-id">Partido: {{ matchId }}</p>
       </div>
       <div class="controls__links">
-        <router-link :to="{ name: 'board', query: { matchId } }" target="_blank">
+        <router-link
+          :to="{
+            name: 'board',
+            query: {
+              matchId,
+              local: route.query.local,
+              visit: route.query.visit,
+              time: route.query.time,
+            },
+          }"
+          target="_blank"
+        >
           <a-button>Abrir Marcador TV</a-button>
         </router-link>
         <a-button @click="copyLink('live')">
@@ -99,6 +133,13 @@ onUnmounted(() => {
       type="warning"
       message="Sin partido activo"
       description="Crea un partido desde Inicio para comenzar."
+      show-icon
+    />
+
+    <a-alert
+      v-else-if="!hydrated"
+      type="info"
+      message="Cargando partido…"
       show-icon
     />
 

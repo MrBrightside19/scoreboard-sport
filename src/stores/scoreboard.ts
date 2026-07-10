@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { ScoreboardState } from '@/types/hockeyScoreboard'
 import { createDefaultScoreboardState } from '@/types/hockeyScoreboard'
+import { fetchMatchState } from '@/services/matchSync'
+import { isSupabaseConfigured } from '@/services/supabaseClient'
 import {
   dispatchScoreboardSync,
   getStorageKey,
@@ -28,6 +30,60 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
         state.value = createDefaultScoreboardState()
       }
     }
+    persistLocal()
+  }
+
+  async function hydrateMatch(
+    id: string,
+    fallback?: Pick<ScoreboardState, 'localTeam' | 'visitTeam' | 'timeGame'>,
+  ): Promise<void> {
+    matchId.value = id
+    writeMatchIdToStorage(id)
+
+    const applyFallback = (state: ScoreboardState): ScoreboardState => {
+      if (!fallback?.localTeam || !fallback?.visitTeam) return state
+      const isDefault =
+        state.localTeam === 'Local' && state.visitTeam === 'Visita'
+      if (!isDefault) return state
+      return {
+        ...state,
+        localTeam: fallback.localTeam,
+        visitTeam: fallback.visitTeam,
+        timeGame: fallback.timeGame ?? state.timeGame,
+      }
+    }
+
+    if (isSupabaseConfigured) {
+      try {
+        const record = await fetchMatchState(id)
+        if (record?.state) {
+          state.value = applyFallback({ ...record.state })
+          persistLocal()
+          return
+        }
+      } catch {
+        // Continuar con localStorage o valores por defecto
+      }
+    }
+
+    const stored = localStorage.getItem(getStorageKey(id))
+    if (stored) {
+      state.value = applyFallback(JSON.parse(stored) as ScoreboardState)
+      persistLocal()
+      return
+    }
+
+    if (fallback?.localTeam && fallback?.visitTeam) {
+      state.value = createDefaultScoreboardState(
+        fallback.localTeam,
+        fallback.visitTeam,
+        fallback.timeGame,
+      )
+      persistLocal()
+      return
+    }
+
+    state.value = createDefaultScoreboardState()
     persistLocal()
   }
 
@@ -134,6 +190,7 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     state,
     isWriter,
     setMatch,
+    hydrateMatch,
     loadFromLocal,
     patch,
     adjustGoal,

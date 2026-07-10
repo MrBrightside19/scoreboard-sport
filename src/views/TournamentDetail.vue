@@ -48,10 +48,19 @@ async function load(): Promise<void> {
   }
 }
 
-function openControls(matchId: string): void {
-  writeMatchIdToStorage(matchId)
+function openControls(tm: TournamentMatch): void {
+  if (!tm.match_id) return
+  writeMatchIdToStorage(tm.match_id)
   window.open(
-    router.resolve({ name: 'controls', query: { matchId } }).href,
+    router.resolve({
+      name: 'controls',
+      query: {
+        matchId: tm.match_id,
+        local: tm.local_team,
+        visit: tm.visit_team,
+        time: tm.game_time,
+      },
+    }).href,
     '_blank',
     'noopener',
   )
@@ -85,7 +94,7 @@ async function onCsvUpload(file: File): Promise<void> {
 async function startMatch(tm: TournamentMatch): Promise<void> {
   if (!auth.profile) return
   const matchId = await startTournamentMatch(tm, auth.profile.id)
-  openControls(matchId)
+  openControls({ ...tm, match_id: matchId })
   await load()
 }
 
@@ -157,7 +166,7 @@ onMounted(() => void load())
                   v-if="record.status === 'live' && record.match_id"
                   type="primary"
                   size="small"
-                  @click="openControls(record.match_id)"
+                  @click="openControls(record)"
                 >
                   Controles
                 </a-button>
