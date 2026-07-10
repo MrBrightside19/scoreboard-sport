@@ -11,6 +11,7 @@ import {
 } from '@/services/tournamentService'
 import { parseCsv, buildCsvTemplate } from '@/utils/csv'
 import { normalizeGameTime } from '@/utils/clock'
+import { buildAppUrl, tournamentOverlayPath } from '@/utils/appUrl'
 import { calculateStandings } from '@/utils/standings'
 import { writeMatchIdToStorage } from '@/utils/localSync'
 import type { Tournament, TournamentMatch } from '@/types/tournament'
@@ -24,6 +25,13 @@ const tournament = ref<Tournament | null>(null)
 const matches = ref<TournamentMatch[]>([])
 const loading = ref(true)
 const importing = ref(false)
+const copiedCourt = ref<string | null>(null)
+
+const streamCourts = computed(() =>
+  [...new Set(matches.value.map((m) => m.court))].sort((a, b) =>
+    a.localeCompare(b, undefined, { numeric: true }),
+  ),
+)
 
 const standings = computed(() =>
   calculateStandings(
@@ -106,6 +114,14 @@ async function finishTournament(): Promise<void> {
   await load()
 }
 
+function copyOverlayForCourt(court: string): void {
+  if (!tournament.value) return
+  const url = buildAppUrl(tournamentOverlayPath(tournament.value.id, court))
+  void navigator.clipboard.writeText(url)
+  copiedCourt.value = court
+  setTimeout(() => { copiedCourt.value = null }, 2000)
+}
+
 onMounted(() => void load())
 </script>
 
@@ -139,6 +155,21 @@ onMounted(() => void load())
       <section class="detail__section">
         <h2>Tabla de posiciones</h2>
         <TournamentStandings :standings="standings" />
+      </section>
+
+      <section v-if="tournament && streamCourts.length" class="detail__section">
+        <h2>Overlay OBS por cancha</h2>
+        <p class="detail__stream-hint">
+          Enlaces fijos para transmisión continua. No necesitas cambiarlos entre partidos.
+        </p>
+        <div class="detail__stream-list">
+          <div v-for="court in streamCourts" :key="court" class="detail__stream-item">
+            <span>Cancha {{ court }}</span>
+            <a-button size="small" @click="copyOverlayForCourt(court)">
+              {{ copiedCourt === court ? '¡Copiado!' : 'Copiar OBS' }}
+            </a-button>
+          </div>
+        </div>
       </section>
 
       <section class="detail__section">
@@ -227,5 +258,27 @@ onMounted(() => void load())
   flex-wrap: wrap;
   gap: 0.35rem;
   align-items: center;
+}
+
+.detail__stream-hint {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.detail__stream-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.detail__stream-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 </style>

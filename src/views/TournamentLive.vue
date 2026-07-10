@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import ScoreBoard from '@/components/ScoreBoard.vue'
 import { useRemoteHockeyBoardCore } from '@/composables/useRemoteHockeyBoardCore'
@@ -12,7 +12,7 @@ const tournamentId = computed(() => route.params.tournamentId as string)
 const court = computed(() => route.params.court as string)
 const activeMatchId = ref<string | null>(null)
 
-const { remoteState, displayTime, displayPenalty } = useRemoteHockeyBoardCore(
+const { remoteState, displayTime, displayPenalty, refresh } = useRemoteHockeyBoardCore(
   () => activeMatchId.value,
 )
 
@@ -24,8 +24,16 @@ let streamTimer: number | null = null
 
 async function refreshStream(): Promise<void> {
   const stream = await fetchCourtStream(tournamentId.value, court.value)
-  activeMatchId.value = stream?.match_id ?? null
+  const nextMatchId = stream?.match_id ?? null
+  if (nextMatchId !== activeMatchId.value) {
+    activeMatchId.value = nextMatchId
+    if (nextMatchId) await refresh()
+  }
 }
+
+watch(activeMatchId, (id) => {
+  if (id) void refresh()
+})
 
 onMounted(() => {
   void refreshStream()

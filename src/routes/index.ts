@@ -29,6 +29,12 @@ const router = createRouter({
       meta: { bare: true, title: 'Torneo en vivo' },
     },
     {
+      path: '/overlay/torneo/:tournamentId/:court',
+      name: 'tournament-overlay',
+      component: () => import('@/views/TournamentLive.vue'),
+      meta: { bare: true, title: 'Overlay torneo' },
+    },
+    {
       path: '/torneo/:id',
       name: 'tournament-public',
       component: () => import('@/views/TournamentPublic.vue'),

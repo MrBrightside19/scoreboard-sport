@@ -11,6 +11,7 @@ import {
 import { isSupabaseConfigured } from '@/services/supabaseClient'
 import { readMatchIdFromStorage } from '@/utils/localSync'
 import { normalizeGameTime } from '@/utils/clock'
+import { buildAppUrl, tournamentLivePath, tournamentOverlayPath } from '@/utils/appUrl'
 import { MAX_PERIODS } from '@/types/hockeyScoreboard'
 
 const route = useRoute()
@@ -131,12 +132,24 @@ async function publish(): Promise<void> {
   }
 }
 
-function copyLink(type: 'live' | 'overlay'): void {
-  const path = type === 'live'
-    ? `/live/${matchId.value}`
-    : `/overlay/${matchId.value}`
-  const url = `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, '')}${path}`
-  void navigator.clipboard.writeText(url)
+type LinkType = 'live' | 'overlay' | 'live-torneo' | 'overlay-torneo'
+
+function copyLink(type: LinkType): void {
+  let path = ''
+
+  if (type === 'overlay-torneo' && tournamentContext.value) {
+    const { tournamentId, court } = tournamentContext.value
+    path = tournamentOverlayPath(tournamentId, court)
+  } else if (type === 'live-torneo' && tournamentContext.value) {
+    const { tournamentId, court } = tournamentContext.value
+    path = tournamentLivePath(tournamentId, court)
+  } else if (type === 'live') {
+    path = `/live/${matchId.value}`
+  } else {
+    path = `/overlay/${matchId.value}`
+  }
+
+  void navigator.clipboard.writeText(buildAppUrl(path))
   copied.value = type
   setTimeout(() => { copied.value = null }, 2000)
 }
@@ -194,12 +207,22 @@ onUnmounted(() => {
         >
           <a-button>Abrir Marcador TV</a-button>
         </router-link>
-        <a-button @click="copyLink('live')">
-          {{ copied === 'live' ? '¡Copiado!' : 'Copiar Live' }}
-        </a-button>
-        <a-button @click="copyLink('overlay')">
-          {{ copied === 'overlay' ? '¡Copiado!' : 'Copiar OBS' }}
-        </a-button>
+        <template v-if="tournamentContext">
+          <a-button type="primary" @click="copyLink('overlay-torneo')">
+            {{ copied === 'overlay-torneo' ? '¡Copiado!' : 'Copiar OBS torneo' }}
+          </a-button>
+          <a-button @click="copyLink('live-torneo')">
+            {{ copied === 'live-torneo' ? '¡Copiado!' : 'Copiar Live torneo' }}
+          </a-button>
+        </template>
+        <template v-else>
+          <a-button @click="copyLink('live')">
+            {{ copied === 'live' ? '¡Copiado!' : 'Copiar Live' }}
+          </a-button>
+          <a-button @click="copyLink('overlay')">
+            {{ copied === 'overlay' ? '¡Copiado!' : 'Copiar OBS' }}
+          </a-button>
+        </template>
       </div>
     </header>
 
@@ -305,6 +328,9 @@ onUnmounted(() => {
         <p class="controls__tournament-meta">
           Cancha {{ tournamentContext.court }}
         </p>
+        <p class="controls__tournament-hint controls__tournament-hint--info">
+          El enlace <strong>OBS torneo</strong> es fijo para esta cancha y se actualiza solo al pasar al siguiente partido.
+        </p>
         <a-alert
           v-if="advanceError"
           type="error"
@@ -389,6 +415,13 @@ onUnmounted(() => {
   font-size: 0.8rem;
   opacity: 0.55;
   text-align: center;
+
+  &--info {
+    margin-top: 0;
+    margin-bottom: 0.75rem;
+    text-align: left;
+    opacity: 0.7;
+  }
 }
 
 .controls__score-row {
