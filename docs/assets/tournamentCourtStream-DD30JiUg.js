@@ -1,1 +1,0 @@
-import{n as e}from"./_plugin-vue_export-helper-CbI6Cvc-.js";async function t(t,n){return(await e(`tournament_court_streams?tournament_id=eq.${t}&court=eq.${n}&select=*`))[0]??null}async function n(t,n,r){return(await e(`tournament_court_streams`,{method:`POST`,body:{tournament_id:t,court:n,match_id:r},prefer:`resolution=merge-duplicates,return=representation`}))[0]}export{n,t};
