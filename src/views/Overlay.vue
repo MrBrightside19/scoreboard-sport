@@ -8,7 +8,7 @@ import { createDefaultScoreboardState } from '@/types/hockeyScoreboard'
 const route = useRoute()
 const matchId = computed(() => route.params.matchId as string)
 
-const { remoteState, displayTime, displayPenalty } =
+const { remoteState, displayTime, displayPenaltiesLocal, displayPenaltiesVisit } =
   useRemoteHockeyBoardCore(() => matchId.value)
 
 const displayState = computed(
@@ -21,6 +21,7 @@ const displayState = computed(
     overlay
     :state="displayState"
     :display-time="displayTime"
-    :display-penalty="displayPenalty"
+    :display-penalties-local="displayPenaltiesLocal"
+    :display-penalties-visit="displayPenaltiesVisit"
   />
 </template>

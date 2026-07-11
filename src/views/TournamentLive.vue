@@ -12,9 +12,8 @@ const tournamentId = computed(() => route.params.tournamentId as string)
 const court = computed(() => route.params.court as string)
 const activeMatchId = ref<string | null>(null)
 
-const { remoteState, displayTime, displayPenalty, refresh } = useRemoteHockeyBoardCore(
-  () => activeMatchId.value,
-)
+const { remoteState, displayTime, displayPenaltiesLocal, displayPenaltiesVisit, refresh } =
+  useRemoteHockeyBoardCore(() => activeMatchId.value)
 
 const displayState = computed(
   () => remoteState.value ?? createDefaultScoreboardState(),
@@ -50,6 +49,7 @@ onUnmounted(() => {
     overlay
     :state="displayState"
     :display-time="displayTime"
-    :display-penalty="displayPenalty"
+    :display-penalties-local="displayPenaltiesLocal"
+    :display-penalties-visit="displayPenaltiesVisit"
   />
 </template>

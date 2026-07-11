@@ -1,7 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { ScoreboardState } from '@/types/hockeyScoreboard'
-import { createDefaultScoreboardState } from '@/types/hockeyScoreboard'
+import type { ScoreboardState, TeamPenalty } from '@/types/hockeyScoreboard'
+import {
+  createDefaultScoreboardState,
+  DEFAULT_PENALTY_TIME,
+  MAX_PENALTIES_PER_TEAM,
+  normalizeScoreboardState,
+} from '@/types/hockeyScoreboard'
 import { fetchMatchState } from '@/services/matchSync'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
 import {
@@ -9,7 +14,7 @@ import {
   getStorageKey,
   writeMatchIdToStorage,
 } from '@/utils/localSync'
-import { tickDown, interpolateClock } from '@/utils/clock'
+import { normalizeGameTime, parseTimeToSeconds, tickDown, interpolateClock } from '@/utils/clock'
 
 export const useScoreboardStore = defineStore('scoreboard', () => {
   const matchId = ref<string | null>(null)
@@ -17,15 +22,19 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
   const isWriter = ref(false)
   const tickInterval = ref<number | null>(null)
 
+  function applyState(raw: unknown): ScoreboardState {
+    return normalizeScoreboardState(raw)
+  }
+
   function setMatch(id: string, initial?: ScoreboardState): void {
     matchId.value = id
     writeMatchIdToStorage(id)
     if (initial) {
-      state.value = { ...initial }
+      state.value = applyState(initial)
     } else {
       const stored = localStorage.getItem(getStorageKey(id))
       if (stored) {
-        state.value = JSON.parse(stored) as ScoreboardState
+        state.value = applyState(JSON.parse(stored) as ScoreboardState)
       } else {
         state.value = createDefaultScoreboardState()
       }
@@ -40,16 +49,16 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     matchId.value = id
     writeMatchIdToStorage(id)
 
-    const applyFallback = (state: ScoreboardState): ScoreboardState => {
-      if (!fallback?.localTeam || !fallback?.visitTeam) return state
+    const applyFallback = (next: ScoreboardState): ScoreboardState => {
+      if (!fallback?.localTeam || !fallback?.visitTeam) return next
       const isDefault =
-        state.localTeam === 'Local' && state.visitTeam === 'Visita'
-      if (!isDefault) return state
+        next.localTeam === 'Local' && next.visitTeam === 'Visita'
+      if (!isDefault) return next
       return {
-        ...state,
+        ...next,
         localTeam: fallback.localTeam,
         visitTeam: fallback.visitTeam,
-        timeGame: fallback.timeGame ?? state.timeGame,
+        timeGame: fallback.timeGame ?? next.timeGame,
       }
     }
 
@@ -57,7 +66,7 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
       try {
         const record = await fetchMatchState(id)
         if (record?.state) {
-          state.value = applyFallback({ ...record.state })
+          state.value = applyFallback(applyState(record.state))
           persistLocal()
           return
         }
@@ -68,7 +77,7 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
 
     const stored = localStorage.getItem(getStorageKey(id))
     if (stored) {
-      state.value = applyFallback(JSON.parse(stored) as ScoreboardState)
+      state.value = applyFallback(applyState(JSON.parse(stored) as ScoreboardState))
       persistLocal()
       return
     }
@@ -99,9 +108,22 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
       state.value.updatedAt,
     )
 
+    const syncedPenaltiesLocal = interpolatePenalties(
+      state.value.penaltiesLocal,
+      state.value.isPaused,
+      state.value.updatedAt,
+    )
+    const syncedPenaltiesVisit = interpolatePenalties(
+      state.value.penaltiesVisit,
+      state.value.isPaused,
+      state.value.updatedAt,
+    )
+
     state.value = {
       ...state.value,
       timeGame: syncedTime,
+      penaltiesLocal: syncedPenaltiesLocal,
+      penaltiesVisit: syncedPenaltiesVisit,
       isPaused: true,
       updatedAt: new Date().toISOString(),
     }
@@ -117,7 +139,7 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
   function loadFromLocal(id: string): void {
     const stored = localStorage.getItem(getStorageKey(id))
     if (stored) {
-      state.value = JSON.parse(stored) as ScoreboardState
+      state.value = applyState(JSON.parse(stored) as ScoreboardState)
       matchId.value = id
     }
   }
@@ -152,19 +174,61 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
   }
 
   function setGameTime(time: string): void {
-    patch({ timeGame: time })
+    patch({ timeGame: normalizeGameTime(time) })
   }
 
-  function togglePenalty(team: 'local' | 'visit'): void {
-    if (team === 'local') {
-      patch({ penalizedLocal: !state.value.penalizedLocal })
-    } else {
-      patch({ penalizedVisit: !state.value.penalizedVisit })
-    }
+  function penaltiesKey(team: 'local' | 'visit'): 'penaltiesLocal' | 'penaltiesVisit' {
+    return team === 'local' ? 'penaltiesLocal' : 'penaltiesVisit'
   }
 
-  function resetPenalty(): void {
-    patch({ penaltyGame: '02:00' })
+  function addPenalty(team: 'local' | 'visit'): void {
+    const key = penaltiesKey(team)
+    const list = [...state.value[key]]
+    if (list.length >= MAX_PENALTIES_PER_TEAM) return
+    list.push({ player: '', time: DEFAULT_PENALTY_TIME })
+    patch({ [key]: list })
+  }
+
+  function removePenalty(team: 'local' | 'visit', index: number): void {
+    const key = penaltiesKey(team)
+    const list = [...state.value[key]]
+    list.splice(index, 1)
+    patch({ [key]: list })
+  }
+
+  function setPenaltyPlayer(team: 'local' | 'visit', index: number, player: string): void {
+    const key = penaltiesKey(team)
+    const list = [...state.value[key]]
+    if (!list[index]) return
+    list[index] = { ...list[index], player }
+    patch({ [key]: list })
+  }
+
+  function setPenaltyTime(team: 'local' | 'visit', index: number, time: string): void {
+    const key = penaltiesKey(team)
+    const list = [...state.value[key]]
+    if (!list[index]) return
+    list[index] = { ...list[index], time: normalizeGameTime(time) }
+    patch({ [key]: list })
+  }
+
+  function tickPenaltyList(penalties: TeamPenalty[]): TeamPenalty[] {
+    return penalties
+      .map((penalty) => ({ ...penalty, time: tickDown(penalty.time) }))
+      .filter((penalty) => parseTimeToSeconds(penalty.time) > 0)
+  }
+
+  function interpolatePenalties(
+    penalties: TeamPenalty[],
+    isPaused: boolean,
+    updatedAt: string,
+  ): TeamPenalty[] {
+    return penalties
+      .map((penalty) => ({
+        ...penalty,
+        time: interpolateClock(penalty.time, isPaused, updatedAt),
+      }))
+      .filter((penalty) => parseTimeToSeconds(penalty.time) > 0)
   }
 
   function startWriterTick(): void {
@@ -173,19 +237,11 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     tickInterval.value = window.setInterval(() => {
       if (state.value.isPaused) return
 
-      let next: Partial<ScoreboardState> = {
+      const next: Partial<ScoreboardState> = {
         timeGame: tickDown(state.value.timeGame),
+        penaltiesLocal: tickPenaltyList(state.value.penaltiesLocal),
+        penaltiesVisit: tickPenaltyList(state.value.penaltiesVisit),
         updatedAt: new Date().toISOString(),
-      }
-
-      if (state.value.penalizedLocal || state.value.penalizedVisit) {
-        const penalty = tickDown(state.value.penaltyGame)
-        next = { ...next, penaltyGame: penalty }
-        if (penalty === '00:00') {
-          next.penalizedLocal = false
-          next.penalizedVisit = false
-          next.penaltyGame = '02:00'
-        }
       }
 
       state.value = { ...state.value, ...next }
@@ -202,7 +258,7 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
   }
 
   function replaceState(next: ScoreboardState): void {
-    state.value = { ...next }
+    state.value = applyState(next)
     if (matchId.value) persistLocal()
   }
 
@@ -219,8 +275,10 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     setPeriod,
     setTeams,
     setGameTime,
-    togglePenalty,
-    resetPenalty,
+    addPenalty,
+    removePenalty,
+    setPenaltyPlayer,
+    setPenaltyTime,
     startWriterTick,
     stopWriterTick,
     replaceState,

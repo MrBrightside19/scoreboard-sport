@@ -1,17 +1,29 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ScoreboardState } from '@/types/hockeyScoreboard'
+import type { ScoreboardState, TeamPenalty } from '@/types/hockeyScoreboard'
 
 const props = defineProps<{
   state: ScoreboardState
   displayTime?: string
-  displayPenalty?: string
+  displayPenaltiesLocal?: TeamPenalty[]
+  displayPenaltiesVisit?: TeamPenalty[]
   overlay?: boolean
   compact?: boolean
 }>()
 
 const clock = computed(() => props.displayTime ?? props.state.timeGame)
-const penalty = computed(() => props.displayPenalty ?? props.state.penaltyGame)
+
+const localPenalties = computed(
+  () => props.displayPenaltiesLocal ?? props.state.penaltiesLocal,
+)
+const visitPenalties = computed(
+  () => props.displayPenaltiesVisit ?? props.state.penaltiesVisit,
+)
+
+function formatPenaltyLabel(penalty: TeamPenalty): string {
+  const player = penalty.player.trim()
+  return player ? `#${player} ${penalty.time}` : penalty.time
+}
 </script>
 
 <template>
@@ -34,12 +46,18 @@ const penalty = computed(() => props.displayPenalty ?? props.state.penaltyGame)
         </div>
         <div
           class="scoreboard__score"
-          :class="{ 'scoreboard__score--penalty': state.penalizedLocal }"
+          :class="{ 'scoreboard__score--penalty': localPenalties.length > 0 }"
         >
           {{ state.goalLocal }}
         </div>
-        <div v-if="state.penalizedLocal" class="scoreboard__penalty-badge">
-          Penalidad {{ penalty }}
+        <div v-if="localPenalties.length" class="scoreboard__penalties">
+          <div
+            v-for="(penalty, index) in localPenalties"
+            :key="`local-${index}`"
+            class="scoreboard__penalty-badge"
+          >
+            {{ formatPenaltyLabel(penalty) }}
+          </div>
         </div>
       </section>
 
@@ -59,12 +77,18 @@ const penalty = computed(() => props.displayPenalty ?? props.state.penaltyGame)
         </div>
         <div
           class="scoreboard__score"
-          :class="{ 'scoreboard__score--penalty': state.penalizedVisit }"
+          :class="{ 'scoreboard__score--penalty': visitPenalties.length > 0 }"
         >
           {{ state.goalVisit }}
         </div>
-        <div v-if="state.penalizedVisit" class="scoreboard__penalty-badge">
-          Penalidad {{ penalty }}
+        <div v-if="visitPenalties.length" class="scoreboard__penalties">
+          <div
+            v-for="(penalty, index) in visitPenalties"
+            :key="`visit-${index}`"
+            class="scoreboard__penalty-badge"
+          >
+            {{ formatPenaltyLabel(penalty) }}
+          </div>
         </div>
       </section>
     </div>
@@ -216,14 +240,25 @@ const penalty = computed(() => props.displayPenalty ?? props.state.penaltyGame)
   animation: pulse 1.5s ease-in-out infinite;
 }
 
+.scoreboard__penalties {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+  align-items: center;
+}
+
 .scoreboard__penalty-badge {
-  font-size: 0.85rem;
-  font-weight: 600;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(0.95rem, 2.5vw, 1.2rem);
+  font-weight: 400;
+  letter-spacing: 0.06em;
   color: #ff4757;
   background: rgba(255, 71, 87, 0.15);
   padding: 0.35rem 0.85rem;
   border-radius: 8px;
-  letter-spacing: 0.05em;
+  min-width: 5.5rem;
+  text-align: center;
 }
 
 .scoreboard__center {

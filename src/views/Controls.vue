@@ -13,7 +13,7 @@ import { isSupabaseConfigured } from '@/services/supabaseClient'
 import { readMatchIdFromStorage } from '@/utils/localSync'
 import { normalizeGameTime } from '@/utils/clock'
 import { buildAppUrl, tournamentLivePath, tournamentOverlayPath } from '@/utils/appUrl'
-import { MAX_PERIODS } from '@/types/hockeyScoreboard'
+import { MAX_PERIODS, MAX_PENALTIES_PER_TEAM } from '@/types/hockeyScoreboard'
 
 const route = useRoute()
 const router = useRouter()
@@ -301,38 +301,34 @@ onUnmounted(() => {
     />
 
     <div v-else class="controls__grid">
-      <a-card title="Equipos" class="controls__card">
-        <a-form layout="vertical">
-          <a-form-item label="Local">
+      <a-card title="Partido" class="controls__card controls__card--wide">
+        <div class="controls__match">
+          <div class="controls__side controls__side--local">
+            <span class="controls__side-label">Local</span>
             <a-input
               :value="store.state.localTeam"
+              size="large"
               @update:value="(v: string) => store.setTeams(v, store.state.visitTeam)"
             />
-          </a-form-item>
-          <a-form-item label="Visita">
-            <a-input
-              :value="store.state.visitTeam"
-              @update:value="(v: string) => store.setTeams(store.state.localTeam, v)"
-            />
-          </a-form-item>
-        </a-form>
-      </a-card>
-
-      <a-card title="Marcador" class="controls__card">
-        <div class="controls__score-row">
-          <div class="controls__team-block">
-            <span>{{ store.state.localTeam }}</span>
-            <div class="controls__score-btns">
+            <div class="controls__score-controls">
               <a-button size="large" @click="store.adjustGoal('local', -1)">−</a-button>
-              <strong>{{ store.state.goalLocal }}</strong>
+              <span class="controls__score">{{ store.state.goalLocal }}</span>
               <a-button type="primary" size="large" @click="store.adjustGoal('local', 1)">+</a-button>
             </div>
           </div>
-          <div class="controls__team-block">
-            <span>{{ store.state.visitTeam }}</span>
-            <div class="controls__score-btns">
+
+          <div class="controls__divider" aria-hidden="true">VS</div>
+
+          <div class="controls__side controls__side--visit">
+            <span class="controls__side-label">Visita</span>
+            <a-input
+              :value="store.state.visitTeam"
+              size="large"
+              @update:value="(v: string) => store.setTeams(store.state.localTeam, v)"
+            />
+            <div class="controls__score-controls">
               <a-button size="large" @click="store.adjustGoal('visit', -1)">−</a-button>
-              <strong>{{ store.state.goalVisit }}</strong>
+              <span class="controls__score">{{ store.state.goalVisit }}</span>
               <a-button type="primary" size="large" @click="store.adjustGoal('visit', 1)">+</a-button>
             </div>
           </div>
@@ -362,24 +358,96 @@ onUnmounted(() => {
         </div>
       </a-card>
 
-      <a-card title="Penalidades" class="controls__card">
-        <p class="controls__penalty-time">{{ store.state.penaltyGame }}</p>
-        <div class="controls__btn-row">
-          <a-button
-            :type="store.state.penalizedLocal ? 'primary' : 'default'"
-            danger
-            @click="store.togglePenalty('local')"
-          >
-            Penalidad {{ store.state.localTeam }}
-          </a-button>
-          <a-button
-            :type="store.state.penalizedVisit ? 'primary' : 'default'"
-            danger
-            @click="store.togglePenalty('visit')"
-          >
-            Penalidad {{ store.state.visitTeam }}
-          </a-button>
-          <a-button @click="store.resetPenalty()">Reset 2:00</a-button>
+      <a-card title="Penalidades" class="controls__card controls__card--wide">
+        <p class="controls__penalty-hint">
+          Hasta {{ MAX_PENALTIES_PER_TEAM }} penalidades simultáneas por equipo. Indica el jugador y el tiempo de cada una.
+        </p>
+        <div class="controls__penalties-grid">
+          <div class="controls__penalty-team">
+            <h3 class="controls__penalty-team-title">
+              Local — {{ store.state.localTeam }}
+              <span class="controls__penalty-count">
+                {{ store.state.penaltiesLocal.length }}/{{ MAX_PENALTIES_PER_TEAM }}
+              </span>
+            </h3>
+
+            <div
+              v-for="(penalty, index) in store.state.penaltiesLocal"
+              :key="`local-penalty-${index}`"
+              class="controls__penalty-row"
+            >
+              <a-input
+                :value="penalty.player"
+                placeholder="#"
+                class="controls__penalty-player"
+                @update:value="(v: string) => store.setPenaltyPlayer('local', index, v)"
+              />
+              <a-input
+                :value="penalty.time"
+                class="controls__penalty-time-input"
+                @update:value="(v: string) => store.setPenaltyTime('local', index, v)"
+              />
+              <a-button
+                danger
+                size="small"
+                class="controls__penalty-remove"
+                @click="store.removePenalty('local', index)"
+              >
+                Quitar
+              </a-button>
+            </div>
+
+            <a-button
+              v-if="store.state.penaltiesLocal.length < MAX_PENALTIES_PER_TEAM"
+              block
+              @click="store.addPenalty('local')"
+            >
+              + Agregar penalidad
+            </a-button>
+          </div>
+
+          <div class="controls__penalty-team">
+            <h3 class="controls__penalty-team-title">
+              Visita — {{ store.state.visitTeam }}
+              <span class="controls__penalty-count">
+                {{ store.state.penaltiesVisit.length }}/{{ MAX_PENALTIES_PER_TEAM }}
+              </span>
+            </h3>
+
+            <div
+              v-for="(penalty, index) in store.state.penaltiesVisit"
+              :key="`visit-penalty-${index}`"
+              class="controls__penalty-row"
+            >
+              <a-input
+                :value="penalty.player"
+                placeholder="#"
+                class="controls__penalty-player"
+                @update:value="(v: string) => store.setPenaltyPlayer('visit', index, v)"
+              />
+              <a-input
+                :value="penalty.time"
+                class="controls__penalty-time-input"
+                @update:value="(v: string) => store.setPenaltyTime('visit', index, v)"
+              />
+              <a-button
+                danger
+                size="small"
+                class="controls__penalty-remove"
+                @click="store.removePenalty('visit', index)"
+              >
+                Quitar
+              </a-button>
+            </div>
+
+            <a-button
+              v-if="store.state.penaltiesVisit.length < MAX_PENALTIES_PER_TEAM"
+              block
+              @click="store.addPenalty('visit')"
+            >
+              + Agregar penalidad
+            </a-button>
+          </div>
         </div>
       </a-card>
 
@@ -483,6 +551,116 @@ onUnmounted(() => {
   }
 }
 
+.controls__match {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+.controls__side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.controls__side-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+.controls__side--local .controls__side-label {
+  color: #00d4ff;
+}
+
+.controls__side--visit .controls__side-label {
+  color: #ff6b35;
+}
+
+.controls__divider {
+  align-self: center;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.4rem;
+  letter-spacing: 0.08em;
+  opacity: 0.35;
+  padding-top: 2rem;
+}
+
+.controls__score-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.controls__score {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 2.8rem;
+  min-width: 2ch;
+  text-align: center;
+  line-height: 1;
+}
+
+.controls__penalty-hint {
+  margin: 0 0 1rem;
+  font-size: 0.82rem;
+  opacity: 0.65;
+}
+
+.controls__penalties-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.25rem;
+}
+
+.controls__penalty-team {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 1rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.controls__penalty-team-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.controls__penalty-count {
+  font-size: 0.8rem;
+  font-weight: 500;
+  opacity: 0.55;
+}
+
+.controls__penalty-row {
+  display: grid;
+  grid-template-columns: 64px 88px 1fr;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.controls__penalty-player,
+.controls__penalty-time-input {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.1rem;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+.controls__penalty-remove {
+  justify-self: start;
+}
+
 .controls__score-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -529,18 +707,21 @@ onUnmounted(() => {
   margin-top: 0.75rem;
 }
 
-.controls__penalty-time {
-  text-align: center;
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: 2rem;
-  margin: 0 0 0.5rem;
-  color: #ff6b6b;
-}
-
 .controls__sync {
   text-align: center;
   font-size: 0.8rem;
   opacity: 0.5;
   margin-top: 1rem;
+}
+
+@media (max-width: 720px) {
+  .controls__match {
+    grid-template-columns: 1fr;
+  }
+
+  .controls__divider {
+    padding-top: 0;
+    text-align: center;
+  }
 }
 </style>
