@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { ScoreboardState, TeamPenalty } from '@/types/hockeyScoreboard'
+import { penaltyTypeLabel } from '@/data/penaltyCatalog'
+import { findPlayerByNumber } from '@/utils/roster'
 
 const props = defineProps<{
   state: ScoreboardState
@@ -20,9 +22,17 @@ const visitPenalties = computed(
   () => props.displayPenaltiesVisit ?? props.state.penaltiesVisit,
 )
 
-function formatPenaltyLabel(penalty: TeamPenalty): string {
-  const player = penalty.player.trim()
-  return player ? `#${player} ${penalty.time}` : penalty.time
+function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): string {
+  const roster = team === 'local' ? props.state.rosterLocal : props.state.rosterVisit
+  const player = findPlayerByNumber(roster, penalty.player)
+  const playerText = player?.name
+    ? `#${penalty.player} ${player.name}`
+    : penalty.player.trim()
+      ? `#${penalty.player}`
+      : ''
+  const typeText = penaltyTypeLabel(penalty.penaltyTypeId)
+  const parts = [playerText, typeText, penalty.time].filter(Boolean)
+  return parts.join(' · ')
 }
 </script>
 
@@ -56,7 +66,7 @@ function formatPenaltyLabel(penalty: TeamPenalty): string {
             :key="`local-${index}`"
             class="scoreboard__penalty-badge"
           >
-            {{ formatPenaltyLabel(penalty) }}
+            {{ formatPenaltyLabel(penalty, 'local') }}
           </div>
         </div>
       </section>
@@ -87,7 +97,7 @@ function formatPenaltyLabel(penalty: TeamPenalty): string {
             :key="`visit-${index}`"
             class="scoreboard__penalty-badge"
           >
-            {{ formatPenaltyLabel(penalty) }}
+            {{ formatPenaltyLabel(penalty, 'visit') }}
           </div>
         </div>
       </section>

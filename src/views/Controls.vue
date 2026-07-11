@@ -13,7 +13,10 @@ import { isSupabaseConfigured } from '@/services/supabaseClient'
 import { readMatchIdFromStorage } from '@/utils/localSync'
 import { normalizeGameTime } from '@/utils/clock'
 import { buildAppUrl, tournamentLivePath, tournamentOverlayPath } from '@/utils/appUrl'
-import { MAX_PERIODS, MAX_PENALTIES_PER_TEAM } from '@/types/hockeyScoreboard'
+import { MAX_PERIODS, isGoalPending } from '@/types/hockeyScoreboard'
+import ControlsRosterPanel from '@/components/controls/ControlsRosterPanel.vue'
+import ControlsGoalsPanel from '@/components/controls/ControlsGoalsPanel.vue'
+import ControlsPenaltiesPanel from '@/components/controls/ControlsPenaltiesPanel.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -43,6 +46,15 @@ const advanceError = ref<string | null>(null)
 const tournamentContext = ref<{ tournamentId: string; court: string } | null>(null)
 const hasNextMatch = ref(false)
 const skipLeaveGuard = ref(false)
+const activeTab = ref('match')
+
+const pendingGoalsCount = computed(
+  () => store.state.goals.filter((goal) => isGoalPending(goal)).length,
+)
+
+function markGoal(team: 'local' | 'visit'): void {
+  store.markGoal(team)
+}
 
 let publishTimer: number | null = null
 
@@ -300,191 +312,128 @@ onUnmounted(() => {
       show-icon
     />
 
-    <div v-else class="controls__grid">
-      <a-card title="Partido" class="controls__card controls__card--wide">
-        <div class="controls__match">
-          <div class="controls__side controls__side--local">
-            <span class="controls__side-label">Local</span>
-            <a-input
-              :value="store.state.localTeam"
-              size="large"
-              @update:value="(v: string) => store.setTeams(v, store.state.visitTeam)"
-            />
-            <div class="controls__score-controls">
-              <a-button size="large" @click="store.adjustGoal('local', -1)">−</a-button>
-              <span class="controls__score">{{ store.state.goalLocal }}</span>
-              <a-button type="primary" size="large" @click="store.adjustGoal('local', 1)">+</a-button>
-            </div>
-          </div>
+    <div v-else class="controls__body">
+      <a-tabs v-model:active-key="activeTab" class="controls__tabs">
+        <a-tab-pane key="match" tab="Partido">
+          <div class="controls__grid">
+            <a-card title="Marcador" class="controls__card controls__card--wide">
+              <div class="controls__match">
+                <div class="controls__side controls__side--local">
+                  <span class="controls__side-label">Local</span>
+                  <a-input
+                    :value="store.state.localTeam"
+                    size="large"
+                    @update:value="(v: string) => store.setTeams(v, store.state.visitTeam)"
+                  />
+                  <div class="controls__score-controls">
+                    <a-button size="large" @click="store.removeLastGoal('local')">−</a-button>
+                    <span class="controls__score">{{ store.state.goalLocal }}</span>
+                    <a-button type="primary" size="large" @click="markGoal('local')">+</a-button>
+                  </div>
+                </div>
 
-          <div class="controls__divider" aria-hidden="true">VS</div>
+                <div class="controls__divider" aria-hidden="true">VS</div>
 
-          <div class="controls__side controls__side--visit">
-            <span class="controls__side-label">Visita</span>
-            <a-input
-              :value="store.state.visitTeam"
-              size="large"
-              @update:value="(v: string) => store.setTeams(store.state.localTeam, v)"
-            />
-            <div class="controls__score-controls">
-              <a-button size="large" @click="store.adjustGoal('visit', -1)">−</a-button>
-              <span class="controls__score">{{ store.state.goalVisit }}</span>
-              <a-button type="primary" size="large" @click="store.adjustGoal('visit', 1)">+</a-button>
-            </div>
-          </div>
-        </div>
-      </a-card>
+                <div class="controls__side controls__side--visit">
+                  <span class="controls__side-label">Visita</span>
+                  <a-input
+                    :value="store.state.visitTeam"
+                    size="large"
+                    @update:value="(v: string) => store.setTeams(store.state.localTeam, v)"
+                  />
+                  <div class="controls__score-controls">
+                    <a-button size="large" @click="store.removeLastGoal('visit')">−</a-button>
+                    <span class="controls__score">{{ store.state.goalVisit }}</span>
+                    <a-button type="primary" size="large" @click="markGoal('visit')">+</a-button>
+                  </div>
+                </div>
+              </div>
+              <p class="controls__score-hint">
+                El botón <strong>+</strong> marca el gol y captura el minuto del reloj. Completa autor y asistencia en <strong>Goles</strong>.
+              </p>
+            </a-card>
 
-      <a-card title="Reloj y periodo" class="controls__card">
-        <div class="controls__clock-display">{{ store.state.timeGame }}</div>
-        <div class="controls__btn-row">
-          <a-button
-            :type="store.state.isPaused ? 'primary' : 'default'"
-            size="large"
-            @click="store.togglePause()"
-          >
-            {{ store.state.isPaused ? 'Reanudar' : 'Pausar' }}
-          </a-button>
-          <a-input
-            :value="store.state.timeGame"
-            style="width: 100px"
-            @update:value="(v: string) => store.setGameTime(v)"
-          />
-        </div>
-        <div class="controls__btn-row">
-          <a-button @click="store.setPeriod(store.state.gamePeriod - 1)">− Periodo</a-button>
-          <span>Periodo {{ store.state.gamePeriod }} / {{ MAX_PERIODS }}</span>
-          <a-button @click="store.setPeriod(store.state.gamePeriod + 1)">+ Periodo</a-button>
-        </div>
-      </a-card>
+            <a-card title="Reloj y periodo" class="controls__card">
+              <div class="controls__clock-display">{{ store.state.timeGame }}</div>
+              <div class="controls__btn-row">
+                <a-button
+                  :type="store.state.isPaused ? 'primary' : 'default'"
+                  size="large"
+                  @click="store.togglePause()"
+                >
+                  {{ store.state.isPaused ? 'Reanudar' : 'Pausar' }}
+                </a-button>
+                <a-input
+                  :value="store.state.timeGame"
+                  style="width: 100px"
+                  @update:value="(v: string) => store.setGameTime(v)"
+                />
+              </div>
+              <div class="controls__btn-row">
+                <a-button @click="store.setPeriod(store.state.gamePeriod - 1)">− Periodo</a-button>
+                <span>Periodo {{ store.state.gamePeriod }} / {{ MAX_PERIODS }}</span>
+                <a-button @click="store.setPeriod(store.state.gamePeriod + 1)">+ Periodo</a-button>
+              </div>
+            </a-card>
 
-      <a-card title="Penalidades" class="controls__card controls__card--wide">
-        <p class="controls__penalty-hint">
-          Hasta {{ MAX_PENALTIES_PER_TEAM }} penalidades simultáneas por equipo. Indica el jugador y el tiempo de cada una.
-        </p>
-        <div class="controls__penalties-grid">
-          <div class="controls__penalty-team">
-            <h3 class="controls__penalty-team-title">
-              Local — {{ store.state.localTeam }}
-              <span class="controls__penalty-count">
-                {{ store.state.penaltiesLocal.length }}/{{ MAX_PENALTIES_PER_TEAM }}
-              </span>
-            </h3>
-
-            <div
-              v-for="(penalty, index) in store.state.penaltiesLocal"
-              :key="`local-penalty-${index}`"
-              class="controls__penalty-row"
-            >
-              <a-input
-                :value="penalty.player"
-                placeholder="#"
-                class="controls__penalty-player"
-                @update:value="(v: string) => store.setPenaltyPlayer('local', index, v)"
+            <a-card v-if="tournamentContext" title="Torneo" class="controls__card controls__card--wide">
+              <p class="controls__tournament-meta">
+                Cancha {{ tournamentContext.court }}
+              </p>
+              <p class="controls__tournament-hint controls__tournament-hint--info">
+                El enlace <strong>OBS torneo</strong> es fijo para esta cancha y se actualiza solo al pasar al siguiente partido.
+              </p>
+              <a-alert
+                v-if="advanceError"
+                type="error"
+                :message="advanceError"
+                show-icon
+                style="margin-bottom: 0.75rem"
               />
-              <a-input
-                :value="penalty.time"
-                class="controls__penalty-time-input"
-                @update:value="(v: string) => store.setPenaltyTime('local', index, v)"
-              />
-              <a-button
-                danger
-                size="small"
-                class="controls__penalty-remove"
-                @click="store.removePenalty('local', index)"
+              <a-popconfirm
+                title="¿Finalizar este partido e iniciar el siguiente de la cancha?"
+                ok-text="Sí, continuar"
+                cancel-text="Cancelar"
+                :disabled="!hasNextMatch || advancing"
+                @confirm="goToNextMatch"
               >
-                Quitar
-              </a-button>
-            </div>
-
-            <a-button
-              v-if="store.state.penaltiesLocal.length < MAX_PENALTIES_PER_TEAM"
-              block
-              @click="store.addPenalty('local')"
-            >
-              + Agregar penalidad
-            </a-button>
+                <a-button
+                  type="primary"
+                  block
+                  :loading="advancing"
+                  :disabled="!hasNextMatch"
+                >
+                  Siguiente partido
+                </a-button>
+              </a-popconfirm>
+              <p v-if="!hasNextMatch" class="controls__tournament-hint">
+                No quedan partidos programados en esta cancha.
+              </p>
+            </a-card>
           </div>
+        </a-tab-pane>
 
-          <div class="controls__penalty-team">
-            <h3 class="controls__penalty-team-title">
-              Visita — {{ store.state.visitTeam }}
-              <span class="controls__penalty-count">
-                {{ store.state.penaltiesVisit.length }}/{{ MAX_PENALTIES_PER_TEAM }}
-              </span>
-            </h3>
+        <a-tab-pane key="roster" tab="Plantillas">
+          <ControlsRosterPanel />
+        </a-tab-pane>
 
-            <div
-              v-for="(penalty, index) in store.state.penaltiesVisit"
-              :key="`visit-penalty-${index}`"
-              class="controls__penalty-row"
-            >
-              <a-input
-                :value="penalty.player"
-                placeholder="#"
-                class="controls__penalty-player"
-                @update:value="(v: string) => store.setPenaltyPlayer('visit', index, v)"
-              />
-              <a-input
-                :value="penalty.time"
-                class="controls__penalty-time-input"
-                @update:value="(v: string) => store.setPenaltyTime('visit', index, v)"
-              />
-              <a-button
-                danger
-                size="small"
-                class="controls__penalty-remove"
-                @click="store.removePenalty('visit', index)"
-              >
-                Quitar
-              </a-button>
-            </div>
+        <a-tab-pane key="goals">
+          <template #tab>
+            Goles
+            <a-badge
+              v-if="pendingGoalsCount > 0"
+              :count="pendingGoalsCount"
+              :number-style="{ backgroundColor: '#faad14' }"
+              class="controls__tab-badge"
+            />
+          </template>
+          <ControlsGoalsPanel />
+        </a-tab-pane>
 
-            <a-button
-              v-if="store.state.penaltiesVisit.length < MAX_PENALTIES_PER_TEAM"
-              block
-              @click="store.addPenalty('visit')"
-            >
-              + Agregar penalidad
-            </a-button>
-          </div>
-        </div>
-      </a-card>
-
-      <a-card v-if="tournamentContext" title="Torneo" class="controls__card controls__card--wide">
-        <p class="controls__tournament-meta">
-          Cancha {{ tournamentContext.court }}
-        </p>
-        <p class="controls__tournament-hint controls__tournament-hint--info">
-          El enlace <strong>OBS torneo</strong> es fijo para esta cancha y se actualiza solo al pasar al siguiente partido.
-        </p>
-        <a-alert
-          v-if="advanceError"
-          type="error"
-          :message="advanceError"
-          show-icon
-          style="margin-bottom: 0.75rem"
-        />
-        <a-popconfirm
-          title="¿Finalizar este partido e iniciar el siguiente de la cancha?"
-          ok-text="Sí, continuar"
-          cancel-text="Cancelar"
-          :disabled="!hasNextMatch || advancing"
-          @confirm="goToNextMatch"
-        >
-          <a-button
-            type="primary"
-            block
-            :loading="advancing"
-            :disabled="!hasNextMatch"
-          >
-            Siguiente partido
-          </a-button>
-        </a-popconfirm>
-        <p v-if="!hasNextMatch" class="controls__tournament-hint">
-          No quedan partidos programados en esta cancha.
-        </p>
-      </a-card>
+        <a-tab-pane key="penalties" tab="Penalidades">
+          <ControlsPenaltiesPanel />
+        </a-tab-pane>
+      </a-tabs>
     </div>
 
     <p v-if="publishing" class="controls__sync">Sincronizando…</p>
@@ -493,7 +442,7 @@ onUnmounted(() => {
 
 <style scoped lang="scss">
 .controls {
-  max-width: 1000px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 1.5rem;
 }
@@ -604,61 +553,42 @@ onUnmounted(() => {
   line-height: 1;
 }
 
-.controls__penalty-hint {
-  margin: 0 0 1rem;
-  font-size: 0.82rem;
-  opacity: 0.65;
-}
-
-.controls__penalties-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 1.25rem;
-}
-
-.controls__penalty-team {
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-  padding: 1rem;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-}
-
-.controls__penalty-team-title {
-  margin: 0;
-  font-size: 0.95rem;
-  font-weight: 600;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.controls__penalty-count {
-  font-size: 0.8rem;
-  font-weight: 500;
+.controls__score-hint {
+  margin: 0.75rem 0 0;
+  text-align: center;
+  font-size: 0.78rem;
   opacity: 0.55;
 }
 
-.controls__penalty-row {
-  display: grid;
-  grid-template-columns: 64px 88px 1fr;
-  gap: 0.5rem;
-  align-items: center;
+.controls__tabs {
+  :deep(.ant-tabs-nav) {
+    margin-bottom: 1rem;
+
+    &::before {
+      border-color: rgba(255, 255, 255, 0.12);
+    }
+  }
+
+  :deep(.ant-tabs-tab) {
+    color: rgba(232, 237, 245, 0.65);
+
+    &:hover {
+      color: #e8edf5;
+    }
+  }
+
+  :deep(.ant-tabs-tab-active .ant-tabs-tab-btn) {
+    color: #00d4ff;
+    text-shadow: none;
+  }
+
+  :deep(.ant-tabs-ink-bar) {
+    background: #00d4ff;
+  }
 }
 
-.controls__penalty-player,
-.controls__penalty-time-input {
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: 1.1rem;
-  letter-spacing: 0.04em;
-  text-align: center;
-}
-
-.controls__penalty-remove {
-  justify-self: start;
+.controls__tab-badge {
+  margin-left: 0.35rem;
 }
 
 .controls__score-row {

@@ -1,18 +1,22 @@
 <script setup lang="ts">
 import { RouterView } from 'vue-router'
+import { theme } from 'ant-design-vue'
+
+const appTheme = {
+  token: {
+    colorPrimary: '#00b4d8',
+    borderRadius: 10,
+    fontFamily: 'Inter, system-ui, sans-serif',
+    colorBgContainer: '#161b22',
+    colorBgElevated: '#1c2128',
+    colorBorder: '#30363d',
+  },
+  algorithm: theme.darkAlgorithm,
+}
 </script>
 
 <template>
-  <a-config-provider
-    :theme="{
-      token: {
-        colorPrimary: '#00b4d8',
-        borderRadius: 10,
-        fontFamily: 'Inter, system-ui, sans-serif',
-      },
-      algorithm: undefined,
-    }"
-  >
+  <a-config-provider :theme="appTheme">
     <div class="app-shell" :class="{ 'app-shell--bare': $route.meta.bare }">
       <RouterView />
     </div>

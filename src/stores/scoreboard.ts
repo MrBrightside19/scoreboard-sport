@@ -1,12 +1,19 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { ScoreboardState, TeamPenalty } from '@/types/hockeyScoreboard'
+import type {
+  GoalEvent,
+  RosterPlayer,
+  ScoreboardState,
+  TeamPenalty,
+} from '@/types/hockeyScoreboard'
 import {
   createDefaultScoreboardState,
-  DEFAULT_PENALTY_TIME,
+  DEFAULT_PENALTY_TYPE_ID,
+  isGoalPending,
   MAX_PENALTIES_PER_TEAM,
   normalizeScoreboardState,
 } from '@/types/hockeyScoreboard'
+import { getPenaltyType, secondsToClock } from '@/data/penaltyCatalog'
 import { fetchMatchState } from '@/services/matchSync'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
 import {
@@ -14,6 +21,8 @@ import {
   getStorageKey,
   writeMatchIdToStorage,
 } from '@/utils/localSync'
+import { generateId } from '@/utils/id'
+import { canSetRole, findPlayerById } from '@/utils/roster'
 import { normalizeGameTime, parseTimeToSeconds, tickDown, interpolateClock } from '@/utils/clock'
 
 export const useScoreboardStore = defineStore('scoreboard', () => {
@@ -108,22 +117,19 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
       state.value.updatedAt,
     )
 
-    const syncedPenaltiesLocal = interpolatePenalties(
-      state.value.penaltiesLocal,
-      state.value.isPaused,
-      state.value.updatedAt,
-    )
-    const syncedPenaltiesVisit = interpolatePenalties(
-      state.value.penaltiesVisit,
-      state.value.isPaused,
-      state.value.updatedAt,
-    )
-
     state.value = {
       ...state.value,
       timeGame: syncedTime,
-      penaltiesLocal: syncedPenaltiesLocal,
-      penaltiesVisit: syncedPenaltiesVisit,
+      penaltiesLocal: interpolatePenalties(
+        state.value.penaltiesLocal,
+        state.value.isPaused,
+        state.value.updatedAt,
+      ),
+      penaltiesVisit: interpolatePenalties(
+        state.value.penaltiesVisit,
+        state.value.isPaused,
+        state.value.updatedAt,
+      ),
       isPaused: true,
       updatedAt: new Date().toISOString(),
     }
@@ -153,11 +159,135 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     persistLocal()
   }
 
+  function rosterKey(team: 'local' | 'visit'): 'rosterLocal' | 'rosterVisit' {
+    return team === 'local' ? 'rosterLocal' : 'rosterVisit'
+  }
+
+  function penaltiesKey(team: 'local' | 'visit'): 'penaltiesLocal' | 'penaltiesVisit' {
+    return team === 'local' ? 'penaltiesLocal' : 'penaltiesVisit'
+  }
+
+  function addRosterPlayer(team: 'local' | 'visit'): void {
+    const key = rosterKey(team)
+    const list = [...state.value[key]]
+    list.push({
+      id: generateId(),
+      number: '',
+      name: '',
+      role: 'player',
+    })
+    patch({ [key]: list })
+  }
+
+  function updateRosterPlayer(
+    team: 'local' | 'visit',
+    playerId: string,
+    updates: Partial<Pick<RosterPlayer, 'number' | 'name' | 'role'>>,
+  ): void {
+    const key = rosterKey(team)
+    const list = [...state.value[key]]
+    const index = list.findIndex((player) => player.id === playerId)
+    if (index < 0) return
+
+    const nextRole = updates.role ?? list[index].role
+    if (updates.role && !canSetRole(list, playerId, nextRole)) return
+
+    list[index] = { ...list[index], ...updates }
+    patch({ [key]: list })
+  }
+
+  function removeRosterPlayer(team: 'local' | 'visit', playerId: string): void {
+    const key = rosterKey(team)
+    const list = state.value[key].filter((player) => player.id !== playerId)
+    const goals = state.value.goals.filter(
+      (goal) =>
+        goal.scorerPlayerId !== playerId && goal.assistPlayerId !== playerId,
+    )
+    const penaltyKey = penaltiesKey(team)
+    const penalties = state.value[penaltyKey].filter(
+      (penalty) => penalty.playerId !== playerId,
+    )
+    patch({
+      [key]: list,
+      goals,
+      [penaltyKey]: penalties,
+    })
+  }
+
+  function markGoal(team: 'local' | 'visit'): string {
+    const gameMinute = interpolateClock(
+      state.value.timeGame,
+      state.value.isPaused,
+      state.value.updatedAt,
+    )
+
+    const goal: GoalEvent = {
+      id: generateId(),
+      team,
+      scorerPlayerId: '',
+      assistPlayerId: null,
+      gameMinute,
+      period: state.value.gamePeriod,
+      createdAt: new Date().toISOString(),
+      status: 'pending',
+    }
+
+    patch({
+      goals: [...state.value.goals, goal],
+      goalLocal: team === 'local' ? state.value.goalLocal + 1 : state.value.goalLocal,
+      goalVisit: team === 'visit' ? state.value.goalVisit + 1 : state.value.goalVisit,
+      timeGame: gameMinute,
+    })
+
+    return goal.id
+  }
+
+  function completeGoal(
+    goalId: string,
+    scorerPlayerId: string,
+    assistPlayerId: string | null,
+  ): void {
+    const goal = state.value.goals.find((item) => item.id === goalId)
+    if (!goal || !isGoalPending(goal)) return
+
+    const goals = state.value.goals.map((item) =>
+      item.id === goalId
+        ? {
+            ...item,
+            scorerPlayerId,
+            assistPlayerId,
+            status: 'confirmed' as const,
+          }
+        : item,
+    )
+    patch({ goals })
+  }
+
+  function removeLastGoal(team: 'local' | 'visit'): void {
+    const teamGoals = state.value.goals.filter((goal) => goal.team === team)
+    if (teamGoals.length === 0) {
+      if (team === 'local' && state.value.goalLocal > 0) {
+        patch({ goalLocal: state.value.goalLocal - 1 })
+      }
+      if (team === 'visit' && state.value.goalVisit > 0) {
+        patch({ goalVisit: state.value.goalVisit - 1 })
+      }
+      return
+    }
+
+    const lastGoal = teamGoals[teamGoals.length - 1]
+    patch({
+      goals: state.value.goals.filter((goal) => goal.id !== lastGoal.id),
+      goalLocal: team === 'local' ? Math.max(0, state.value.goalLocal - 1) : state.value.goalLocal,
+      goalVisit: team === 'visit' ? Math.max(0, state.value.goalVisit - 1) : state.value.goalVisit,
+    })
+  }
+
   function adjustGoal(team: 'local' | 'visit', delta: number): void {
-    if (team === 'local') {
-      patch({ goalLocal: Math.max(0, state.value.goalLocal + delta) })
-    } else {
-      patch({ goalVisit: Math.max(0, state.value.goalVisit + delta) })
+    if (delta > 0) return
+    if (delta < 0) {
+      removeLastGoal(team)
+      return
     }
   }
 
@@ -177,38 +307,47 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     patch({ timeGame: normalizeGameTime(time) })
   }
 
-  function penaltiesKey(team: 'local' | 'visit'): 'penaltiesLocal' | 'penaltiesVisit' {
-    return team === 'local' ? 'penaltiesLocal' : 'penaltiesVisit'
-  }
-
-  function addPenalty(team: 'local' | 'visit'): void {
+  function addPenalty(
+    team: 'local' | 'visit',
+    playerId: string,
+    penaltyTypeId: string,
+    infraction = '',
+  ): void {
     const key = penaltiesKey(team)
     const list = [...state.value[key]]
     if (list.length >= MAX_PENALTIES_PER_TEAM) return
-    list.push({ player: '', time: DEFAULT_PENALTY_TIME })
+
+    const roster = state.value[rosterKey(team)]
+    const player = findPlayerById(roster, playerId)
+    const penaltyType = getPenaltyType(penaltyTypeId) ?? getPenaltyType(DEFAULT_PENALTY_TYPE_ID)!
+
+    list.push({
+      id: generateId(),
+      playerId,
+      player: player?.number ?? '',
+      penaltyTypeId: penaltyType.id,
+      infraction,
+      time: secondsToClock(penaltyType.durationSeconds),
+    })
     patch({ [key]: list })
   }
 
-  function removePenalty(team: 'local' | 'visit', index: number): void {
+  function removePenalty(team: 'local' | 'visit', penaltyId: string): void {
     const key = penaltiesKey(team)
-    const list = [...state.value[key]]
-    list.splice(index, 1)
+    const list = state.value[key].filter((penalty) => penalty.id !== penaltyId)
     patch({ [key]: list })
   }
 
-  function setPenaltyPlayer(team: 'local' | 'visit', index: number, player: string): void {
+  function setPenaltyInfraction(
+    team: 'local' | 'visit',
+    penaltyId: string,
+    infraction: string,
+  ): void {
     const key = penaltiesKey(team)
     const list = [...state.value[key]]
-    if (!list[index]) return
-    list[index] = { ...list[index], player }
-    patch({ [key]: list })
-  }
-
-  function setPenaltyTime(team: 'local' | 'visit', index: number, time: string): void {
-    const key = penaltiesKey(team)
-    const list = [...state.value[key]]
-    if (!list[index]) return
-    list[index] = { ...list[index], time: normalizeGameTime(time) }
+    const index = list.findIndex((penalty) => penalty.id === penaltyId)
+    if (index < 0) return
+    list[index] = { ...list[index], infraction }
     patch({ [key]: list })
   }
 
@@ -270,6 +409,12 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     hydrateMatch,
     loadFromLocal,
     patch,
+    addRosterPlayer,
+    updateRosterPlayer,
+    removeRosterPlayer,
+    markGoal,
+    completeGoal,
+    removeLastGoal,
     adjustGoal,
     togglePause,
     setPeriod,
@@ -277,8 +422,7 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     setGameTime,
     addPenalty,
     removePenalty,
-    setPenaltyPlayer,
-    setPenaltyTime,
+    setPenaltyInfraction,
     startWriterTick,
     stopWriterTick,
     replaceState,
