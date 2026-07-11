@@ -1,0 +1,1 @@
+function e(e,t,n){let r=e?Number.parseInt(e,10):NaN;return Number.isNaN(r)||r<n?t:r}function t(){return e(`10000`,5e3,1e3)}function n(){let e=Number.parseInt(`60000`,10);return Number.isNaN(e)||e<5e3?6e4:e}export{n,t};
