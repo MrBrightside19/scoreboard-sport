@@ -17,6 +17,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
     steps:
       - uses: actions/checkout@v4
 
@@ -27,6 +29,18 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Verify Supabase env
+        run: |
+          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
+            echo "::error::Faltan VITE_SUPABASE_URL y/o VITE_SUPABASE_ANON_KEY."
+            echo "Configúralas en Settings → Secrets and variables → Actions"
+            echo "(repositorio o entorno github-pages). Nombres exactos: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY"
+            exit 1
+          fi
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
       - name: Build
         run: npm run build
