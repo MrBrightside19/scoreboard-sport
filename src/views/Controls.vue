@@ -401,26 +401,45 @@ onUnmounted(() => {
               </p>
             </a-card>
 
-            <a-card title="Reloj y periodo" class="controls__card">
-              <div class="controls__clock-display">{{ store.state.timeGame }}</div>
-              <div class="controls__btn-row">
-                <a-button
-                  :type="store.state.isPaused ? 'primary' : 'default'"
-                  size="large"
-                  @click="store.togglePause()"
-                >
-                  {{ store.state.isPaused ? 'Reanudar' : 'Pausar' }}
-                </a-button>
-                <a-input
-                  :value="store.state.timeGame"
-                  style="width: 100px"
-                  @update:value="(v: string) => store.setGameTime(v)"
-                />
-              </div>
-              <div class="controls__btn-row">
-                <a-button @click="store.setPeriod(store.state.gamePeriod - 1)">− Periodo</a-button>
-                <span>Periodo {{ store.state.gamePeriod }} / {{ MAX_PERIODS }}</span>
-                <a-button @click="store.setPeriod(store.state.gamePeriod + 1)">+ Periodo</a-button>
+            <a-card title="Reloj y periodo" class="controls__card controls__card--wide controls__card--clock">
+              <div class="controls__clock">
+                <div class="controls__clock-main">
+                  <div class="controls__clock-display">{{ store.state.timeGame }}</div>
+                  <p class="controls__clock-status">
+                    {{ store.state.isPaused ? 'En pausa' : 'En juego' }}
+                  </p>
+                </div>
+
+                <div class="controls__clock-actions">
+                  <a-button
+                    block
+                    size="large"
+                    :type="store.state.isPaused ? 'primary' : 'default'"
+                    @click="store.togglePause()"
+                  >
+                    {{ store.state.isPaused ? 'Reanudar' : 'Pausar' }}
+                  </a-button>
+
+                  <div class="controls__clock-field">
+                    <label for="controls-game-time">Ajustar tiempo</label>
+                    <a-input
+                      id="controls-game-time"
+                      :value="store.state.timeGame"
+                      @update:value="(v: string) => store.setGameTime(v)"
+                    />
+                  </div>
+
+                  <div class="controls__clock-field controls__clock-field--period">
+                    <label>Periodo</label>
+                    <div class="controls__clock-period">
+                      <a-button @click="store.setPeriod(store.state.gamePeriod - 1)">−</a-button>
+                      <span class="controls__clock-period-label">
+                        {{ store.state.gamePeriod }} / {{ MAX_PERIODS }}
+                      </span>
+                      <a-button @click="store.setPeriod(store.state.gamePeriod + 1)">+</a-button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </a-card>
 
@@ -669,9 +688,65 @@ onUnmounted(() => {
 
 .controls__clock-display {
   font-family: 'Bebas Neue', sans-serif;
-  font-size: 3rem;
+  font-size: 3.25rem;
   text-align: center;
-  margin-bottom: 1rem;
+  line-height: 1;
+  margin: 0;
+}
+
+.controls__clock {
+  display: grid;
+  grid-template-columns: minmax(140px, 200px) 1fr;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.controls__clock-main {
+  text-align: center;
+  padding-right: 1.5rem;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.controls__clock-status {
+  margin: 0.35rem 0 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.5;
+}
+
+.controls__clock-actions {
+  display: grid;
+  grid-template-columns: minmax(130px, 160px) minmax(140px, 200px) minmax(160px, 220px);
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.controls__clock-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+
+  label {
+    font-size: 0.75rem;
+    opacity: 0.6;
+  }
+}
+
+.controls__clock-period {
+  display: grid;
+  grid-template-columns: 40px 1fr 40px;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.controls__clock-period-label {
+  text-align: center;
+  font-size: 0.95rem;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .controls__btn-row {
@@ -691,6 +766,22 @@ onUnmounted(() => {
   .controls__divider {
     padding-top: 0;
     text-align: center;
+  }
+
+  .controls__clock {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .controls__clock-main {
+    padding-right: 0;
+    border-right: none;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .controls__clock-actions {
+    grid-template-columns: 1fr;
   }
 }
 </style>
