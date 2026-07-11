@@ -15,10 +15,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -30,38 +31,44 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Verify Supabase env
+      - name: Check Supabase env
         run: |
           if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
-            echo "::error::Faltan VITE_SUPABASE_URL y/o VITE_SUPABASE_ANON_KEY."
-            echo "Configúralas en Settings → Secrets and variables → Actions"
-            echo "(repositorio o entorno github-pages). Nombres exactos: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY"
-            exit 1
+            echo "::warning::Faltan VITE_SUPABASE_URL y/o VITE_SUPABASE_ANON_KEY."
+            echo "La app se publicará, pero mostrará 'Supabase no configurado'."
+            echo "Configúralas en Settings → Secrets and variables → Actions (repositorio o entorno github-pages)."
+          else
+            echo "Supabase env OK"
           fi
         env:
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
 
       - name: Build
         run: npm run build
         env:
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
           VITE_LIVE_CLOCK_UPDATE_MS: ${{ vars.VITE_LIVE_CLOCK_UPDATE_MS || '5000' }}
           VITE_POLL_INTERVAL_MS: ${{ vars.VITE_POLL_INTERVAL_MS || '5000' }}
           VITE_TOURNAMENT_TABLE_REFRESH_MS: ${{ vars.VITE_TOURNAMENT_TABLE_REFRESH_MS || '60000' }}
+
+      - name: Verify build output
+        run: |
+          if grep -q '/src/main.ts' dist/index.html; then
+            echo "::error::El build no generó assets de producción."
+            exit 1
+          fi
+          if ! grep -q '/${{ github.event.repository.name }}/assets/' dist/index.html; then
+            echo "::error::dist/index.html no contiene la ruta base esperada."
+            exit 1
+          fi
+          echo "Build OK"
 
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
       - id: deployment
         uses: actions/deploy-pages@v4
