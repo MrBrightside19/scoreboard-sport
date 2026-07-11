@@ -1,6 +1,6 @@
 -- Perfiles, partidos y trigger de registro
 
-create type public.user_role as enum ('organizer', 'spectator');
+create type public.user_role as enum ('organizer', 'spectator', 'assistant');
 
 create table public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,

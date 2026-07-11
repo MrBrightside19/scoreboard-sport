@@ -32,7 +32,7 @@ async function loadLive(): Promise<void> {
 }
 
 async function createMatchFlow(): Promise<void> {
-  if (!auth.isOrganizer && isSupabaseConfigured) {
+  if (!auth.isStaff && isSupabaseConfigured) {
     showAuth.value = true
     return
   }
@@ -61,7 +61,7 @@ async function createMatchFlow(): Promise<void> {
 
 onMounted(() => {
   void loadLive()
-  if (route.query.auth === 'organizer') {
+  if (route.query.auth === 'organizer' || route.query.auth === 'staff') {
     showAuth.value = true
   }
 })
@@ -81,7 +81,7 @@ onMounted(() => {
           <a-button type="primary" size="large" :loading="creating" @click="createMatchFlow">
             Crear partido
           </a-button>
-          <router-link v-if="auth.isOrganizer" to="/tournaments">
+          <router-link v-if="auth.isStaff" to="/tournaments">
             <a-button size="large">Mis torneos</a-button>
           </router-link>
           <router-link to="/torneos-publicos">
@@ -117,8 +117,16 @@ onMounted(() => {
     <footer class="home__footer">
       <template v-if="auth.isAuthenticated">
         <span>{{ auth.profile?.display_name ?? auth.profile?.email }}</span>
-        <a-tag :color="auth.isOrganizer ? 'cyan' : 'default'">
-          {{ auth.isOrganizer ? 'Organizador' : 'Espectador' }}
+        <a-tag
+          :color="auth.isOrganizer ? 'cyan' : auth.isAssistant ? 'purple' : 'default'"
+        >
+          {{
+            auth.isOrganizer
+              ? 'Organizador'
+              : auth.isAssistant
+                ? 'Asistente'
+                : 'Espectador'
+          }}
         </a-tag>
         <a-button type="link" @click="auth.logout()">Cerrar sesión</a-button>
       </template>

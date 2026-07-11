@@ -16,8 +16,15 @@ import { normalizeGameTime } from '@/utils/clock'
 import { buildAppUrl, tournamentOverlayPath } from '@/utils/appUrl'
 import { calculateStandings } from '@/utils/standings'
 import { writeMatchIdToStorage } from '@/utils/localSync'
+import {
+  assignTournamentAssistant,
+  canAccessTournament,
+  fetchTournamentAssistants,
+  removeTournamentAssistant,
+} from '@/services/tournamentAssistantService'
 import { getTournamentTableRefreshMs } from '@/config/poll'
-import type { Tournament, TournamentMatch } from '@/types/tournament'
+import type { Tournament, TournamentAssistant, TournamentMatch } from '@/types/tournament'
+import { MAX_TOURNAMENT_ASSISTANTS } from '@/types/tournament'
 import TournamentStandings from '@/components/TournamentStandings.vue'
 
 const route = useRoute()
@@ -25,13 +32,25 @@ const router = useRouter()
 const auth = useAuthStore()
 
 const tournament = ref<Tournament | null>(null)
+const assistants = ref<TournamentAssistant[]>([])
 const matches = ref<TournamentMatch[]>([])
 const loading = ref(true)
 const refreshing = ref(false)
 const importing = ref(false)
 const copiedCourt = ref<string | null>(null)
+const assistantEmail = ref('')
+const assigningAssistant = ref(false)
+const removingAssistantId = ref<string | null>(null)
 
 let pollTimer: number | null = null
+
+const isOwner = computed(
+  () => tournament.value?.organizer_id === auth.profile?.id,
+)
+
+const canAddAssistant = computed(
+  () => assistants.value.length < MAX_TOURNAMENT_ASSISTANTS,
+)
 
 const streamCourts = computed(() =>
   [...new Set(matches.value.map((m) => m.court))].sort((a, b) =>
@@ -61,6 +80,25 @@ async function load(options: { silent?: boolean } = {}): Promise<void> {
   }
   try {
     tournament.value = await fetchTournament(id)
+    if (!tournament.value) {
+      await router.replace({ name: 'tournaments' })
+      return
+    }
+
+    if (auth.profile) {
+      const allowed = await canAccessTournament(
+        id,
+        auth.profile.id,
+        tournament.value.organizer_id,
+      )
+      if (!allowed) {
+        message.error('No tienes acceso a este torneo.')
+        await router.replace({ name: 'tournaments' })
+        return
+      }
+    }
+
+    assistants.value = await fetchTournamentAssistants(id)
     matches.value = await fetchTournamentMatches(id)
   } finally {
     loading.value = false
@@ -203,6 +241,57 @@ function copyOverlayForCourt(court: string): void {
   setTimeout(() => { copiedCourt.value = null }, 2000)
 }
 
+async function submitAssistant(): Promise<void> {
+  if (!tournament.value || !auth.profile || !isOwner.value) return
+
+  assigningAssistant.value = true
+  try {
+    const created = await assignTournamentAssistant(
+      tournament.value.id,
+      assistantEmail.value,
+      auth.profile.id,
+      tournament.value.organizer_id,
+    )
+    assistants.value = [...assistants.value, created].sort(
+      (a, b) => a.created_at.localeCompare(b.created_at),
+    )
+    assistantEmail.value = ''
+    message.success(`Asistente asignado: ${created.email}`)
+    if (auth.profile?.id === created.user_id) {
+      await auth.loadProfile()
+    }
+  } catch (err) {
+    Modal.error({
+      title: 'No se pudo asignar asistente',
+      content: err instanceof Error ? err.message : 'Error desconocido',
+    })
+  } finally {
+    assigningAssistant.value = false
+  }
+}
+
+async function removeAssistant(userId: string): Promise<void> {
+  if (!tournament.value || !isOwner.value) return
+
+  removingAssistantId.value = userId
+  try {
+    await removeTournamentAssistant(tournament.value.id, userId)
+    assistants.value = assistants.value.filter((assistant) => assistant.user_id !== userId)
+    message.success('Asistente removido del torneo.')
+    if (auth.profile?.id === userId) {
+      await auth.loadProfile()
+      await router.replace({ name: 'tournaments' })
+    }
+  } catch (err) {
+    Modal.error({
+      title: 'No se pudo quitar al asistente',
+      content: err instanceof Error ? err.message : 'Error desconocido',
+    })
+  } finally {
+    removingAssistantId.value = null
+  }
+}
+
 onMounted(() => {
   void load()
   pollTimer = window.setInterval(() => void refresh(), getTournamentTableRefreshMs())
@@ -241,6 +330,60 @@ onUnmounted(() => {
           </a-button>
         </div>
       </header>
+
+      <section v-if="tournament && isOwner" class="detail__section">
+        <h2>Asistentes del torneo</h2>
+        <p class="detail__assistant-hint">
+          Puedes asignar hasta {{ MAX_TOURNAMENT_ASSISTANTS }} personas como asistentes
+          ({{ assistants.length }}/{{ MAX_TOURNAMENT_ASSISTANTS }}).
+          Podrán operar el calendario y la mesa de control desde sus propias cuentas.
+        </p>
+
+        <div v-if="assistants.length" class="detail__assistant-list">
+          <div
+            v-for="item in assistants"
+            :key="item.user_id"
+            class="detail__assistant-current"
+          >
+            <div>
+              <strong>{{ item.email }}</strong>
+              <span class="detail__assistant-role">Asistente</span>
+            </div>
+            <a-popconfirm
+              title="¿Quitar a esta persona como asistente?"
+              ok-text="Sí, quitar"
+              cancel-text="Cancelar"
+              @confirm="removeAssistant(item.user_id)"
+            >
+              <a-button
+                danger
+                size="small"
+                :loading="removingAssistantId === item.user_id"
+              >
+                Quitar
+              </a-button>
+            </a-popconfirm>
+          </div>
+        </div>
+
+        <div v-if="canAddAssistant" class="detail__assistant-form">
+          <a-input
+            v-model:value="assistantEmail"
+            type="email"
+            placeholder="correo@ejemplo.com"
+            :disabled="assigningAssistant"
+          />
+          <a-button
+            type="primary"
+            class="detail__assistant-submit"
+            :loading="assigningAssistant"
+            :disabled="!assistantEmail.trim()"
+            @click="submitAssistant"
+          >
+            Agregar asistente
+          </a-button>
+        </div>
+      </section>
 
       <section class="detail__section">
         <h2>Tabla de posiciones</h2>
@@ -406,6 +549,81 @@ onUnmounted(() => {
   margin: 0 0 1rem;
   font-size: 0.85rem;
   opacity: 0.7;
+}
+
+.detail__assistant-hint {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.detail__assistant-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.detail__assistant-current {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.detail__assistant-role {
+  display: inline-block;
+  margin-left: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #b37feb;
+}
+
+.detail__assistant-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem;
+}
+
+:deep(.detail__assistant-form .ant-input) {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #e8edf5;
+
+  &::placeholder {
+    color: rgba(232, 237, 245, 0.45);
+  }
+
+  &:hover,
+  &:focus {
+    border-color: #00b4d8;
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+
+:deep(.detail__assistant-submit.ant-btn-primary) {
+  background: #00b4d8;
+  border-color: #00b4d8;
+  color: #041018;
+  font-weight: 600;
+
+  &:not(:disabled):hover {
+    background: #00d4ff;
+    border-color: #00d4ff;
+    color: #041018;
+  }
+
+  &:disabled {
+    background: rgba(0, 180, 216, 0.25);
+    border-color: rgba(0, 180, 216, 0.35);
+    color: rgba(232, 237, 245, 0.55);
+  }
 }
 
 .detail__stream-list {

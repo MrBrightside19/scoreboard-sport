@@ -50,25 +50,25 @@ const router = createRouter({
       path: '/board',
       name: 'board',
       component: () => import('@/views/Board.vue'),
-      meta: { bare: true, requiresOrganizer: true, title: 'Marcador TV' },
+      meta: { bare: true, requiresStaff: true, title: 'Marcador TV' },
     },
     {
       path: '/controls',
       name: 'controls',
       component: () => import('@/views/Controls.vue'),
-      meta: { requiresOrganizer: true, title: 'Mesa de control' },
+      meta: { requiresStaff: true, title: 'Mesa de control' },
     },
     {
       path: '/tournaments',
       name: 'tournaments',
       component: () => import('@/views/Tournaments.vue'),
-      meta: { requiresOrganizer: true, title: 'Torneos' },
+      meta: { requiresStaff: true, title: 'Torneos' },
     },
     {
       path: '/tournaments/:id',
       name: 'tournament-detail',
       component: () => import('@/views/TournamentDetail.vue'),
-      meta: { requiresOrganizer: true, title: 'Detalle torneo' },
+      meta: { requiresStaff: true, title: 'Detalle torneo' },
     },
   ],
   scrollBehavior: () => ({ top: 0 }),
@@ -79,7 +79,7 @@ router.beforeEach(async (to) => {
     document.title = `${to.meta.title} · Marcador Hockey`
   }
 
-  if (!to.meta.requiresOrganizer) return true
+  if (!to.meta.requiresStaff) return true
 
   const auth = useAuthStore()
   if (auth.loading) {
@@ -93,8 +93,12 @@ router.beforeEach(async (to) => {
     })
   }
 
-  if (!auth.isOrganizer) {
-    return { name: 'home', query: { auth: 'organizer' } }
+  if (!auth.isAuthenticated) {
+    return { name: 'home', query: { auth: 'staff' } }
+  }
+
+  if (!auth.isStaff) {
+    return { name: 'home', query: { auth: 'staff' } }
   }
 
   return true

@@ -57,3 +57,13 @@ export interface StandingRow {
   goalDiff: number
   points: number
 }
+
+export interface TournamentAssistant {
+  tournament_id: string
+  user_id: string
+  email: string
+  assigned_by: string
+  created_at: string
+}
+
+export const MAX_TOURNAMENT_ASSISTANTS = 2

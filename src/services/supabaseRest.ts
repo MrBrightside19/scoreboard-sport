@@ -50,7 +50,7 @@ export async function supabaseRest<T>(
       const parsed = JSON.parse(errorText) as { message?: string; code?: string }
       if (parsed.message) message = parsed.message
       if (parsed.code === '42501' || message.includes('row-level security')) {
-        message = 'Permiso denegado. Inicia sesión como organizador.'
+        message = 'Permiso denegado. Inicia sesión como organizador o asistente del torneo.'
       }
     } catch {
       // mantener message original

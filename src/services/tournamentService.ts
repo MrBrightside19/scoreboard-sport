@@ -11,11 +11,24 @@ import { normalizeGameTime } from '@/utils/clock'
 import { supabaseRest } from './supabaseRest'
 import { createMatch, finishMatch } from './matchSync'
 import { upsertCourtStream } from './tournamentCourtStream'
+import { fetchAssistantTournamentIds } from './tournamentAssistantService'
 
 export async function fetchTournaments(organizerId?: string): Promise<Tournament[]> {
   const filter = organizerId
     ? `organizer_id=eq.${organizerId}`
     : 'visibility=eq.public'
+  return supabaseRest<Tournament[]>(
+    `tournaments?${filter}&select=*&order=created_at.desc`,
+  )
+}
+
+export async function fetchManagedTournaments(userId: string): Promise<Tournament[]> {
+  const assistantIds = await fetchAssistantTournamentIds(userId)
+
+  const filter = assistantIds.length > 0
+    ? `or=(organizer_id.eq.${userId},id.in.(${assistantIds.join(',')}))`
+    : `organizer_id=eq.${userId}`
+
   return supabaseRest<Tournament[]>(
     `tournaments?${filter}&select=*&order=created_at.desc`,
   )
