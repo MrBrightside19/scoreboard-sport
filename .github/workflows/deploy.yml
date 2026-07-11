@@ -2,68 +2,62 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main, develop]
+    branches:
+      - main
+      - develop
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '20'
           cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Check Supabase env
-        run: |
-          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
-            echo "::warning::Faltan VITE_SUPABASE_URL y/o VITE_SUPABASE_ANON_KEY."
-            echo "La app se publicará, pero mostrará 'Supabase no configurado'."
-          else
-            echo "Supabase env OK"
-          fi
-        env:
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
-
       - name: Build
         run: npm run build
         env:
+          NODE_ENV: production
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           VITE_LIVE_CLOCK_UPDATE_MS: ${{ vars.VITE_LIVE_CLOCK_UPDATE_MS || '5000' }}
           VITE_POLL_INTERVAL_MS: ${{ vars.VITE_POLL_INTERVAL_MS || '5000' }}
           VITE_TOURNAMENT_TABLE_REFRESH_MS: ${{ vars.VITE_TOURNAMENT_TABLE_REFRESH_MS || '60000' }}
 
-      - name: Verify build output
-        run: |
-          if grep -q '/src/main.ts' dist/index.html; then
-            echo "::error::El build no generó assets de producción."
-            exit 1
-          fi
-          if ! grep -q '/${{ github.event.repository.name }}/assets/' dist/index.html; then
-            echo "::error::dist/index.html no contiene la ruta base esperada."
-            exit 1
-          fi
-          echo "Build OK"
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
 
-      - name: Publish to gh-pages branch
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
-          publish_branch: gh-pages
-          force_orphan: true
+          path: ./dist
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
