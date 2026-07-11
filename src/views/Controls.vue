@@ -1,31 +1,192 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
+import { Modal } from 'ant-design-vue'
 import { useScoreboardStore } from '@/stores/scoreboard'
 import { useAuthStore } from '@/stores/auth'
-import { useLocalScoreboardSync } from '@/composables/useLocalScoreboardSync'
-import { publishMatchState } from '@/services/matchSync'
+import { fetchMatchState, publishMatchState } from '@/services/matchSync'
+import {
+  advanceToNextTournamentMatch,
+  getNextScheduledMatch,
+} from '@/services/tournamentService'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
 import { readMatchIdFromStorage } from '@/utils/localSync'
-import { MAX_PERIODS } from '@/types/hockeyScoreboard'
+import { normalizeGameTime } from '@/utils/clock'
+import { buildAppUrl, tournamentLivePath, tournamentOverlayPath } from '@/utils/appUrl'
+import { getLiveClockUpdateMs } from '@/config/poll'
+import { MAX_PERIODS, isGoalPending } from '@/types/hockeyScoreboard'
+import ControlsRosterPanel from '@/components/controls/ControlsRosterPanel.vue'
+import ControlsGoalsPanel from '@/components/controls/ControlsGoalsPanel.vue'
+import ControlsPenaltiesPanel from '@/components/controls/ControlsPenaltiesPanel.vue'
 
 const route = useRoute()
+const router = useRouter()
 const store = useScoreboardStore()
 const auth = useAuthStore()
 
 const matchId = computed(
   () => (route.query.matchId as string) || readMatchIdFromStorage() || '',
 )
-const publishing = ref(false)
-const copied = ref<string | null>(null)
 
-useLocalScoreboardSync(() => matchId.value)
+const matchFallback = computed((): Pick<
+  import('@/types/hockeyScoreboard').ScoreboardState,
+  'localTeam' | 'visitTeam' | 'timeGame'
+> | undefined => {
+  const local = route.query.local as string | undefined
+  const visit = route.query.visit as string | undefined
+  const time = route.query.time as string | undefined
+  if (!local || !visit) return undefined
+  return { localTeam: local, visitTeam: visit, timeGame: normalizeGameTime(time ?? '20:00') }
+})
+
+const copied = ref<string | null>(null)
+const hydrated = ref(false)
+const advancing = ref(false)
+const advanceError = ref<string | null>(null)
+const tournamentContext = ref<{ tournamentId: string; court: string } | null>(null)
+const hasNextMatch = ref(false)
+const skipLeaveGuard = ref(false)
+const activeTab = ref('match')
+
+const pendingGoalsCount = computed(
+  () => store.state.goals.filter((goal) => isGoalPending(goal)).length,
+)
+
+function markGoal(team: 'local' | 'visit'): void {
+  store.markGoal(team)
+}
 
 let publishTimer: number | null = null
+let publishDebounceTimer: number | null = null
+let publishInFlight = false
+let publishQueued = false
+
+function penaltySignature(
+  penalties: import('@/types/hockeyScoreboard').TeamPenalty[],
+): string {
+  return penalties
+    .map((penalty) =>
+      `${penalty.id}|${penalty.playerId}|${penalty.penaltyTypeId}|${penalty.infraction}`,
+    )
+    .join(';')
+}
+
+function schedulePublish(delayMs = 400): void {
+  if (!hydrated.value || !matchId.value || !isSupabaseConfigured) return
+  if (publishDebounceTimer) clearTimeout(publishDebounceTimer)
+  publishDebounceTimer = window.setTimeout(() => {
+    publishDebounceTimer = null
+    void publish()
+  }, delayMs)
+}
+
+async function finalizeOnExit(): Promise<void> {
+  store.stopWriterTick()
+  if (publishTimer) {
+    clearInterval(publishTimer)
+    publishTimer = null
+  }
+  if (publishDebounceTimer) {
+    clearTimeout(publishDebounceTimer)
+    publishDebounceTimer = null
+  }
+  if (!matchId.value || !hydrated.value || !isSupabaseConfigured) return
+  hydrated.value = false
+  store.syncElapsedAndPause()
+  await publish()
+}
+
+function onBeforeUnload(event: BeforeUnloadEvent): void {
+  if (!matchId.value || !hydrated.value || skipLeaveGuard.value) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+
+let leaveModalOpen = false
+
+async function loadTournamentContext(id: string): Promise<void> {
+  tournamentContext.value = null
+  hasNextMatch.value = false
+
+  if (!isSupabaseConfigured) return
+
+  try {
+    const record = await fetchMatchState(id)
+    if (!record?.tournament_id || !record.court) return
+
+    tournamentContext.value = {
+      tournamentId: record.tournament_id,
+      court: record.court,
+    }
+    const next = await getNextScheduledMatch(record.tournament_id, record.court)
+    hasNextMatch.value = Boolean(next)
+  } catch {
+    tournamentContext.value = null
+  }
+}
+
+async function initMatch(id: string): Promise<void> {
+  hydrated.value = false
+  advanceError.value = null
+  await store.hydrateMatch(id, matchFallback.value)
+  await loadTournamentContext(id)
+  hydrated.value = true
+  if (!store.isWriter) {
+    store.startWriterTick()
+  }
+}
+
+async function goToNextMatch(): Promise<void> {
+  if (!matchId.value || !auth.profile) return
+
+  advancing.value = true
+  advanceError.value = null
+  hydrated.value = false
+  store.stopWriterTick()
+
+  try {
+    const result = await advanceToNextTournamentMatch(
+      matchId.value,
+      store.state,
+      auth.profile.id,
+    )
+
+    if (!result) {
+      advanceError.value = 'No hay más partidos programados en esta cancha.'
+      hasNextMatch.value = false
+      hydrated.value = true
+      store.startWriterTick()
+      return
+    }
+
+    skipLeaveGuard.value = true
+    await router.replace({
+      name: 'controls',
+      query: {
+        matchId: result.matchId,
+        local: result.localTeam,
+        visit: result.visitTeam,
+        time: result.timeGame,
+        tournamentId: result.tournamentId,
+      },
+    })
+  } catch (err) {
+    advanceError.value = err instanceof Error ? err.message : 'Error al avanzar al siguiente partido'
+    hydrated.value = true
+    store.startWriterTick()
+  } finally {
+    advancing.value = false
+  }
+}
 
 async function publish(): Promise<void> {
   if (!matchId.value || !isSupabaseConfigured) return
-  publishing.value = true
+  if (publishInFlight) {
+    publishQueued = true
+    return
+  }
+
+  publishInFlight = true
   try {
     await publishMatchState(matchId.value, store.state, {
       organizer_id: auth.profile?.id ?? null,
@@ -33,16 +194,32 @@ async function publish(): Promise<void> {
       title: `${store.state.localTeam} vs ${store.state.visitTeam}`,
     })
   } finally {
-    publishing.value = false
+    publishInFlight = false
+    if (publishQueued) {
+      publishQueued = false
+      void publish()
+    }
   }
 }
 
-function copyLink(type: 'live' | 'overlay'): void {
-  const path = type === 'live'
-    ? `/live/${matchId.value}`
-    : `/overlay/${matchId.value}`
-  const url = `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, '')}${path}`
-  void navigator.clipboard.writeText(url)
+type LinkType = 'live' | 'overlay' | 'live-torneo' | 'overlay-torneo'
+
+function copyLink(type: LinkType): void {
+  let path = ''
+
+  if (type === 'overlay-torneo' && tournamentContext.value) {
+    const { tournamentId, court } = tournamentContext.value
+    path = tournamentOverlayPath(tournamentId, court)
+  } else if (type === 'live-torneo' && tournamentContext.value) {
+    const { tournamentId, court } = tournamentContext.value
+    path = tournamentLivePath(tournamentId, court)
+  } else if (type === 'live') {
+    path = `/live/${matchId.value}`
+  } else {
+    path = `/overlay/${matchId.value}`
+  }
+
+  void navigator.clipboard.writeText(buildAppUrl(path))
   copied.value = type
   setTimeout(() => { copied.value = null }, 2000)
 }
@@ -50,27 +227,80 @@ function copyLink(type: 'live' | 'overlay'): void {
 watch(
   matchId,
   (id) => {
-    if (id) store.setMatch(id)
+    if (id) void initMatch(id)
   },
   { immediate: true },
 )
 
 watch(
-  () => store.state,
-  () => { void publish() },
+  () => ({
+    localTeam: store.state.localTeam,
+    visitTeam: store.state.visitTeam,
+    goalLocal: store.state.goalLocal,
+    goalVisit: store.state.goalVisit,
+    gamePeriod: store.state.gamePeriod,
+    isPaused: store.state.isPaused,
+    goals: store.state.goals,
+    rosterLocal: store.state.rosterLocal,
+    rosterVisit: store.state.rosterVisit,
+    penaltiesLocal: penaltySignature(store.state.penaltiesLocal),
+    penaltiesVisit: penaltySignature(store.state.penaltiesVisit),
+    manualClock: store.state.isPaused ? store.state.timeGame : null,
+  }),
+  () => {
+    schedulePublish()
+  },
   { deep: true },
 )
 
 onMounted(() => {
+  window.addEventListener('beforeunload', onBeforeUnload)
   if (matchId.value) {
-    store.startWriterTick()
-    publishTimer = window.setInterval(() => void publish(), 5000)
+    const pollMs = getLiveClockUpdateMs()
+    publishTimer = window.setInterval(() => {
+      if (hydrated.value) void publish()
+    }, pollMs)
   }
 })
 
+onBeforeRouteLeave((_to, _from, next) => {
+  if (skipLeaveGuard.value || !matchId.value || !hydrated.value) {
+    skipLeaveGuard.value = false
+    next()
+    return
+  }
+
+  if (leaveModalOpen) {
+    next(false)
+    return
+  }
+
+  leaveModalOpen = true
+  Modal.confirm({
+    title: '¿Cerrar la mesa de control?',
+    content:
+      'Si sales, el reloj se pausará y dejarás de operar el partido. El overlay seguirá mostrando el marcador pausado.',
+    okText: 'Salir',
+    cancelText: 'Quedarme',
+    okType: 'danger',
+    onOk: async () => {
+      skipLeaveGuard.value = true
+      await finalizeOnExit()
+      leaveModalOpen = false
+      next()
+    },
+    onCancel: () => {
+      leaveModalOpen = false
+      next(false)
+    },
+  })
+})
+
 onUnmounted(() => {
-  store.stopWriterTick()
-  if (publishTimer) clearInterval(publishTimer)
+  window.removeEventListener('beforeunload', onBeforeUnload)
+  if (!skipLeaveGuard.value) {
+    void finalizeOnExit()
+  }
 })
 </script>
 
@@ -82,15 +312,36 @@ onUnmounted(() => {
         <p v-if="matchId" class="controls__match-id">Partido: {{ matchId }}</p>
       </div>
       <div class="controls__links">
-        <router-link :to="{ name: 'board', query: { matchId } }" target="_blank">
+        <router-link
+          :to="{
+            name: 'board',
+            query: {
+              matchId,
+              local: route.query.local,
+              visit: route.query.visit,
+              time: route.query.time,
+            },
+          }"
+          target="_blank"
+        >
           <a-button>Abrir Marcador TV</a-button>
         </router-link>
-        <a-button @click="copyLink('live')">
-          {{ copied === 'live' ? '¡Copiado!' : 'Copiar Live' }}
-        </a-button>
-        <a-button @click="copyLink('overlay')">
-          {{ copied === 'overlay' ? '¡Copiado!' : 'Copiar OBS' }}
-        </a-button>
+        <template v-if="tournamentContext">
+          <a-button type="primary" @click="copyLink('overlay-torneo')">
+            {{ copied === 'overlay-torneo' ? '¡Copiado!' : 'Copiar OBS torneo' }}
+          </a-button>
+          <a-button @click="copyLink('live-torneo')">
+            {{ copied === 'live-torneo' ? '¡Copiado!' : 'Copiar Live torneo' }}
+          </a-button>
+        </template>
+        <template v-else>
+          <a-button @click="copyLink('live')">
+            {{ copied === 'live' ? '¡Copiado!' : 'Copiar Live' }}
+          </a-button>
+          <a-button @click="copyLink('overlay')">
+            {{ copied === 'overlay' ? '¡Copiado!' : 'Copiar OBS' }}
+          </a-button>
+        </template>
       </div>
     </header>
 
@@ -102,97 +353,161 @@ onUnmounted(() => {
       show-icon
     />
 
-    <div v-else class="controls__grid">
-      <a-card title="Equipos" class="controls__card">
-        <a-form layout="vertical">
-          <a-form-item label="Local">
-            <a-input
-              :value="store.state.localTeam"
-              @update:value="(v: string) => store.setTeams(v, store.state.visitTeam)"
-            />
-          </a-form-item>
-          <a-form-item label="Visita">
-            <a-input
-              :value="store.state.visitTeam"
-              @update:value="(v: string) => store.setTeams(store.state.localTeam, v)"
-            />
-          </a-form-item>
-        </a-form>
-      </a-card>
+    <a-alert
+      v-else-if="!hydrated"
+      type="info"
+      message="Cargando partido…"
+      show-icon
+    />
 
-      <a-card title="Marcador" class="controls__card">
-        <div class="controls__score-row">
-          <div class="controls__team-block">
-            <span>{{ store.state.localTeam }}</span>
-            <div class="controls__score-btns">
-              <a-button size="large" @click="store.adjustGoal('local', -1)">−</a-button>
-              <strong>{{ store.state.goalLocal }}</strong>
-              <a-button type="primary" size="large" @click="store.adjustGoal('local', 1)">+</a-button>
-            </div>
+    <div v-else class="controls__body">
+      <a-tabs v-model:active-key="activeTab" class="controls__tabs">
+        <a-tab-pane key="match" tab="Partido">
+          <div class="controls__grid">
+            <a-card title="Marcador" class="controls__card controls__card--wide">
+              <div class="controls__match">
+                <div class="controls__side controls__side--local">
+                  <span class="controls__side-label">Local</span>
+                  <a-input
+                    :value="store.state.localTeam"
+                    size="large"
+                    @update:value="(v: string) => store.setTeams(v, store.state.visitTeam)"
+                  />
+                  <div class="controls__score-controls">
+                    <a-button size="large" @click="store.removeLastGoal('local')">−</a-button>
+                    <span class="controls__score">{{ store.state.goalLocal }}</span>
+                    <a-button type="primary" size="large" @click="markGoal('local')">+</a-button>
+                  </div>
+                </div>
+
+                <div class="controls__divider" aria-hidden="true">VS</div>
+
+                <div class="controls__side controls__side--visit">
+                  <span class="controls__side-label">Visita</span>
+                  <a-input
+                    :value="store.state.visitTeam"
+                    size="large"
+                    @update:value="(v: string) => store.setTeams(store.state.localTeam, v)"
+                  />
+                  <div class="controls__score-controls">
+                    <a-button size="large" @click="store.removeLastGoal('visit')">−</a-button>
+                    <span class="controls__score">{{ store.state.goalVisit }}</span>
+                    <a-button type="primary" size="large" @click="markGoal('visit')">+</a-button>
+                  </div>
+                </div>
+              </div>
+              <p class="controls__score-hint">
+                El botón <strong>+</strong> marca el gol y captura el minuto del reloj. Completa autor y asistencia en <strong>Goles</strong>.
+              </p>
+            </a-card>
+
+            <a-card title="Reloj y periodo" class="controls__card controls__card--wide controls__card--clock">
+              <div class="controls__clock">
+                <div class="controls__clock-main">
+                  <div class="controls__clock-display">{{ store.state.timeGame }}</div>
+                  <p class="controls__clock-status">
+                    {{ store.state.isPaused ? 'En pausa' : 'En juego' }}
+                  </p>
+                </div>
+
+                <div class="controls__clock-actions">
+                  <a-button
+                    block
+                    size="large"
+                    :type="store.state.isPaused ? 'primary' : 'default'"
+                    @click="store.togglePause()"
+                  >
+                    {{ store.state.isPaused ? 'Reanudar' : 'Pausar' }}
+                  </a-button>
+
+                  <div class="controls__clock-field">
+                    <label for="controls-game-time">Ajustar tiempo</label>
+                    <a-input
+                      id="controls-game-time"
+                      :value="store.state.timeGame"
+                      @update:value="(v: string) => store.setGameTime(v)"
+                    />
+                  </div>
+
+                  <div class="controls__clock-field controls__clock-field--period">
+                    <label>Periodo</label>
+                    <div class="controls__clock-period">
+                      <a-button @click="store.setPeriod(store.state.gamePeriod - 1)">−</a-button>
+                      <span class="controls__clock-period-label">
+                        {{ store.state.gamePeriod }} / {{ MAX_PERIODS }}
+                      </span>
+                      <a-button @click="store.setPeriod(store.state.gamePeriod + 1)">+</a-button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </a-card>
+
+            <a-card v-if="tournamentContext" title="Torneo" class="controls__card controls__card--wide">
+              <p class="controls__tournament-meta">
+                Cancha {{ tournamentContext.court }}
+              </p>
+              <p class="controls__tournament-hint controls__tournament-hint--info">
+                El enlace <strong>OBS torneo</strong> es fijo para esta cancha y se actualiza solo al pasar al siguiente partido.
+              </p>
+              <a-alert
+                v-if="advanceError"
+                type="error"
+                :message="advanceError"
+                show-icon
+                style="margin-bottom: 0.75rem"
+              />
+              <a-popconfirm
+                title="¿Finalizar este partido e iniciar el siguiente de la cancha?"
+                ok-text="Sí, continuar"
+                cancel-text="Cancelar"
+                :disabled="!hasNextMatch || advancing"
+                @confirm="goToNextMatch"
+              >
+                <a-button
+                  type="primary"
+                  block
+                  :loading="advancing"
+                  :disabled="!hasNextMatch"
+                >
+                  Siguiente partido
+                </a-button>
+              </a-popconfirm>
+              <p v-if="!hasNextMatch" class="controls__tournament-hint">
+                No quedan partidos programados en esta cancha.
+              </p>
+            </a-card>
           </div>
-          <div class="controls__team-block">
-            <span>{{ store.state.visitTeam }}</span>
-            <div class="controls__score-btns">
-              <a-button size="large" @click="store.adjustGoal('visit', -1)">−</a-button>
-              <strong>{{ store.state.goalVisit }}</strong>
-              <a-button type="primary" size="large" @click="store.adjustGoal('visit', 1)">+</a-button>
-            </div>
-          </div>
-        </div>
-      </a-card>
+        </a-tab-pane>
 
-      <a-card title="Reloj y periodo" class="controls__card">
-        <div class="controls__clock-display">{{ store.state.timeGame }}</div>
-        <div class="controls__btn-row">
-          <a-button
-            :type="store.state.isPaused ? 'primary' : 'default'"
-            size="large"
-            @click="store.togglePause()"
-          >
-            {{ store.state.isPaused ? 'Reanudar' : 'Pausar' }}
-          </a-button>
-          <a-input
-            :value="store.state.timeGame"
-            style="width: 100px"
-            @update:value="(v: string) => store.setGameTime(v)"
-          />
-        </div>
-        <div class="controls__btn-row">
-          <a-button @click="store.setPeriod(store.state.gamePeriod - 1)">− Periodo</a-button>
-          <span>Periodo {{ store.state.gamePeriod }} / {{ MAX_PERIODS }}</span>
-          <a-button @click="store.setPeriod(store.state.gamePeriod + 1)">+ Periodo</a-button>
-        </div>
-      </a-card>
+        <a-tab-pane key="roster" tab="Plantillas">
+          <ControlsRosterPanel />
+        </a-tab-pane>
 
-      <a-card title="Penalidades" class="controls__card">
-        <p class="controls__penalty-time">{{ store.state.penaltyGame }}</p>
-        <div class="controls__btn-row">
-          <a-button
-            :type="store.state.penalizedLocal ? 'primary' : 'default'"
-            danger
-            @click="store.togglePenalty('local')"
-          >
-            Penalidad {{ store.state.localTeam }}
-          </a-button>
-          <a-button
-            :type="store.state.penalizedVisit ? 'primary' : 'default'"
-            danger
-            @click="store.togglePenalty('visit')"
-          >
-            Penalidad {{ store.state.visitTeam }}
-          </a-button>
-          <a-button @click="store.resetPenalty()">Reset 2:00</a-button>
-        </div>
-      </a-card>
+        <a-tab-pane key="goals">
+          <template #tab>
+            Goles
+            <a-badge
+              v-if="pendingGoalsCount > 0"
+              :count="pendingGoalsCount"
+              :number-style="{ backgroundColor: '#faad14' }"
+              class="controls__tab-badge"
+            />
+          </template>
+          <ControlsGoalsPanel />
+        </a-tab-pane>
+
+        <a-tab-pane key="penalties" tab="Penalidades">
+          <ControlsPenaltiesPanel />
+        </a-tab-pane>
+      </a-tabs>
     </div>
-
-    <p v-if="publishing" class="controls__sync">Sincronizando…</p>
   </div>
 </template>
 
 <style scoped lang="scss">
 .controls {
-  max-width: 1000px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 1.5rem;
 }
@@ -224,6 +539,121 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 1rem;
+}
+
+.controls__card--wide {
+  grid-column: 1 / -1;
+}
+
+.controls__tournament-meta {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+  opacity: 0.7;
+}
+
+.controls__tournament-hint {
+  margin: 0.75rem 0 0;
+  font-size: 0.8rem;
+  opacity: 0.55;
+  text-align: center;
+
+  &--info {
+    margin-top: 0;
+    margin-bottom: 0.75rem;
+    text-align: left;
+    opacity: 0.7;
+  }
+}
+
+.controls__match {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+.controls__side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.controls__side-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+.controls__side--local .controls__side-label {
+  color: #00d4ff;
+}
+
+.controls__side--visit .controls__side-label {
+  color: #ff6b35;
+}
+
+.controls__divider {
+  align-self: center;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.4rem;
+  letter-spacing: 0.08em;
+  opacity: 0.35;
+  padding-top: 2rem;
+}
+
+.controls__score-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.controls__score {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 2.8rem;
+  min-width: 2ch;
+  text-align: center;
+  line-height: 1;
+}
+
+.controls__score-hint {
+  margin: 0.75rem 0 0;
+  text-align: center;
+  font-size: 0.78rem;
+  opacity: 0.55;
+}
+
+.controls__tabs {
+  :deep(.ant-tabs-nav) {
+    margin-bottom: 1rem;
+
+    &::before {
+      border-color: rgba(255, 255, 255, 0.12);
+    }
+  }
+
+  :deep(.ant-tabs-tab) {
+    color: rgba(232, 237, 245, 0.65);
+
+    &:hover {
+      color: #e8edf5;
+    }
+  }
+
+  :deep(.ant-tabs-tab-active .ant-tabs-tab-btn) {
+    color: #00d4ff;
+    text-shadow: none;
+  }
+
+  :deep(.ant-tabs-ink-bar) {
+    background: #00d4ff;
+  }
+}
+
+.controls__tab-badge {
+  margin-left: 0.35rem;
 }
 
 .controls__score-row {
@@ -258,9 +688,65 @@ onUnmounted(() => {
 
 .controls__clock-display {
   font-family: 'Bebas Neue', sans-serif;
-  font-size: 3rem;
+  font-size: 3.25rem;
   text-align: center;
-  margin-bottom: 1rem;
+  line-height: 1;
+  margin: 0;
+}
+
+.controls__clock {
+  display: grid;
+  grid-template-columns: minmax(140px, 200px) 1fr;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.controls__clock-main {
+  text-align: center;
+  padding-right: 1.5rem;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.controls__clock-status {
+  margin: 0.35rem 0 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.5;
+}
+
+.controls__clock-actions {
+  display: grid;
+  grid-template-columns: minmax(130px, 160px) minmax(140px, 200px) minmax(160px, 220px);
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.controls__clock-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+
+  label {
+    font-size: 0.75rem;
+    opacity: 0.6;
+  }
+}
+
+.controls__clock-period {
+  display: grid;
+  grid-template-columns: 40px 1fr 40px;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.controls__clock-period-label {
+  text-align: center;
+  font-size: 0.95rem;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .controls__btn-row {
@@ -272,18 +758,30 @@ onUnmounted(() => {
   margin-top: 0.75rem;
 }
 
-.controls__penalty-time {
-  text-align: center;
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: 2rem;
-  margin: 0 0 0.5rem;
-  color: #ff6b6b;
-}
+@media (max-width: 720px) {
+  .controls__match {
+    grid-template-columns: 1fr;
+  }
 
-.controls__sync {
-  text-align: center;
-  font-size: 0.8rem;
-  opacity: 0.5;
-  margin-top: 1rem;
+  .controls__divider {
+    padding-top: 0;
+    text-align: center;
+  }
+
+  .controls__clock {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .controls__clock-main {
+    padding-right: 0;
+    border-right: none;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .controls__clock-actions {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

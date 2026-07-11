@@ -7,14 +7,28 @@ import type {
 import type { ScoreboardState } from '@/types/hockeyScoreboard'
 import { createDefaultScoreboardState } from '@/types/hockeyScoreboard'
 import { generateMatchId } from '@/utils/matchId'
+import { normalizeGameTime } from '@/utils/clock'
 import { supabaseRest } from './supabaseRest'
 import { createMatch, finishMatch } from './matchSync'
 import { upsertCourtStream } from './tournamentCourtStream'
+import { fetchAssistantTournamentIds } from './tournamentAssistantService'
 
 export async function fetchTournaments(organizerId?: string): Promise<Tournament[]> {
   const filter = organizerId
     ? `organizer_id=eq.${organizerId}`
     : 'visibility=eq.public'
+  return supabaseRest<Tournament[]>(
+    `tournaments?${filter}&select=*&order=created_at.desc`,
+  )
+}
+
+export async function fetchManagedTournaments(userId: string): Promise<Tournament[]> {
+  const assistantIds = await fetchAssistantTournamentIds(userId)
+
+  const filter = assistantIds.length > 0
+    ? `or=(organizer_id.eq.${userId},id.in.(${assistantIds.join(',')}))`
+    : `organizer_id=eq.${userId}`
+
   return supabaseRest<Tournament[]>(
     `tournaments?${filter}&select=*&order=created_at.desc`,
   )
@@ -73,6 +87,33 @@ export async function fetchTournamentMatches(
   )
 }
 
+export async function clearTournamentCalendar(tournamentId: string): Promise<void> {
+  const existing = await fetchTournamentMatches(tournamentId)
+  const matchIds = existing
+    .map((match) => match.match_id)
+    .filter((matchId): matchId is string => Boolean(matchId))
+
+  await supabaseRest(`tournament_court_streams?tournament_id=eq.${tournamentId}`, {
+    method: 'DELETE',
+  })
+
+  await supabaseRest(`tournament_matches?tournament_id=eq.${tournamentId}`, {
+    method: 'DELETE',
+  })
+
+  if (matchIds.length > 0) {
+    await supabaseRest(`matches?id=in.(${matchIds.join(',')})`, {
+      method: 'DELETE',
+    })
+  }
+
+  await supabaseRest(`matches?tournament_id=eq.${tournamentId}`, {
+    method: 'DELETE',
+  })
+
+  await updateTournamentStatus(tournamentId, 'draft')
+}
+
 export async function importTournamentCsv(
   tournamentId: string,
   rows: CsvMatchRow[],
@@ -81,8 +122,9 @@ export async function importTournamentCsv(
     tournament_id: tournamentId,
     local_team: row.local,
     visit_team: row.visita,
-    game_time: row.tiempo_juego,
+    game_time: normalizeGameTime(row.tiempo_juego),
     court: row.cancha,
+    category: row.categoria?.trim() || null,
     scheduled_at: row.fecha_programada
       ? new Date(row.fecha_programada.replace(' ', 'T')).toISOString()
       : null,
@@ -93,7 +135,6 @@ export async function importTournamentCsv(
   await supabaseRest('tournament_matches', {
     method: 'POST',
     body: payload,
-    prefer: 'resolution=merge-duplicates',
   })
 }
 
@@ -105,7 +146,7 @@ export async function startTournamentMatch(
   const state = createDefaultScoreboardState(
     tournamentMatch.local_team,
     tournamentMatch.visit_team,
-    tournamentMatch.game_time,
+    normalizeGameTime(tournamentMatch.game_time),
   )
 
   await createMatch(matchId, state, organizerId)
@@ -151,6 +192,48 @@ export async function finishTournamentMatch(
       goal_visit: state.goalVisit,
     },
   })
+}
+
+export async function fetchTournamentMatchByMatchId(
+  matchId: string,
+): Promise<TournamentMatch | null> {
+  const rows = await supabaseRest<TournamentMatch[]>(
+    `tournament_matches?match_id=eq.${matchId}&select=*&limit=1`,
+  )
+  return rows[0] ?? null
+}
+
+export async function advanceToNextTournamentMatch(
+  currentMatchId: string,
+  state: ScoreboardState,
+  organizerId: string,
+): Promise<{
+  matchId: string
+  localTeam: string
+  visitTeam: string
+  timeGame: string
+  tournamentId: string
+  court: string
+} | null> {
+  const current = await fetchTournamentMatchByMatchId(currentMatchId)
+  if (!current) {
+    throw new Error('Este partido no pertenece a un torneo.')
+  }
+
+  await finishTournamentMatch(current, state)
+
+  const next = await getNextScheduledMatch(current.tournament_id, current.court)
+  if (!next) return null
+
+  const newMatchId = await startTournamentMatch(next, organizerId)
+  return {
+    matchId: newMatchId,
+    localTeam: next.local_team,
+    visitTeam: next.visit_team,
+    timeGame: normalizeGameTime(next.game_time),
+    tournamentId: current.tournament_id,
+    court: current.court,
+  }
 }
 
 export async function getNextScheduledMatch(

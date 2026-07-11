@@ -3,12 +3,13 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { Rule } from 'ant-design-vue/es/form'
 import { useAuthStore } from '@/stores/auth'
-import { createTournament, fetchTournaments } from '@/services/tournamentService'
+import { createTournament, fetchManagedTournaments } from '@/services/tournamentService'
 import type { Tournament } from '@/types/tournament'
 
 const auth = useAuthStore()
 const router = useRouter()
 const tournaments = ref<Tournament[]>([])
+const assistedTournamentIds = ref<Set<string>>(new Set())
 const loading = ref(true)
 const creating = ref(false)
 const showModal = ref(false)
@@ -26,11 +27,35 @@ const rules: Record<string, Rule[]> = {
   name: [{ required: true, message: 'Ingresa el nombre del torneo' }],
 }
 
+const statusLabels: Record<Tournament['status'], string> = {
+  draft: 'Borrador',
+  active: 'Activo',
+  finished: 'Finalizado',
+}
+
+const visibilityLabels: Record<Tournament['visibility'], string> = {
+  public: 'Público',
+  private: 'Privado',
+}
+
+function statusTagClass(status: Tournament['status']): string {
+  return `page__tag--status-${status}`
+}
+
+function visibilityTagClass(visibility: Tournament['visibility']): string {
+  return `page__tag--visibility-${visibility}`
+}
+
 async function load(): Promise<void> {
   if (!auth.profile) return
   loading.value = true
   try {
-    tournaments.value = await fetchTournaments(auth.profile.id)
+    tournaments.value = await fetchManagedTournaments(auth.profile.id)
+    assistedTournamentIds.value = new Set(
+      tournaments.value
+        .filter((tournament) => tournament.organizer_id !== auth.profile?.id)
+        .map((tournament) => tournament.id),
+    )
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Error al cargar torneos'
   } finally {
@@ -89,7 +114,7 @@ onMounted(() => void load())
   <div class="page">
     <header class="page__header">
       <h1>Mis torneos</h1>
-      <a-button type="primary" @click="openModal">Nuevo torneo</a-button>
+      <a-button v-if="auth.isOrganizer" type="primary" @click="openModal">Nuevo torneo</a-button>
     </header>
 
     <a-alert
@@ -111,11 +136,26 @@ onMounted(() => void load())
           class="page__card"
         >
           <h3>{{ t.name }}</h3>
-          <a-tag>{{ t.status }}</a-tag>
-          <a-tag>{{ t.visibility }}</a-tag>
+          <div class="page__tags">
+            <a-tag
+              v-if="assistedTournamentIds.has(t.id)"
+              class="page__tag--assistant"
+            >
+              Asistente
+            </a-tag>
+            <a-tag :class="statusTagClass(t.status)">
+              {{ statusLabels[t.status] }}
+            </a-tag>
+            <a-tag :class="visibilityTagClass(t.visibility)">
+              {{ visibilityLabels[t.visibility] }}
+            </a-tag>
+          </div>
         </router-link>
       </div>
-      <a-empty v-else description="Aún no tienes torneos" />
+      <a-empty
+        v-else
+        :description="auth.isOrganizer ? 'Aún no tienes torneos' : 'No estás asignado a ningún torneo'"
+      />
     </a-spin>
 
     <a-modal v-model:open="showModal" title="Nuevo torneo" :footer="null" destroy-on-close>
@@ -188,5 +228,55 @@ onMounted(() => void load())
   text-decoration: none;
 
   h3 { margin: 0; flex: 1; }
+}
+
+.page__tags {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+:deep(.page__card .ant-tag) {
+  margin: 0;
+  border: 1px solid transparent;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+:deep(.page__tag--assistant) {
+  background: rgba(179, 127, 235, 0.2);
+  border-color: rgba(179, 127, 235, 0.45);
+  color: #d3adf7;
+}
+
+:deep(.page__tag--status-draft) {
+  background: rgba(0, 180, 216, 0.15);
+  border-color: rgba(0, 180, 216, 0.4);
+  color: #7dd3fc;
+}
+
+:deep(.page__tag--status-active) {
+  background: rgba(82, 196, 26, 0.15);
+  border-color: rgba(82, 196, 26, 0.4);
+  color: #95de64;
+}
+
+:deep(.page__tag--status-finished) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: rgba(232, 237, 245, 0.8);
+}
+
+:deep(.page__tag--visibility-public) {
+  background: rgba(0, 212, 255, 0.12);
+  border-color: rgba(0, 212, 255, 0.35);
+  color: #00d4ff;
+}
+
+:deep(.page__tag--visibility-private) {
+  background: rgba(255, 107, 53, 0.12);
+  border-color: rgba(255, 107, 53, 0.35);
+  color: #ff9f6b;
 }
 </style>

@@ -14,19 +14,25 @@ const router = createRouter({
       path: '/live/:matchId',
       name: 'live',
       component: () => import('@/views/Live.vue'),
-      meta: { bare: true, title: 'En vivo' },
+      meta: { bare: true, hideNav: true, title: 'En vivo' },
     },
     {
       path: '/overlay/:matchId',
       name: 'overlay',
       component: () => import('@/views/Overlay.vue'),
-      meta: { bare: true, title: 'Overlay' },
+      meta: { bare: true, hideNav: true, title: 'Overlay' },
     },
     {
       path: '/live/torneo/:tournamentId/:court',
       name: 'tournament-live',
       component: () => import('@/views/TournamentLive.vue'),
-      meta: { bare: true, title: 'Torneo en vivo' },
+      meta: { bare: true, hideNav: true, title: 'Torneo en vivo' },
+    },
+    {
+      path: '/overlay/torneo/:tournamentId/:court',
+      name: 'tournament-overlay',
+      component: () => import('@/views/TournamentLive.vue'),
+      meta: { bare: true, hideNav: true, title: 'Overlay torneo' },
     },
     {
       path: '/torneo/:id',
@@ -44,25 +50,25 @@ const router = createRouter({
       path: '/board',
       name: 'board',
       component: () => import('@/views/Board.vue'),
-      meta: { bare: true, requiresOrganizer: true, title: 'Marcador TV' },
+      meta: { bare: true, hideNav: true, requiresStaff: true, title: 'Marcador TV' },
     },
     {
       path: '/controls',
       name: 'controls',
       component: () => import('@/views/Controls.vue'),
-      meta: { requiresOrganizer: true, title: 'Mesa de control' },
+      meta: { hideNav: true, requiresStaff: true, title: 'Mesa de control' },
     },
     {
       path: '/tournaments',
       name: 'tournaments',
       component: () => import('@/views/Tournaments.vue'),
-      meta: { requiresOrganizer: true, title: 'Torneos' },
+      meta: { requiresStaff: true, title: 'Torneos' },
     },
     {
       path: '/tournaments/:id',
       name: 'tournament-detail',
       component: () => import('@/views/TournamentDetail.vue'),
-      meta: { requiresOrganizer: true, title: 'Detalle torneo' },
+      meta: { requiresStaff: true, title: 'Detalle torneo' },
     },
   ],
   scrollBehavior: () => ({ top: 0 }),
@@ -73,7 +79,7 @@ router.beforeEach(async (to) => {
     document.title = `${to.meta.title} · Marcador Hockey`
   }
 
-  if (!to.meta.requiresOrganizer) return true
+  if (!to.meta.requiresStaff) return true
 
   const auth = useAuthStore()
   if (auth.loading) {
@@ -87,8 +93,12 @@ router.beforeEach(async (to) => {
     })
   }
 
-  if (!auth.isOrganizer) {
-    return { name: 'home', query: { auth: 'organizer' } }
+  if (!auth.isAuthenticated) {
+    return { name: 'home', query: { auth: 'staff' } }
+  }
+
+  if (!auth.isStaff) {
+    return { name: 'home', query: { auth: 'staff' } }
   }
 
   return true
