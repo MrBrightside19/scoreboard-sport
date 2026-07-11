@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>Marcador Hockey</title>
+    <script>
+      const segment = window.location.pathname.split('/').pop() || ''
+      const base = window.location.pathname.replace(/\/[^/]*$/, '/')
+      const redirect = base + (segment === '404.html' ? '' : '?p=' + encodeURIComponent(window.location.pathname + window.location.search + window.location.hash))
+      sessionStorage.setItem('spa-redirect', redirect)
+      window.location.replace(base)
+    </script>
+  </head>
+  <body></body>
+</html>

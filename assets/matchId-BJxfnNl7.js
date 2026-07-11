@@ -1,0 +1,1 @@
+function e(){return`partido-${Math.random().toString(36).slice(2,9)}`}export{e as t};

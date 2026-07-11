@@ -1,0 +1,1 @@
+function e(e){let t=`/scoreboard-sport/`.replace(/\/$/,``);return`${window.location.origin}${t}${e}`}function t(e,t){return`/overlay/torneo/${e}/${t}`}function n(e,t){return`/live/torneo/${e}/${t}`}export{n,t as r,e as t};
