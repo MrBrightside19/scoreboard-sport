@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import ScoreBoard from '@/components/ScoreBoard.vue'
 import { useRemoteHockeyBoardCore } from '@/composables/useRemoteHockeyBoardCore'
 import { fetchCourtStream } from '@/services/tournamentCourtStream'
-import { getPollIntervalMs } from '@/config/poll'
+import { getLiveClockUpdateMs } from '@/config/poll'
 import { createDefaultScoreboardState } from '@/types/hockeyScoreboard'
 
 const route = useRoute()
@@ -36,7 +36,7 @@ watch(activeMatchId, (id) => {
 
 onMounted(() => {
   void refreshStream()
-  streamTimer = window.setInterval(() => void refreshStream(), getPollIntervalMs())
+  streamTimer = window.setInterval(() => void refreshStream(), getLiveClockUpdateMs())
 })
 
 onUnmounted(() => {

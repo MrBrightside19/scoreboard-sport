@@ -1,6 +1,6 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import type { ScoreboardState, TeamPenalty } from '@/types/hockeyScoreboard'
-import { getPollIntervalMs } from '@/config/poll'
+import { getLiveClockUpdateMs } from '@/config/poll'
 import { interpolateClock, parseTimeToSeconds } from '@/utils/clock'
 import { fetchMatchState } from '@/services/matchSync'
 import { normalizeScoreboardState } from '@/types/hockeyScoreboard'
@@ -67,7 +67,7 @@ export function useRemoteHockeyBoardCore(matchId: () => string | null) {
 
   onMounted(() => {
     void poll()
-    pollTimer = window.setInterval(() => void poll(), getPollIntervalMs())
+    pollTimer = window.setInterval(() => void poll(), getLiveClockUpdateMs())
     clockTimer = window.setInterval(updateDisplayClock, 250)
   })
 

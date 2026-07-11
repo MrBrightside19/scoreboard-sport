@@ -13,6 +13,7 @@ import { isSupabaseConfigured } from '@/services/supabaseClient'
 import { readMatchIdFromStorage } from '@/utils/localSync'
 import { normalizeGameTime } from '@/utils/clock'
 import { buildAppUrl, tournamentLivePath, tournamentOverlayPath } from '@/utils/appUrl'
+import { getLiveClockUpdateMs } from '@/config/poll'
 import { MAX_PERIODS, isGoalPending } from '@/types/hockeyScoreboard'
 import ControlsRosterPanel from '@/components/controls/ControlsRosterPanel.vue'
 import ControlsGoalsPanel from '@/components/controls/ControlsGoalsPanel.vue'
@@ -38,7 +39,6 @@ const matchFallback = computed((): Pick<
   return { localTeam: local, visitTeam: visit, timeGame: normalizeGameTime(time ?? '20:00') }
 })
 
-const publishing = ref(false)
 const copied = ref<string | null>(null)
 const hydrated = ref(false)
 const advancing = ref(false)
@@ -57,12 +57,38 @@ function markGoal(team: 'local' | 'visit'): void {
 }
 
 let publishTimer: number | null = null
+let publishDebounceTimer: number | null = null
+let publishInFlight = false
+let publishQueued = false
+
+function penaltySignature(
+  penalties: import('@/types/hockeyScoreboard').TeamPenalty[],
+): string {
+  return penalties
+    .map((penalty) =>
+      `${penalty.id}|${penalty.playerId}|${penalty.penaltyTypeId}|${penalty.infraction}`,
+    )
+    .join(';')
+}
+
+function schedulePublish(delayMs = 400): void {
+  if (!hydrated.value || !matchId.value || !isSupabaseConfigured) return
+  if (publishDebounceTimer) clearTimeout(publishDebounceTimer)
+  publishDebounceTimer = window.setTimeout(() => {
+    publishDebounceTimer = null
+    void publish()
+  }, delayMs)
+}
 
 async function finalizeOnExit(): Promise<void> {
   store.stopWriterTick()
   if (publishTimer) {
     clearInterval(publishTimer)
     publishTimer = null
+  }
+  if (publishDebounceTimer) {
+    clearTimeout(publishDebounceTimer)
+    publishDebounceTimer = null
   }
   if (!matchId.value || !hydrated.value || !isSupabaseConfigured) return
   hydrated.value = false
@@ -155,7 +181,12 @@ async function goToNextMatch(): Promise<void> {
 
 async function publish(): Promise<void> {
   if (!matchId.value || !isSupabaseConfigured) return
-  publishing.value = true
+  if (publishInFlight) {
+    publishQueued = true
+    return
+  }
+
+  publishInFlight = true
   try {
     await publishMatchState(matchId.value, store.state, {
       organizer_id: auth.profile?.id ?? null,
@@ -163,7 +194,11 @@ async function publish(): Promise<void> {
       title: `${store.state.localTeam} vs ${store.state.visitTeam}`,
     })
   } finally {
-    publishing.value = false
+    publishInFlight = false
+    if (publishQueued) {
+      publishQueued = false
+      void publish()
+    }
   }
 }
 
@@ -198,10 +233,22 @@ watch(
 )
 
 watch(
-  () => store.state,
+  () => ({
+    localTeam: store.state.localTeam,
+    visitTeam: store.state.visitTeam,
+    goalLocal: store.state.goalLocal,
+    goalVisit: store.state.goalVisit,
+    gamePeriod: store.state.gamePeriod,
+    isPaused: store.state.isPaused,
+    goals: store.state.goals,
+    rosterLocal: store.state.rosterLocal,
+    rosterVisit: store.state.rosterVisit,
+    penaltiesLocal: penaltySignature(store.state.penaltiesLocal),
+    penaltiesVisit: penaltySignature(store.state.penaltiesVisit),
+    manualClock: store.state.isPaused ? store.state.timeGame : null,
+  }),
   () => {
-    if (!hydrated.value) return
-    void publish()
+    schedulePublish()
   },
   { deep: true },
 )
@@ -209,9 +256,10 @@ watch(
 onMounted(() => {
   window.addEventListener('beforeunload', onBeforeUnload)
   if (matchId.value) {
+    const pollMs = getLiveClockUpdateMs()
     publishTimer = window.setInterval(() => {
       if (hydrated.value) void publish()
-    }, 5000)
+    }, pollMs)
   }
 })
 
@@ -435,8 +483,6 @@ onUnmounted(() => {
         </a-tab-pane>
       </a-tabs>
     </div>
-
-    <p v-if="publishing" class="controls__sync">Sincronizando…</p>
   </div>
 </template>
 
@@ -635,13 +681,6 @@ onUnmounted(() => {
   gap: 0.5rem;
   flex-wrap: wrap;
   margin-top: 0.75rem;
-}
-
-.controls__sync {
-  text-align: center;
-  font-size: 0.8rem;
-  opacity: 0.5;
-  margin-top: 1rem;
 }
 
 @media (max-width: 720px) {
