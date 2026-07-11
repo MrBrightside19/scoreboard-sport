@@ -74,6 +74,33 @@ export async function fetchTournamentMatches(
   )
 }
 
+export async function clearTournamentCalendar(tournamentId: string): Promise<void> {
+  const existing = await fetchTournamentMatches(tournamentId)
+  const matchIds = existing
+    .map((match) => match.match_id)
+    .filter((matchId): matchId is string => Boolean(matchId))
+
+  await supabaseRest(`tournament_court_streams?tournament_id=eq.${tournamentId}`, {
+    method: 'DELETE',
+  })
+
+  await supabaseRest(`tournament_matches?tournament_id=eq.${tournamentId}`, {
+    method: 'DELETE',
+  })
+
+  if (matchIds.length > 0) {
+    await supabaseRest(`matches?id=in.(${matchIds.join(',')})`, {
+      method: 'DELETE',
+    })
+  }
+
+  await supabaseRest(`matches?tournament_id=eq.${tournamentId}`, {
+    method: 'DELETE',
+  })
+
+  await updateTournamentStatus(tournamentId, 'draft')
+}
+
 export async function importTournamentCsv(
   tournamentId: string,
   rows: CsvMatchRow[],
@@ -84,6 +111,7 @@ export async function importTournamentCsv(
     visit_team: row.visita,
     game_time: normalizeGameTime(row.tiempo_juego),
     court: row.cancha,
+    category: row.categoria?.trim() || null,
     scheduled_at: row.fecha_programada
       ? new Date(row.fecha_programada.replace(' ', 'T')).toISOString()
       : null,
@@ -94,7 +122,6 @@ export async function importTournamentCsv(
   await supabaseRest('tournament_matches', {
     method: 'POST',
     body: payload,
-    prefer: 'resolution=merge-duplicates',
   })
 }
 

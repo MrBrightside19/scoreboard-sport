@@ -34,6 +34,7 @@ jobs:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           VITE_POLL_INTERVAL_MS: ${{ vars.VITE_POLL_INTERVAL_MS || '5000' }}
+          VITE_TOURNAMENT_TABLE_REFRESH_MS: ${{ vars.VITE_TOURNAMENT_TABLE_REFRESH_MS || '60000' }}
 
       - uses: actions/upload-pages-artifact@v3
         with:

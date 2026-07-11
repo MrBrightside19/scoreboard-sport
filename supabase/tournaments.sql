@@ -24,6 +24,7 @@ create table public.tournament_matches (
   visit_team text not null,
   game_time text not null default '20:00',
   court text not null,
+  category text,
   scheduled_at timestamptz,
   status public.tournament_match_status not null default 'scheduled',
   match_id text references public.matches (id) on delete set null,

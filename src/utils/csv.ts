@@ -36,6 +36,7 @@ export function parseCsv(text: string): CsvMatchRow[] {
       visita: row.visita,
       tiempo_juego: normalizeGameTime(row.tiempo_juego),
       cancha: row.cancha,
+      categoria: row.categoria || undefined,
       fecha_programada: row.fecha_programada || undefined,
     }
   })
@@ -43,8 +44,8 @@ export function parseCsv(text: string): CsvMatchRow[] {
 
 export function buildCsvTemplate(): string {
   return [
-    'local,visita,tiempo_juego,cancha,fecha_programada',
-    'Huracanes,Thunder,20:00,1,2026-06-15 18:00',
-    'Leones,Sharks,15:00,2,2026-06-15 18:00',
+    'local,visita,categoria,tiempo_juego,cancha,fecha_programada',
+    'Huracanes,Thunder,Sub-18,20:00,1,2026-06-15 18:00',
+    'Leones,Sharks,Sub-21,15:00,2,2026-06-15 18:00',
   ].join('\n')
 }

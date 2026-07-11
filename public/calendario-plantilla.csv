@@ -1,3 +1,3 @@
-local,visita,tiempo_juego,cancha,fecha_programada
-Huracanes,Thunder,20:00,1,2026-06-15 18:00
-Leones,Sharks,15:00,2,2026-06-15 18:00
+local,visita,categoria,tiempo_juego,cancha,fecha_programada
+Huracanes,Thunder,Sub-18,20:00,1,2026-06-15 18:00
+Leones,Sharks,Sub-21,15:00,2,2026-06-15 18:00

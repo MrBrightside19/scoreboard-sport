@@ -62,5 +62,10 @@ export async function supabaseRest<T>(
     return [] as T
   }
 
-  return (await response.json()) as T
+  const text = await response.text()
+  if (!text.trim()) {
+    return [] as T
+  }
+
+  return JSON.parse(text) as T
 }

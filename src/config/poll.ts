@@ -11,3 +11,15 @@ export function getPollIntervalMs(): number {
 }
 
 export const LIVE_WINDOW_HOURS = 3
+
+const DEFAULT_TOURNAMENT_TABLE_REFRESH_MS = 60_000
+const MIN_TOURNAMENT_TABLE_REFRESH_MS = 5_000
+
+export function getTournamentTableRefreshMs(): number {
+  const raw = import.meta.env.VITE_TOURNAMENT_TABLE_REFRESH_MS
+  const parsed = raw ? Number.parseInt(raw, 10) : DEFAULT_TOURNAMENT_TABLE_REFRESH_MS
+  if (Number.isNaN(parsed) || parsed < MIN_TOURNAMENT_TABLE_REFRESH_MS) {
+    return DEFAULT_TOURNAMENT_TABLE_REFRESH_MS
+  }
+  return parsed
+}

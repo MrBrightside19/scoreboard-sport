@@ -22,6 +22,7 @@ export interface TournamentMatch {
   visit_team: string
   game_time: string
   court: string
+  category: string | null
   scheduled_at: string | null
   status: TournamentMatchStatus
   match_id: string | null
@@ -41,6 +42,7 @@ export interface CsvMatchRow {
   visita: string
   tiempo_juego: string
   cancha: string
+  categoria?: string
   fecha_programada?: string
 }
 

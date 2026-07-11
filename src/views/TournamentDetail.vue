@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { Modal, message } from 'ant-design-vue'
 import { useAuthStore } from '@/stores/auth'
 import {
+  clearTournamentCalendar,
   fetchTournament,
   fetchTournamentMatches,
   importTournamentCsv,
@@ -14,6 +16,7 @@ import { normalizeGameTime } from '@/utils/clock'
 import { buildAppUrl, tournamentOverlayPath } from '@/utils/appUrl'
 import { calculateStandings } from '@/utils/standings'
 import { writeMatchIdToStorage } from '@/utils/localSync'
+import { getTournamentTableRefreshMs } from '@/config/poll'
 import type { Tournament, TournamentMatch } from '@/types/tournament'
 import TournamentStandings from '@/components/TournamentStandings.vue'
 
@@ -24,8 +27,11 @@ const auth = useAuthStore()
 const tournament = ref<Tournament | null>(null)
 const matches = ref<TournamentMatch[]>([])
 const loading = ref(true)
+const refreshing = ref(false)
 const importing = ref(false)
 const copiedCourt = ref<string | null>(null)
+
+let pollTimer: number | null = null
 
 const streamCourts = computed(() =>
   [...new Set(matches.value.map((m) => m.court))].sort((a, b) =>
@@ -46,15 +52,45 @@ const standings = computed(() =>
   ),
 )
 
-async function load(): Promise<void> {
+async function load(options: { silent?: boolean } = {}): Promise<void> {
   const id = route.params.id as string
-  loading.value = true
+  if (options.silent) {
+    refreshing.value = true
+  } else {
+    loading.value = true
+  }
   try {
     tournament.value = await fetchTournament(id)
     matches.value = await fetchTournamentMatches(id)
   } finally {
     loading.value = false
+    refreshing.value = false
   }
+}
+
+async function refresh(): Promise<void> {
+  await load({ silent: true })
+}
+
+function onVisibilityChange(): void {
+  if (document.visibilityState === 'visible') {
+    void refresh()
+  }
+}
+
+function statusLabel(status: TournamentMatch['status']): string {
+  const labels: Record<TournamentMatch['status'], string> = {
+    scheduled: 'Programado',
+    live: 'En vivo',
+    finished: 'Finalizado',
+  }
+  return labels[status]
+}
+
+function statusColor(status: TournamentMatch['status']): string {
+  if (status === 'live') return 'green'
+  if (status === 'finished') return 'default'
+  return 'blue'
 }
 
 function openControls(tm: TournamentMatch): void {
@@ -86,19 +122,64 @@ function downloadTemplate(): void {
   URL.revokeObjectURL(url)
 }
 
-async function onCsvUpload(file: File): Promise<void> {
+async function importCalendarRows(rows: ReturnType<typeof parseCsv>): Promise<void> {
   if (!tournament.value) return
+
+  const replaced = matches.value.length > 0
   importing.value = true
   try {
-    const text = await file.text()
-    const rows = parseCsv(text)
+    if (replaced) {
+      await clearTournamentCalendar(tournament.value.id)
+    }
     await importTournamentCsv(tournament.value.id, rows)
     await load()
+
+    const count = rows.length
+    const partidos = count === 1 ? 'partido' : 'partidos'
+    message.success(
+      replaced
+        ? `Calendario reemplazado correctamente: ${count} ${partidos} importados.`
+        : `Calendario importado correctamente: ${count} ${partidos} cargados.`,
+    )
   } catch (err) {
-    alert(err instanceof Error ? err.message : 'Error al importar CSV')
+    Modal.error({
+      title: 'Error al importar calendario',
+      content: err instanceof Error ? err.message : 'No se pudo importar el CSV.',
+    })
   } finally {
     importing.value = false
   }
+}
+
+async function onCsvUpload(file: File): Promise<void> {
+  if (!tournament.value) return
+
+  let rows: ReturnType<typeof parseCsv>
+  try {
+    const text = await file.text()
+    rows = parseCsv(text)
+  } catch (err) {
+    Modal.error({
+      title: 'CSV inválido',
+      content: err instanceof Error ? err.message : 'No se pudo leer el archivo.',
+    })
+    return
+  }
+
+  if (matches.value.length > 0) {
+    Modal.confirm({
+      title: '¿Reemplazar el calendario?',
+      content:
+        'Ya tienes un calendario importado. Si continúas, se eliminarán todos los partidos, resultados y datos recopilados del torneo, y se cargará el nuevo calendario. Esta acción no se puede deshacer.',
+      okText: 'Reemplazar calendario',
+      cancelText: 'Cancelar',
+      okType: 'danger',
+      onOk: () => importCalendarRows(rows),
+    })
+    return
+  }
+
+  await importCalendarRows(rows)
 }
 
 async function startMatch(tm: TournamentMatch): Promise<void> {
@@ -122,7 +203,16 @@ function copyOverlayForCourt(court: string): void {
   setTimeout(() => { copiedCourt.value = null }, 2000)
 }
 
-onMounted(() => void load())
+onMounted(() => {
+  void load()
+  pollTimer = window.setInterval(() => void refresh(), getTournamentTableRefreshMs())
+  document.addEventListener('visibilitychange', onVisibilityChange)
+})
+
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+})
 </script>
 
 <template>
@@ -173,21 +263,50 @@ onMounted(() => void load())
       </section>
 
       <section class="detail__section">
-        <h2>Calendario</h2>
+        <div class="detail__section-header">
+          <h2>Calendario</h2>
+          <div class="detail__section-actions">
+            <span v-if="refreshing" class="detail__refreshing">Actualizando…</span>
+            <a-button size="small" :loading="refreshing" @click="refresh">
+              Actualizar
+            </a-button>
+          </div>
+        </div>
         <a-table
           :data-source="matches.map((m) => ({ ...m, key: m.id }))"
           :pagination="false"
           size="small"
+          :row-class-name="(record: TournamentMatch) =>
+            record.status === 'live' ? 'detail__row--live' : ''"
         >
           <a-table-column title="Local" data-index="local_team" />
           <a-table-column title="Visita" data-index="visit_team" />
+          <a-table-column title="Categoría" width="100">
+            <template #default="{ record }">
+              {{ record.category || '—' }}
+            </template>
+          </a-table-column>
           <a-table-column title="Cancha" data-index="court" width="80" />
           <a-table-column title="Tiempo" width="80">
             <template #default="{ record }">
               {{ normalizeGameTime(record.game_time) }}
             </template>
           </a-table-column>
-          <a-table-column title="Estado" data-index="status" width="100" />
+          <a-table-column title="Estado" width="110">
+            <template #default="{ record }">
+              <a-tag :color="statusColor(record.status)">
+                {{ statusLabel(record.status) }}
+              </a-tag>
+            </template>
+          </a-table-column>
+          <a-table-column title="Resultado" width="90">
+            <template #default="{ record }">
+              <span v-if="record.status === 'finished'">
+                {{ record.goal_local }} - {{ record.goal_visit }}
+              </span>
+              <span v-else>—</span>
+            </template>
+          </a-table-column>
           <a-table-column title="Acciones" width="140">
             <template #default="{ record }">
               <div class="detail__match-actions">
@@ -248,9 +367,32 @@ onMounted(() => void load())
   margin-bottom: 2rem;
 
   h2 {
-    margin: 0 0 1rem;
+    margin: 0;
     font-size: 1.1rem;
   }
+}
+
+.detail__section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.detail__section-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.detail__refreshing {
+  font-size: 0.8rem;
+  opacity: 0.55;
+}
+
+:deep(.detail__row--live) {
+  background: rgba(82, 196, 26, 0.08) !important;
 }
 
 .detail__match-actions {
