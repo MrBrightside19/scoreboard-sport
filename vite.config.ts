@@ -5,7 +5,7 @@ import { AntDesignVueResolver } from 'unplugin-vue-components/resolvers'
 import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
-  base: '/score-board/',
+  base: process.env.VITE_BASE_PATH || '/',
   plugins: [
     vue(),
     Components({
