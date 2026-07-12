@@ -62,6 +62,11 @@ onMounted(async () => {
         >
           <a-table-column title="Local" data-index="local_team" />
           <a-table-column title="Visita" data-index="visit_team" />
+          <a-table-column title="Categoría" width="100">
+            <template #default="{ record }">
+              {{ record.category || '—' }}
+            </template>
+          </a-table-column>
           <a-table-column title="Cancha" data-index="court" width="80" />
           <a-table-column title="Estado" data-index="status" width="100" />
           <a-table-column title="Resultado" width="100">

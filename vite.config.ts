@@ -4,8 +4,8 @@ import Components from 'unplugin-vue-components/vite'
 import { AntDesignVueResolver } from 'unplugin-vue-components/resolvers'
 import { fileURLToPath, URL } from 'node:url'
 
-export default defineConfig({
-  base: '/score-board/',
+export default defineConfig(({ command }) => ({
+  base: command === 'serve' ? '/' : '/scoreboard-sport/',
   plugins: [
     vue(),
     Components({
@@ -17,4 +17,4 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
-})
+}))

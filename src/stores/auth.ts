@@ -8,16 +8,20 @@ import {
   signOut,
   signUp,
 } from '@/services/authService'
+import { fetchAssistantTournamentIds } from '@/services/tournamentAssistantService'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
 
 export const useAuthStore = defineStore('auth', () => {
   const profile = ref<Profile | null>(null)
+  const assistantTournamentIds = ref<string[]>([])
   const loading = ref(true)
   const error = ref<string | null>(null)
   const info = ref<string | null>(null)
 
   const isAuthenticated = computed(() => Boolean(profile.value))
   const isOrganizer = computed(() => profile.value?.role === 'organizer')
+  const isAssistant = computed(() => assistantTournamentIds.value.length > 0)
+  const isStaff = computed(() => isOrganizer.value || isAssistant.value)
 
   async function loadProfile(): Promise<void> {
     if (!isSupabaseConfigured) {
@@ -26,6 +30,9 @@ export const useAuthStore = defineStore('auth', () => {
     }
     try {
       profile.value = await getCurrentProfile()
+      assistantTournamentIds.value = profile.value
+        ? await fetchAssistantTournamentIds(profile.value.id)
+        : []
       error.value = null
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Error de autenticación'
@@ -79,6 +86,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function logout(): Promise<void> {
     await signOut()
     profile.value = null
+    assistantTournamentIds.value = []
     info.value = null
   }
 
@@ -90,6 +98,7 @@ export const useAuthStore = defineStore('auth', () => {
         void loadProfile()
       } else {
         profile.value = null
+        assistantTournamentIds.value = []
         loading.value = false
       }
     })
@@ -102,6 +111,9 @@ export const useAuthStore = defineStore('auth', () => {
     info,
     isAuthenticated,
     isOrganizer,
+    isAssistant,
+    isStaff,
+    assistantTournamentIds,
     loadProfile,
     login,
     register,
