@@ -371,7 +371,15 @@ onUnmounted(() => {
                   <a-input
                     :value="store.state.localTeam"
                     size="large"
+                    :maxlength="15"
+                    show-count
                     @update:value="(v: string) => store.setTeams(v, store.state.visitTeam)"
+                  />
+                  <a-input
+                    :value="store.state.localLogo"
+                    size="small"
+                    placeholder="URL logo local"
+                    @update:value="(v: string) => store.setTeamLogos(v, store.state.visitLogo)"
                   />
                   <div class="controls__score-controls">
                     <a-button size="large" @click="store.removeLastGoal('local')">−</a-button>
@@ -387,7 +395,15 @@ onUnmounted(() => {
                   <a-input
                     :value="store.state.visitTeam"
                     size="large"
+                    :maxlength="15"
+                    show-count
                     @update:value="(v: string) => store.setTeams(store.state.localTeam, v)"
+                  />
+                  <a-input
+                    :value="store.state.visitLogo"
+                    size="small"
+                    placeholder="URL logo visita"
+                    @update:value="(v: string) => store.setTeamLogos(store.state.localLogo, v)"
                   />
                   <div class="controls__score-controls">
                     <a-button size="large" @click="store.removeLastGoal('visit')">−</a-button>

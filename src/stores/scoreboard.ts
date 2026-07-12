@@ -300,7 +300,14 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
   }
 
   function setTeams(localTeam: string, visitTeam: string): void {
-    patch({ localTeam, visitTeam })
+    patch({
+      localTeam: localTeam.slice(0, 15),
+      visitTeam: visitTeam.slice(0, 15),
+    })
+  }
+
+  function setTeamLogos(localLogo: string, visitLogo: string): void {
+    patch({ localLogo, visitLogo })
   }
 
   function setGameTime(time: string): void {
@@ -419,6 +426,7 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     togglePause,
     setPeriod,
     setTeams,
+    setTeamLogos,
     setGameTime,
     addPenalty,
     removePenalty,

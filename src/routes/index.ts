@@ -20,7 +20,7 @@ const router = createRouter({
       path: '/overlay/:matchId',
       name: 'overlay',
       component: () => import('@/views/Overlay.vue'),
-      meta: { bare: true, hideNav: true, title: 'Overlay' },
+      meta: { bare: true, hideNav: true, transparent: true, title: 'Overlay' },
     },
     {
       path: '/live/torneo/:tournamentId/:court',
@@ -32,7 +32,7 @@ const router = createRouter({
       path: '/overlay/torneo/:tournamentId/:court',
       name: 'tournament-overlay',
       component: () => import('@/views/TournamentLive.vue'),
-      meta: { bare: true, hideNav: true, title: 'Overlay torneo' },
+      meta: { bare: true, hideNav: true, transparent: true, title: 'Overlay torneo' },
     },
     {
       path: '/torneo/:id',
