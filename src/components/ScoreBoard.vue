@@ -1076,29 +1076,45 @@ function formatPenaltyShort(penalty: TeamPenalty, team: 'local' | 'visit'): stri
 }
 
 .scoreboard--tv .scoreboard__main {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  grid-template-rows: auto auto;
   gap: clamp(0.75rem, 2vw, 2rem);
-  align-items: start;
+  align-items: stretch;
 }
 
-.scoreboard__column {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+.scoreboard--tv .scoreboard__column {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: 1 / span 2;
   gap: 1rem;
   min-width: 0;
+  align-items: stretch;
+  height: auto;
 }
 
 .scoreboard--tv .scoreboard__team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
   gap: 1.75rem;
+  width: 100%;
   min-height: min(58vh, 620px);
   padding: clamp(1rem, 2.5vw, 2rem);
   border-radius: 24px;
+  box-sizing: border-box;
 }
 
 .scoreboard--tv .scoreboard__team-name {
   font-size: clamp(3.5rem, 9vw, 7.5rem);
   line-height: 0.95;
+  /* Reserva siempre 2 líneas para alinear nombres cortos y largos */
+  min-height: calc(2 * 0.95em);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
 }
 
 .scoreboard--tv .scoreboard__score {
@@ -1109,6 +1125,7 @@ function formatPenaltyShort(penalty: TeamPenalty, team: 'local' | 'visit'): stri
 }
 
 .scoreboard--tv .scoreboard__center {
+  grid-row: 1 / span 2;
   gap: 0.5rem;
   align-self: center;
   padding: 0 0.5rem;
