@@ -70,7 +70,9 @@ function formatGoalEntry(goal: GoalEvent, team: 'local' | 'visit'): string {
   }
   const scorer = findPlayerById(roster, goal.scorerPlayerId)
   const number = scorer?.number.trim() || '?'
-  return `#${number} · ${goal.gameMinute} · ${period}`
+  const name = scorer?.name.trim()
+  const who = name ? `#${number} ${name}` : `#${number}`
+  return `${who} · ${goal.gameMinute} · ${period}`
 }
 
 const confirmedGoalIds = computed(() =>
@@ -200,6 +202,16 @@ function formatPenaltyShort(penalty: TeamPenalty, team: 'local' | 'visit'): stri
   const player = findPlayerByNumber(roster, penalty.player)
   const number = penalty.player.trim() || player?.number || '?'
   return `#${number} ${penalty.time}`
+}
+
+function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): string {
+  const roster = team === 'local' ? props.state.rosterLocal : props.state.rosterVisit
+  const player =
+    findPlayerById(roster, penalty.playerId) ?? findPlayerByNumber(roster, penalty.player)
+  const number = penalty.player.trim() || player?.number.trim() || '?'
+  const name = player?.name.trim()
+  const who = name ? `#${number} ${name}` : `#${number}`
+  return `${who} · ${penalty.time}`
 }
 </script>
 
@@ -432,7 +444,7 @@ function formatPenaltyShort(penalty: TeamPenalty, team: 'local' | 'visit'): stri
                 :key="`local-${index}`"
                 class="scoreboard__penalty-badge scoreboard__penalty-badge--live"
               >
-                {{ formatPenaltyShort(penalty, 'local') }}
+                {{ formatPenaltyLive(penalty, 'local') }}
               </div>
             </div>
             <span v-else class="scoreboard__detail-empty">Sin faltas</span>
@@ -487,7 +499,7 @@ function formatPenaltyShort(penalty: TeamPenalty, team: 'local' | 'visit'): stri
                 :key="`visit-${index}`"
                 class="scoreboard__penalty-badge scoreboard__penalty-badge--live"
               >
-                {{ formatPenaltyShort(penalty, 'visit') }}
+                {{ formatPenaltyLive(penalty, 'visit') }}
               </div>
             </div>
             <span v-else class="scoreboard__detail-empty">Sin faltas</span>
