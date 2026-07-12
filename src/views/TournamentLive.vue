@@ -6,6 +6,7 @@ import { useRemoteHockeyBoardCore } from '@/composables/useRemoteHockeyBoardCore
 import { fetchCourtStream } from '@/services/tournamentCourtStream'
 import { getLiveClockUpdateMs } from '@/config/poll'
 import { createDefaultScoreboardState } from '@/types/hockeyScoreboard'
+import { loadLiveEventMeta } from '@/utils/liveEventMeta'
 
 const route = useRoute()
 const tournamentId = computed(() => route.params.tournamentId as string)
@@ -20,7 +21,16 @@ const displayState = computed(
   () => remoteState.value ?? createDefaultScoreboardState(),
 )
 
+const eventTitle = ref<string | null>(null)
+const eventDate = ref<string | null>(null)
+
 let streamTimer: number | null = null
+
+async function refreshEventMeta(): Promise<void> {
+  const meta = await loadLiveEventMeta(activeMatchId.value, tournamentId.value)
+  eventTitle.value = meta.title
+  eventDate.value = meta.date
+}
 
 async function refreshStream(): Promise<void> {
   const stream = await fetchCourtStream(tournamentId.value, court.value)
@@ -33,10 +43,12 @@ async function refreshStream(): Promise<void> {
 
 watch(activeMatchId, (id) => {
   if (id) void refresh()
+  void refreshEventMeta()
 })
 
 onMounted(() => {
   void refreshStream()
+  void refreshEventMeta()
   streamTimer = window.setInterval(() => void refreshStream(), getLiveClockUpdateMs())
 })
 
@@ -53,6 +65,8 @@ onUnmounted(() => {
       :display-time="displayTime"
       :display-penalties-local="displayPenaltiesLocal"
       :display-penalties-visit="displayPenaltiesVisit"
+      :event-title="isOverlay ? null : eventTitle"
+      :event-date="isOverlay ? null : eventDate"
     />
   </div>
 </template>

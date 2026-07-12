@@ -14,6 +14,10 @@ const props = defineProps<{
   /** Marcador grande para TV / cancha. Live usa el diseño responsivo. */
   tv?: boolean
   compact?: boolean
+  /** Nombre del torneo (reemplaza “Hockey en línea” en el live). */
+  eventTitle?: string | null
+  /** Fecha del partido o torneo, junto al nombre. */
+  eventDate?: string | null
 }>()
 
 const GOAL_BANNER_MS = 12_000
@@ -53,14 +57,20 @@ function truncateTeamName(name: string): string {
   return `${cleaned.slice(0, TEAM_NAME_MAX)}…`
 }
 
+function formatGoalPeriod(period: number): string {
+  if (period > MAX_PERIODS) return 'OT'
+  return `${period}'`
+}
+
 function formatGoalEntry(goal: GoalEvent, team: 'local' | 'visit'): string {
   const roster = team === 'local' ? props.state.rosterLocal : props.state.rosterVisit
+  const period = formatGoalPeriod(goal.period)
   if (isGoalPending(goal)) {
-    return `— · ${goal.gameMinute}`
+    return `— · ${goal.gameMinute} · ${period}`
   }
   const scorer = findPlayerById(roster, goal.scorerPlayerId)
   const number = scorer?.number.trim() || '?'
-  return `#${number} · ${goal.gameMinute}`
+  return `#${number} · ${goal.gameMinute} · ${period}`
 }
 
 const confirmedGoalIds = computed(() =>
@@ -371,7 +381,15 @@ function formatPenaltyShort(penalty: TeamPenalty, team: 'local' | 'visit'): stri
     <div class="scoreboard__glow" />
 
     <header class="scoreboard__header">
-      <span class="scoreboard__sport">Hockey en línea</span>
+      <span
+        class="scoreboard__sport"
+        :class="{ 'scoreboard__sport--event': eventTitle }"
+      >
+        <template v-if="eventTitle">
+          {{ eventTitle }}<template v-if="eventDate"> · {{ eventDate }}</template>
+        </template>
+        <template v-else>Hockey en línea</template>
+      </span>
       <span class="scoreboard__period-pill">Periodo {{ state.gamePeriod }}</span>
     </header>
 
@@ -915,6 +933,14 @@ function formatPenaltyShort(penalty: TeamPenalty, team: 'local' | 'visit'): stri
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--muted);
+  max-width: min(70%, 28rem);
+  line-height: 1.3;
+}
+
+.scoreboard__sport--event {
+  letter-spacing: 0.04em;
+  text-transform: none;
+  font-size: clamp(0.85rem, 2.4vw, 1.05rem);
 }
 
 .scoreboard__period-pill {
