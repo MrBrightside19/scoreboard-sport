@@ -10,6 +10,7 @@ import { createDefaultScoreboardState } from '@/types/hockeyScoreboard'
 const route = useRoute()
 const tournamentId = computed(() => route.params.tournamentId as string)
 const court = computed(() => route.params.court as string)
+const isOverlay = computed(() => route.name === 'tournament-overlay')
 const activeMatchId = ref<string | null>(null)
 
 const { remoteState, displayTime, displayPenaltiesLocal, displayPenaltiesVisit, refresh } =
@@ -45,11 +46,20 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <ScoreBoard
-    overlay
-    :state="displayState"
-    :display-time="displayTime"
-    :display-penalties-local="displayPenaltiesLocal"
-    :display-penalties-visit="displayPenaltiesVisit"
-  />
+  <div :class="{ 'overlay-root': isOverlay }">
+    <ScoreBoard
+      :overlay="isOverlay"
+      :state="displayState"
+      :display-time="displayTime"
+      :display-penalties-local="displayPenaltiesLocal"
+      :display-penalties-visit="displayPenaltiesVisit"
+    />
+  </div>
 </template>
+
+<style scoped>
+.overlay-root {
+  min-height: 100vh;
+  background: transparent;
+}
+</style>

@@ -6,6 +6,7 @@ import AppNavbar from '@/components/AppNavbar.vue'
 
 const route = useRoute()
 const showNavbar = computed(() => !route.meta.hideNav)
+const isTransparent = computed(() => Boolean(route.meta.transparent))
 
 const appTheme = {
   token: {
@@ -22,7 +23,13 @@ const appTheme = {
 
 <template>
   <a-config-provider :theme="appTheme">
-    <div class="app-shell" :class="{ 'app-shell--bare': $route.meta.bare }">
+    <div
+      class="app-shell"
+      :class="{
+        'app-shell--bare': $route.meta.bare,
+        'app-shell--transparent': isTransparent,
+      }"
+    >
       <AppNavbar v-if="showNavbar" />
       <main class="app-main" :class="{ 'app-main--full': !showNavbar }">
         <RouterView />
@@ -58,6 +65,11 @@ body {
   &--bare {
     background: #0a0e17;
   }
+
+  &--transparent {
+    min-height: 0;
+    background: transparent !important;
+  }
 }
 
 .app-main {
@@ -66,6 +78,18 @@ body {
   &--full {
     min-height: 100vh;
   }
+}
+
+.app-shell--transparent .app-main,
+.app-shell--transparent .app-main--full {
+  min-height: 0;
+  background: transparent;
+}
+
+html:has(.app-shell--transparent),
+html:has(.app-shell--transparent) body,
+html:has(.app-shell--transparent) #app {
+  background: transparent !important;
 }
 
 a {

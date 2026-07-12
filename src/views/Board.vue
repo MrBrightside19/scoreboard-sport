@@ -42,7 +42,7 @@ watch(
 </script>
 
 <template>
-  <ScoreBoard v-if="matchId && ready" :state="store.state" />
+  <ScoreBoard v-if="matchId && ready" tv :state="store.state" />
   <div v-else-if="matchId" class="board-empty">Cargando marcador…</div>
   <div v-else class="board-empty">
     <p>No hay partido activo. Abre la mesa de control y crea un partido.</p>
