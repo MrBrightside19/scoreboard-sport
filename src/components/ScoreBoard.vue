@@ -78,7 +78,7 @@ const penaltyIdsSignature = computed(() => {
 
 watch(
   confirmedGoalIds,
-  (next, prev) => {
+  (_next, prev) => {
     if (!props.overlay) return
     if (prev === undefined) return
 
@@ -101,7 +101,7 @@ watch(
 
 watch(
   penaltyIdsSignature,
-  (next, prev) => {
+  (_next, prev) => {
     if (!props.overlay) return
     if (prev === undefined) return
 
