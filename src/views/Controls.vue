@@ -16,6 +16,9 @@ import { playCountdownBeep } from '@/utils/countdownBeep'
 import { buildAppUrl, tournamentLivePath, tournamentOverlayPath } from '@/utils/appUrl'
 import { getLiveClockUpdateMs } from '@/config/poll'
 import { MAX_PERIODS, isGoalPending } from '@/types/hockeyScoreboard'
+import type { TeamPenalty } from '@/types/hockeyScoreboard'
+import { penaltyTypeLabel } from '@/data/penaltyCatalog'
+import { findPlayerById, findPlayerByNumber, playerLabel } from '@/utils/roster'
 import ControlsRosterPanel from '@/components/controls/ControlsRosterPanel.vue'
 import ControlsGoalsPanel from '@/components/controls/ControlsGoalsPanel.vue'
 import ControlsPenaltiesPanel from '@/components/controls/ControlsPenaltiesPanel.vue'
@@ -56,8 +59,46 @@ const pendingGoalsCount = computed(
   () => store.state.goals.filter((goal) => isGoalPending(goal)).length,
 )
 
+const powerPlayModalOpen = ref(false)
+const powerPlayTeam = ref<'local' | 'visit'>('local')
+const powerPlayPenalties = ref<TeamPenalty[]>([])
+const selectedPenaltyId = ref('')
+
+const powerPlayTeamName = computed(() =>
+  powerPlayTeam.value === 'local' ? store.state.localTeam : store.state.visitTeam,
+)
+
+function penaltyPlayerLabel(team: 'local' | 'visit', penalty: TeamPenalty): string {
+  const roster = team === 'local' ? store.state.rosterLocal : store.state.rosterVisit
+  const player =
+    findPlayerById(roster, penalty.playerId) ?? findPlayerByNumber(roster, penalty.player)
+  if (player) return playerLabel(player)
+  return penalty.player.trim() ? `#${penalty.player}` : 'Jugador'
+}
+
 function markGoal(team: 'local' | 'visit'): void {
   store.markGoal(team)
+
+  const against = team === 'local' ? 'visit' : 'local'
+  const penalties =
+    against === 'local' ? store.state.penaltiesLocal : store.state.penaltiesVisit
+  if (penalties.length === 0) return
+
+  powerPlayTeam.value = against
+  powerPlayPenalties.value = [...penalties]
+  selectedPenaltyId.value = penalties[0]?.id ?? ''
+  powerPlayModalOpen.value = true
+}
+
+function keepPowerPlayPenalties(): void {
+  powerPlayModalOpen.value = false
+}
+
+function releasePowerPlayPenalty(): void {
+  if (selectedPenaltyId.value) {
+    store.removePenalty(powerPlayTeam.value, selectedPenaltyId.value)
+  }
+  powerPlayModalOpen.value = false
 }
 
 watch(
@@ -464,6 +505,8 @@ onUnmounted(() => {
               </div>
               <p class="controls__score-hint">
                 El botón <strong>+</strong> marca el gol y captura el minuto del reloj. Completa autor y asistencia en <strong>Goles</strong>.
+                Si el rival tiene una penalidad activa, se te preguntará si corresponde liberar al jugador.
+                Si el rival tiene una penalidad activa, se te preguntará si corresponde liberar al jugador.
               </p>
             </a-card>
 
@@ -576,6 +619,40 @@ onUnmounted(() => {
         </a-tab-pane>
       </a-tabs>
     </div>
+
+    <a-modal
+      v-model:open="powerPlayModalOpen"
+      title="¿Liberar jugador penalizado?"
+      ok-text="Liberar jugador"
+      cancel-text="Mantener penalidad"
+      :ok-button-props="{ disabled: !selectedPenaltyId }"
+      destroy-on-close
+      @ok="releasePowerPlayPenalty"
+      @cancel="keepPowerPlayPenalties"
+    >
+      <p>
+        <strong>{{ powerPlayTeamName }}</strong> tiene
+        {{ powerPlayPenalties.length === 1 ? 'un jugador penalizado' : 'jugadores penalizados' }}.
+        Si el gol fue en superioridad numérica, puedes terminar la penalidad y devolver al jugador.
+      </p>
+
+      <a-radio-group
+        v-model:value="selectedPenaltyId"
+        class="controls__power-play-list"
+      >
+        <a-radio
+          v-for="penalty in powerPlayPenalties"
+          :key="penalty.id"
+          :value="penalty.id"
+          class="controls__power-play-option"
+        >
+          {{ penaltyPlayerLabel(powerPlayTeam, penalty) }}
+          · {{ penaltyTypeLabel(penalty.penaltyTypeId) }}
+          · {{ penalty.time }}
+          <template v-if="penalty.infraction"> · {{ penalty.infraction }}</template>
+        </a-radio>
+      </a-radio-group>
+    </a-modal>
   </div>
 </template>
 
@@ -607,6 +684,22 @@ onUnmounted(() => {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+}
+
+.controls__power-play-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  width: 100%;
+  margin-top: 0.75rem;
+}
+
+.controls__power-play-option {
+  display: flex !important;
+  align-items: flex-start;
+  white-space: normal;
+  height: auto;
+  line-height: 1.35;
 }
 
 .controls__grid {
