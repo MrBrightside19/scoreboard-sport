@@ -14,7 +14,7 @@ const router = createRouter({
       path: '/live/:matchId',
       name: 'live',
       component: () => import('@/views/Live.vue'),
-      meta: { bare: true, hideNav: true, title: 'En vivo' },
+      meta: { title: 'En vivo' },
     },
     {
       path: '/overlay/:matchId',
@@ -26,7 +26,7 @@ const router = createRouter({
       path: '/live/torneo/:tournamentId/:court',
       name: 'tournament-live',
       component: () => import('@/views/TournamentLive.vue'),
-      meta: { bare: true, hideNav: true, title: 'Torneo en vivo' },
+      meta: { title: 'Torneo en vivo' },
     },
     {
       path: '/overlay/torneo/:tournamentId/:court',

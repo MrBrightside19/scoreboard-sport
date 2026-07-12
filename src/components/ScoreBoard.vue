@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
-import type { ScoreboardState, TeamPenalty } from '@/types/hockeyScoreboard'
+import type { GoalEvent, ScoreboardState, TeamPenalty } from '@/types/hockeyScoreboard'
 import { isGoalPending, MAX_PERIODS } from '@/types/hockeyScoreboard'
 import { penaltyTypeLabel } from '@/data/penaltyCatalog'
 import { findPlayerById, findPlayerByNumber, playerLabel } from '@/utils/roster'
@@ -11,6 +11,8 @@ const props = defineProps<{
   displayPenaltiesLocal?: TeamPenalty[]
   displayPenaltiesVisit?: TeamPenalty[]
   overlay?: boolean
+  /** Marcador grande para TV / cancha. Live usa el diseño responsivo. */
+  tv?: boolean
   compact?: boolean
 }>()
 
@@ -36,12 +38,29 @@ const periodLabel = computed(() => {
   return `${period}º`
 })
 
+const localGoals = computed(() =>
+  props.state.goals.filter((goal) => goal.team === 'local'),
+)
+const visitGoals = computed(() =>
+  props.state.goals.filter((goal) => goal.team === 'visit'),
+)
+
 const TEAM_NAME_MAX = 15
 
 function truncateTeamName(name: string): string {
   const cleaned = name.trim()
   if (cleaned.length <= TEAM_NAME_MAX) return cleaned
   return `${cleaned.slice(0, TEAM_NAME_MAX)}…`
+}
+
+function formatGoalEntry(goal: GoalEvent, team: 'local' | 'visit'): string {
+  const roster = team === 'local' ? props.state.rosterLocal : props.state.rosterVisit
+  if (isGoalPending(goal)) {
+    return `— · ${goal.gameMinute}`
+  }
+  const scorer = findPlayerById(roster, goal.scorerPlayerId)
+  const number = scorer?.number.trim() || '?'
+  return `#${number} · ${goal.gameMinute}`
 }
 
 const confirmedGoalIds = computed(() =>
@@ -172,19 +191,6 @@ function formatPenaltyShort(penalty: TeamPenalty, team: 'local' | 'visit'): stri
   const number = penalty.player.trim() || player?.number || '?'
   return `#${number} ${penalty.time}`
 }
-
-function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): string {
-  const roster = team === 'local' ? props.state.rosterLocal : props.state.rosterVisit
-  const player = findPlayerByNumber(roster, penalty.player)
-  const playerText = player?.name
-    ? `#${penalty.player} ${player.name}`
-    : penalty.player.trim()
-      ? `#${penalty.player}`
-      : ''
-  const typeText = penaltyTypeLabel(penalty.penaltyTypeId)
-  const parts = [playerText, typeText, penalty.time].filter(Boolean)
-  return parts.join(' · ')
-}
 </script>
 
 <template>
@@ -296,43 +302,127 @@ function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): stri
     </Transition>
   </div>
 
-  <!-- Full / TV scoreboard -->
+  <!-- TV / cancha (pantalla grande) -->
   <div
-    v-else
-    class="scoreboard"
+    v-else-if="tv"
+    class="scoreboard scoreboard--tv"
     :class="{ 'scoreboard--compact': compact }"
   >
     <div class="scoreboard__glow" />
 
-    <header class="scoreboard__header">
-      <span class="scoreboard__sport">Hockey en línea</span>
-      <span class="scoreboard__period">Periodo {{ state.gamePeriod }}</span>
-    </header>
-
     <div class="scoreboard__main">
-      <section class="scoreboard__team scoreboard__team--local">
-        <div class="scoreboard__team-meta">
-          <span class="scoreboard__team-label">Local</span>
+      <div class="scoreboard__column">
+        <section class="scoreboard__team scoreboard__team--local">
           <h2 class="scoreboard__team-name">{{ state.localTeam }}</h2>
-        </div>
-        <div
-          class="scoreboard__score"
-          :class="{ 'scoreboard__score--penalty': localPenalties.length > 0 }"
-        >
-          {{ state.goalLocal }}
-        </div>
+          <div
+            class="scoreboard__score"
+            :class="{ 'scoreboard__score--penalty': localPenalties.length > 0 }"
+          >
+            {{ state.goalLocal }}
+          </div>
+        </section>
         <div v-if="localPenalties.length" class="scoreboard__penalties">
           <div
             v-for="(penalty, index) in localPenalties"
             :key="`local-${index}`"
             class="scoreboard__penalty-badge"
           >
-            {{ formatPenaltyLabel(penalty, 'local') }}
+            {{ formatPenaltyShort(penalty, 'local') }}
+          </div>
+        </div>
+      </div>
+
+      <section class="scoreboard__center">
+        <div class="scoreboard__clock" :class="{ 'scoreboard__clock--paused': state.isPaused }">
+          {{ clock }}
+        </div>
+        <div class="scoreboard__period">Periodo {{ state.gamePeriod }}</div>
+      </section>
+
+      <div class="scoreboard__column">
+        <section class="scoreboard__team scoreboard__team--visit">
+          <h2 class="scoreboard__team-name">{{ state.visitTeam }}</h2>
+          <div
+            class="scoreboard__score"
+            :class="{ 'scoreboard__score--penalty': visitPenalties.length > 0 }"
+          >
+            {{ state.goalVisit }}
+          </div>
+        </section>
+        <div v-if="visitPenalties.length" class="scoreboard__penalties">
+          <div
+            v-for="(penalty, index) in visitPenalties"
+            :key="`visit-${index}`"
+            class="scoreboard__penalty-badge"
+          >
+            {{ formatPenaltyShort(penalty, 'visit') }}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Live / espectadores (responsivo) -->
+  <div
+    v-else
+    class="scoreboard scoreboard--live"
+    :class="{ 'scoreboard--compact': compact }"
+  >
+    <div class="scoreboard__glow" />
+
+    <header class="scoreboard__header">
+      <span class="scoreboard__sport">Hockey en línea</span>
+      <span class="scoreboard__period-pill">Periodo {{ state.gamePeriod }}</span>
+    </header>
+
+    <div class="scoreboard__main scoreboard__main--live">
+      <section class="scoreboard__team scoreboard__team--local scoreboard__team--live">
+        <div class="scoreboard__team-top">
+          <div class="scoreboard__team-meta">
+            <span class="scoreboard__team-label">Local</span>
+            <h2 class="scoreboard__team-name">{{ state.localTeam }}</h2>
+          </div>
+          <div
+            class="scoreboard__score"
+            :class="{ 'scoreboard__score--penalty': localPenalties.length > 0 }"
+          >
+            {{ state.goalLocal }}
+          </div>
+        </div>
+
+        <div class="scoreboard__team-details">
+          <div class="scoreboard__detail-block">
+            <span class="scoreboard__detail-title">Goles</span>
+            <div v-if="localGoals.length" class="scoreboard__goals">
+              <div
+                v-for="goal in localGoals"
+                :key="goal.id"
+                class="scoreboard__goal-entry"
+                :class="{ 'scoreboard__goal-entry--pending': isGoalPending(goal) }"
+              >
+                {{ formatGoalEntry(goal, 'local') }}
+              </div>
+            </div>
+            <span v-else class="scoreboard__detail-empty">Sin goles</span>
+          </div>
+
+          <div class="scoreboard__detail-block">
+            <span class="scoreboard__detail-title">Penalidades</span>
+            <div v-if="localPenalties.length" class="scoreboard__penalties scoreboard__penalties--live">
+              <div
+                v-for="(penalty, index) in localPenalties"
+                :key="`local-${index}`"
+                class="scoreboard__penalty-badge scoreboard__penalty-badge--live"
+              >
+                {{ formatPenaltyShort(penalty, 'local') }}
+              </div>
+            </div>
+            <span v-else class="scoreboard__detail-empty">Sin faltas</span>
           </div>
         </div>
       </section>
 
-      <section class="scoreboard__center">
+      <section class="scoreboard__center scoreboard__center--live">
         <div class="scoreboard__clock" :class="{ 'scoreboard__clock--paused': state.isPaused }">
           {{ clock }}
         </div>
@@ -341,24 +431,48 @@ function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): stri
         </div>
       </section>
 
-      <section class="scoreboard__team scoreboard__team--visit">
-        <div class="scoreboard__team-meta">
-          <span class="scoreboard__team-label">Visita</span>
-          <h2 class="scoreboard__team-name">{{ state.visitTeam }}</h2>
-        </div>
-        <div
-          class="scoreboard__score"
-          :class="{ 'scoreboard__score--penalty': visitPenalties.length > 0 }"
-        >
-          {{ state.goalVisit }}
-        </div>
-        <div v-if="visitPenalties.length" class="scoreboard__penalties">
+      <section class="scoreboard__team scoreboard__team--visit scoreboard__team--live">
+        <div class="scoreboard__team-top scoreboard__team-top--visit">
           <div
-            v-for="(penalty, index) in visitPenalties"
-            :key="`visit-${index}`"
-            class="scoreboard__penalty-badge"
+            class="scoreboard__score"
+            :class="{ 'scoreboard__score--penalty': visitPenalties.length > 0 }"
           >
-            {{ formatPenaltyLabel(penalty, 'visit') }}
+            {{ state.goalVisit }}
+          </div>
+          <div class="scoreboard__team-meta scoreboard__team-meta--visit">
+            <span class="scoreboard__team-label">Visita</span>
+            <h2 class="scoreboard__team-name">{{ state.visitTeam }}</h2>
+          </div>
+        </div>
+
+        <div class="scoreboard__team-details">
+          <div class="scoreboard__detail-block">
+            <span class="scoreboard__detail-title">Goles</span>
+            <div v-if="visitGoals.length" class="scoreboard__goals">
+              <div
+                v-for="goal in visitGoals"
+                :key="goal.id"
+                class="scoreboard__goal-entry"
+                :class="{ 'scoreboard__goal-entry--pending': isGoalPending(goal) }"
+              >
+                {{ formatGoalEntry(goal, 'visit') }}
+              </div>
+            </div>
+            <span v-else class="scoreboard__detail-empty">Sin goles</span>
+          </div>
+
+          <div class="scoreboard__detail-block">
+            <span class="scoreboard__detail-title">Penalidades</span>
+            <div v-if="visitPenalties.length" class="scoreboard__penalties scoreboard__penalties--live">
+              <div
+                v-for="(penalty, index) in visitPenalties"
+                :key="`visit-${index}`"
+                class="scoreboard__penalty-badge scoreboard__penalty-badge--live"
+              >
+                {{ formatPenaltyShort(penalty, 'visit') }}
+              </div>
+            </div>
+            <span v-else class="scoreboard__detail-empty">Sin faltas</span>
           </div>
         </div>
       </section>
@@ -652,7 +766,7 @@ function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): stri
   transform: translateY(-6px);
 }
 
-/* ——— Full / TV scoreboard ——— */
+/* ——— Shared scoreboard shell ——— */
 .scoreboard {
   --local-color: #00d4ff;
   --visit-color: #ff6b35;
@@ -694,33 +808,6 @@ function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): stri
   pointer-events: none;
 }
 
-.scoreboard__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: clamp(1.5rem, 4vw, 3rem);
-  position: relative;
-  z-index: 1;
-}
-
-.scoreboard__sport {
-  font-size: 0.85rem;
-  font-weight: 600;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.scoreboard__period {
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: clamp(1.2rem, 3vw, 1.8rem);
-  letter-spacing: 0.08em;
-  padding: 0.35rem 1rem;
-  border-radius: 999px;
-  background: var(--panel);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
 .scoreboard__main {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -728,6 +815,7 @@ function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): stri
   align-items: center;
   position: relative;
   z-index: 1;
+  width: 100%;
 }
 
 .scoreboard__team {
@@ -735,6 +823,7 @@ function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): stri
   flex-direction: column;
   align-items: center;
   gap: 0.75rem;
+  width: 100%;
   padding: clamp(1rem, 3vw, 2rem);
   border-radius: 20px;
   background: var(--panel);
@@ -752,22 +841,15 @@ function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): stri
   box-shadow: inset 0 0 40px rgba(255, 107, 53, 0.05);
 }
 
-.scoreboard__team-label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
 .scoreboard__team-name {
   margin: 0;
   font-family: 'Bebas Neue', sans-serif;
-  font-size: clamp(1.8rem, 5vw, 3.2rem);
   font-weight: 400;
   letter-spacing: 0.04em;
   text-align: center;
   line-height: 1.1;
+  max-width: 100%;
+  word-break: break-word;
 }
 
 .scoreboard__team--local .scoreboard__team-name {
@@ -780,9 +862,8 @@ function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): stri
 
 .scoreboard__score {
   font-family: 'Bebas Neue', sans-serif;
-  font-size: clamp(4rem, 12vw, 8rem);
-  line-height: 1;
   font-weight: 400;
+  line-height: 1;
   text-shadow: 0 0 40px rgba(255, 255, 255, 0.15);
   transition: color 0.2s, transform 0.2s;
 }
@@ -790,27 +871,6 @@ function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): stri
 .scoreboard__score--penalty {
   color: #ff4757;
   animation: pulse 1.5s ease-in-out infinite;
-}
-
-.scoreboard__penalties {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  width: 100%;
-  align-items: center;
-}
-
-.scoreboard__penalty-badge {
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: clamp(0.95rem, 2.5vw, 1.2rem);
-  font-weight: 400;
-  letter-spacing: 0.06em;
-  color: #ff4757;
-  background: rgba(255, 71, 87, 0.15);
-  padding: 0.35rem 0.85rem;
-  border-radius: 8px;
-  min-width: 5.5rem;
-  text-align: center;
 }
 
 .scoreboard__center {
@@ -822,7 +882,6 @@ function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): stri
 
 .scoreboard__clock {
   font-family: 'Bebas Neue', sans-serif;
-  font-size: clamp(3rem, 10vw, 6.5rem);
   line-height: 1;
   letter-spacing: 0.06em;
   color: #fff;
@@ -834,11 +893,262 @@ function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): stri
   text-shadow: none;
 }
 
+/* ——— Live responsivo (espectadores) ——— */
+.scoreboard--live {
+  padding: clamp(1rem, 3vw, 2rem);
+  justify-content: flex-start;
+  min-height: calc(100vh - 57px);
+}
+
+.scoreboard__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: clamp(1rem, 3vw, 1.75rem);
+  position: relative;
+  z-index: 1;
+}
+
+.scoreboard__sport {
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.scoreboard__period-pill {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(1.2rem, 3vw, 1.8rem);
+  letter-spacing: 0.08em;
+  padding: 0.35rem 1rem;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.scoreboard__main--live {
+  align-items: stretch;
+  gap: clamp(0.75rem, 2vw, 1.5rem);
+}
+
+.scoreboard__team--live {
+  align-items: stretch;
+  gap: 1rem;
+  padding: clamp(0.85rem, 2vw, 1.35rem);
+}
+
+.scoreboard__team-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-width: 0;
+
+  &--visit {
+    flex-direction: row;
+  }
+}
+
+.scoreboard__team-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  flex: 1;
+
+  &--visit {
+    align-items: flex-end;
+    text-align: right;
+  }
+}
+
+.scoreboard__team-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.scoreboard--live .scoreboard__team-name {
+  font-size: clamp(1.6rem, 4vw, 2.8rem);
+  line-height: 1;
+}
+
+.scoreboard--live .scoreboard__score {
+  font-size: clamp(3.5rem, 10vw, 6.5rem);
+  flex-shrink: 0;
+  line-height: 0.9;
+}
+
+.scoreboard--live .scoreboard__clock {
+  font-size: clamp(2.8rem, 8vw, 5.5rem);
+}
+
+.scoreboard__center--live {
+  justify-content: center;
+  min-width: min(180px, 28vw);
+  padding: 0 0.5rem;
+}
+
 .scoreboard__status {
   font-size: 0.8rem;
   font-weight: 700;
   letter-spacing: 0.25em;
   color: var(--muted);
+}
+
+.scoreboard__team-details {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  width: 100%;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 0.85rem;
+}
+
+.scoreboard__detail-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.scoreboard__detail-title {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.scoreboard__detail-empty {
+  font-size: 0.78rem;
+  opacity: 0.4;
+}
+
+.scoreboard__goals {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.3rem;
+  width: 100%;
+}
+
+.scoreboard__goal-entry {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(0.95rem, 2.2vw, 1.2rem);
+  letter-spacing: 0.05em;
+  color: rgba(240, 244, 255, 0.9);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.3rem 0.55rem;
+  border-radius: 8px;
+  line-height: 1.2;
+
+  &--pending {
+    opacity: 0.55;
+  }
+}
+
+.scoreboard__penalties--live {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  align-items: stretch;
+  width: 100%;
+}
+
+.scoreboard__penalty-badge--live {
+  font-size: clamp(0.95rem, 2.2vw, 1.2rem);
+  color: #fff;
+  background: rgba(255, 71, 87, 0.85);
+  padding: 0.3rem 0.55rem;
+  border-radius: 8px;
+  min-width: 0;
+  text-align: left;
+}
+
+/* ——— TV / cancha (pantalla grande) ——— */
+.scoreboard--tv {
+  padding: clamp(0.5rem, 1.5vw, 1.25rem);
+}
+
+.scoreboard--tv .scoreboard__main {
+  gap: clamp(0.75rem, 2vw, 2rem);
+  align-items: start;
+}
+
+.scoreboard__column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.scoreboard--tv .scoreboard__team {
+  justify-content: center;
+  gap: 1.75rem;
+  min-height: min(58vh, 620px);
+  padding: clamp(1rem, 2.5vw, 2rem);
+  border-radius: 24px;
+}
+
+.scoreboard--tv .scoreboard__team-name {
+  font-size: clamp(3.5rem, 9vw, 7.5rem);
+  line-height: 0.95;
+}
+
+.scoreboard--tv .scoreboard__score {
+  font-size: clamp(11rem, 28vw, 22rem);
+  line-height: 0.85;
+  margin-top: 0.35rem;
+  text-shadow: 0 0 50px rgba(255, 255, 255, 0.18);
+}
+
+.scoreboard--tv .scoreboard__center {
+  gap: 0.5rem;
+  align-self: center;
+  padding: 0 0.5rem;
+}
+
+.scoreboard--tv .scoreboard__period {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(2.2rem, 5vw, 4rem);
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.scoreboard--tv .scoreboard__clock {
+  font-size: clamp(9rem, 26vw, 18rem);
+  line-height: 0.9;
+  letter-spacing: 0.05em;
+  text-shadow: 0 0 70px rgba(0, 212, 255, 0.45);
+}
+
+.scoreboard--tv .scoreboard__penalties {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+}
+
+.scoreboard--tv .scoreboard__penalty-badge {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(2.8rem, 7vw, 5rem);
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  color: #fff;
+  background: rgba(255, 71, 87, 0.92);
+  padding: 0.65rem 1.5rem;
+  border-radius: 14px;
+  text-align: center;
+  line-height: 1.1;
+  min-width: 9.5rem;
 }
 
 @keyframes pulse {
@@ -854,6 +1164,19 @@ function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): stri
 
   .scoreboard__center {
     order: -1;
+  }
+
+  .scoreboard__team-top--visit {
+    flex-direction: row-reverse;
+  }
+
+  .scoreboard__team-meta--visit {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .scoreboard__team-details {
+    grid-template-columns: 1fr;
   }
 
   .nhl-bug__bar {
