@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import type { ScoreboardState, TeamPenalty } from '@/types/hockeyScoreboard'
-import { MAX_PERIODS } from '@/types/hockeyScoreboard'
+import { isGoalPending, MAX_PERIODS } from '@/types/hockeyScoreboard'
 import { penaltyTypeLabel } from '@/data/penaltyCatalog'
-import { findPlayerByNumber } from '@/utils/roster'
+import { findPlayerById, findPlayerByNumber, playerLabel } from '@/utils/roster'
 
 const props = defineProps<{
   state: ScoreboardState
@@ -13,6 +13,10 @@ const props = defineProps<{
   overlay?: boolean
   compact?: boolean
 }>()
+
+const GOAL_BANNER_MS = 12_000
+const activeGoalId = ref<string | null>(null)
+let goalHideTimer: number | null = null
 
 const clock = computed(() => props.displayTime ?? props.state.timeGame)
 
@@ -36,6 +40,61 @@ function truncateTeamName(name: string): string {
   if (cleaned.length <= TEAM_NAME_MAX) return cleaned
   return `${cleaned.slice(0, TEAM_NAME_MAX)}…`
 }
+
+const confirmedGoalIds = computed(() =>
+  props.state.goals
+    .filter((goal) => !isGoalPending(goal) && goal.scorerPlayerId)
+    .map((goal) => goal.id)
+    .join(','),
+)
+
+watch(
+  confirmedGoalIds,
+  (next, prev) => {
+    if (!props.overlay) return
+    if (prev === undefined) return
+
+    const prevIds = new Set(prev.split(',').filter(Boolean))
+    const confirmed = props.state.goals.filter(
+      (goal) => !isGoalPending(goal) && goal.scorerPlayerId,
+    )
+    const newest =
+      [...confirmed].reverse().find((goal) => !prevIds.has(goal.id)) ?? null
+    if (!newest) return
+
+    activeGoalId.value = newest.id
+    if (goalHideTimer) window.clearTimeout(goalHideTimer)
+    goalHideTimer = window.setTimeout(() => {
+      activeGoalId.value = null
+      goalHideTimer = null
+    }, GOAL_BANNER_MS)
+  },
+)
+
+onUnmounted(() => {
+  if (goalHideTimer) window.clearTimeout(goalHideTimer)
+})
+
+const goalBanner = computed(() => {
+  if (!activeGoalId.value) return null
+  const goal = props.state.goals.find((item) => item.id === activeGoalId.value)
+  if (!goal || isGoalPending(goal) || !goal.scorerPlayerId) return null
+
+  const roster = goal.team === 'local' ? props.state.rosterLocal : props.state.rosterVisit
+  const teamName = goal.team === 'local' ? props.state.localTeam : props.state.visitTeam
+  const scorer = findPlayerById(roster, goal.scorerPlayerId)
+  const assist = goal.assistPlayerId
+    ? findPlayerById(roster, goal.assistPlayerId)
+    : undefined
+
+  return {
+    team: goal.team,
+    teamName: truncateTeamName(teamName),
+    scorer: scorer ? playerLabel(scorer) : 'Gol',
+    assist: assist ? playerLabel(assist) : null,
+    minute: goal.gameMinute,
+  }
+})
 
 function formatPenaltyShort(penalty: TeamPenalty, team: 'local' | 'visit'): string {
   const roster = team === 'local' ? props.state.rosterLocal : props.state.rosterVisit
@@ -107,6 +166,22 @@ function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): stri
         <span class="nhl-bug__accent nhl-bug__accent--visit" />
       </div>
     </div>
+
+    <Transition name="nhl-goal">
+      <div
+        v-if="goalBanner"
+        class="nhl-bug__goal"
+        :class="`nhl-bug__goal--${goalBanner.team}`"
+      >
+        <span class="nhl-bug__goal-tag">GOL</span>
+        <span class="nhl-bug__goal-team">{{ goalBanner.teamName }}</span>
+        <span class="nhl-bug__goal-scorer">{{ goalBanner.scorer }}</span>
+        <span v-if="goalBanner.assist" class="nhl-bug__goal-assist">
+          A {{ goalBanner.assist }}
+        </span>
+        <span class="nhl-bug__goal-minute">{{ goalBanner.minute }}</span>
+      </div>
+    </Transition>
 
     <div
       v-if="localPenalties.length || visitPenalties.length"
@@ -388,6 +463,87 @@ function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): stri
   padding: 0.15rem 0.45rem;
   border-radius: 2px;
   line-height: 1.2;
+}
+
+.nhl-bug__goal {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: min(520px, 92vw);
+  max-width: 640px;
+  margin-top: 0.35rem;
+  padding: 0.4rem 0.65rem;
+  background: rgba(12, 16, 24, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+.nhl-bug__goal--local {
+  border-left: 3px solid var(--local);
+}
+
+.nhl-bug__goal--visit {
+  border-left: 3px solid var(--visit);
+}
+
+.nhl-bug__goal-tag {
+  flex-shrink: 0;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: #0a0e17;
+  background: #ffe566;
+  padding: 0.2rem 0.4rem;
+  border-radius: 2px;
+}
+
+.nhl-bug__goal-team {
+  flex-shrink: 0;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.nhl-bug__goal-scorer {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.15rem;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nhl-bug__goal-assist {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nhl-bug__goal-minute {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.nhl-goal-enter-active,
+.nhl-goal-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.nhl-goal-enter-from,
+.nhl-goal-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
 }
 
 /* ——— Full / TV scoreboard ——— */
