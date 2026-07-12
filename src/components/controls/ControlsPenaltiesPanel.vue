@@ -38,6 +38,22 @@ const teams = computed(() => [
   },
 ])
 
+const availableRoster = computed(() => {
+  const team = penaltyTeam.value
+  const roster = team === 'local' ? store.state.rosterLocal : store.state.rosterVisit
+  const penalties = team === 'local' ? store.state.penaltiesLocal : store.state.penaltiesVisit
+  const busyIds = new Set(penalties.map((penalty) => penalty.playerId).filter(Boolean))
+  const busyNumbers = new Set(
+    penalties.map((penalty) => penalty.player.trim()).filter(Boolean),
+  )
+
+  return roster.filter(
+    (player) =>
+      !busyIds.has(player.id) &&
+      !(player.number.trim() && busyNumbers.has(player.number.trim())),
+  )
+})
+
 function openPenaltyModal(team: 'local' | 'visit'): void {
   penaltyTeam.value = team
   penaltyForm.playerId = ''
@@ -48,12 +64,13 @@ function openPenaltyModal(team: 'local' | 'visit'): void {
 
 function submitPenalty(): void {
   if (!penaltyForm.playerId) return
-  store.addPenalty(
+  const applied = store.addPenalty(
     penaltyTeam.value,
     penaltyForm.playerId,
     penaltyForm.penaltyTypeId,
     penaltyForm.infraction,
   )
+  if (!applied) return
   penaltyModalOpen.value = false
 }
 
@@ -68,7 +85,7 @@ function playerName(team: 'local' | 'visit', playerId: string, fallback: string)
   <div class="penalties-panel">
     <p class="penalties-panel__hint">
       Hasta {{ MAX_PENALTIES_PER_TEAM }} penalidades simultáneas por equipo (reglamento Worldskate 2026).
-      Selecciona jugador, tipo de falta e infracción.
+      Un jugador no puede tener dos faltas activas a la vez.
     </p>
 
     <div class="penalties-panel__grid">
@@ -150,9 +167,14 @@ function playerName(team: 'local' | 'visit', playerId: string, fallback: string)
             placeholder="Seleccionar jugador"
             show-search
             option-filter-prop="label"
+            :not-found-content="
+              availableRoster.length === 0
+                ? 'No hay jugadores disponibles (ya tienen falta activa)'
+                : undefined
+            "
           >
             <a-select-option
-              v-for="player in (penaltyTeam === 'local' ? store.state.rosterLocal : store.state.rosterVisit)"
+              v-for="player in availableRoster"
               :key="player.id"
               :value="player.id"
               :label="playerLabel(player)"

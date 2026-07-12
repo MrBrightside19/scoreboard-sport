@@ -319,24 +319,35 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     playerId: string,
     penaltyTypeId: string,
     infraction = '',
-  ): void {
+  ): boolean {
     const key = penaltiesKey(team)
     const list = [...state.value[key]]
-    if (list.length >= MAX_PENALTIES_PER_TEAM) return
+    if (list.length >= MAX_PENALTIES_PER_TEAM) return false
 
     const roster = state.value[rosterKey(team)]
     const player = findPlayerById(roster, playerId)
+    if (!playerId || !player) return false
+
+    const alreadyPenalized = list.some(
+      (penalty) =>
+        penalty.playerId === playerId ||
+        (player.number.trim() !== '' &&
+          penalty.player.trim() === player.number.trim()),
+    )
+    if (alreadyPenalized) return false
+
     const penaltyType = getPenaltyType(penaltyTypeId) ?? getPenaltyType(DEFAULT_PENALTY_TYPE_ID)!
 
     list.push({
       id: generateId(),
       playerId,
-      player: player?.number ?? '',
+      player: player.number,
       penaltyTypeId: penaltyType.id,
       infraction,
       time: secondsToClock(penaltyType.durationSeconds),
     })
     patch({ [key]: list })
+    return true
   }
 
   function removePenalty(team: 'local' | 'visit', penaltyId: string): void {
