@@ -421,7 +421,7 @@ onUnmounted(() => {
                   <a-input
                     :value="store.state.localTeam"
                     size="large"
-                    :maxlength="15"
+                    :maxlength="18"
                     show-count
                     @update:value="(v: string) => store.setTeams(v, store.state.visitTeam)"
                   />
@@ -445,7 +445,7 @@ onUnmounted(() => {
                   <a-input
                     :value="store.state.visitTeam"
                     size="large"
-                    :maxlength="15"
+                    :maxlength="18"
                     show-count
                     @update:value="(v: string) => store.setTeams(store.state.localTeam, v)"
                   />

@@ -45,7 +45,7 @@ const visitGoals = computed(() =>
   props.state.goals.filter((goal) => goal.team === 'visit'),
 )
 
-const TEAM_NAME_MAX = 15
+const TEAM_NAME_MAX = 18
 
 function truncateTeamName(name: string): string {
   const cleaned = name.trim()
@@ -552,8 +552,8 @@ function formatPenaltyShort(penalty: TeamPenalty, team: 'local' | 'visit'): stri
   grid-template-columns: 1fr auto 1fr;
   align-items: stretch;
   flex: 0 0 auto;
-  width: min(520px, 70vw);
-  max-width: 640px;
+  width: min(648px, 79vw);
+  max-width: 738px;
   height: 48px;
   background: var(--bug-bg);
   border: 1px solid var(--bug-border);
@@ -684,8 +684,8 @@ function formatPenaltyShort(penalty: TeamPenalty, team: 'local' | 'visit'): stri
   display: flex;
   align-items: center;
   gap: 0.55rem;
-  width: min(520px, 92vw);
-  max-width: 640px;
+  width: min(648px, 79vw);
+  max-width: 738px;
   margin-top: 0.35rem;
   padding: 0.4rem 0.65rem;
   background: rgba(12, 16, 24, 0.94);
@@ -1198,7 +1198,7 @@ function formatPenaltyShort(penalty: TeamPenalty, team: 'local' | 'visit'): stri
 
   .nhl-bug__bar {
     height: 46px;
-    width: min(420px, 62vw);
+    width: min(504px, 81vw);
   }
 
   .nhl-bug__name {

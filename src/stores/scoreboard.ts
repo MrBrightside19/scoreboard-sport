@@ -301,8 +301,8 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
 
   function setTeams(localTeam: string, visitTeam: string): void {
     patch({
-      localTeam: localTeam.slice(0, 15),
-      visitTeam: visitTeam.slice(0, 15),
+      localTeam: localTeam.slice(0, 18),
+      visitTeam: visitTeam.slice(0, 18),
     })
   }
 
