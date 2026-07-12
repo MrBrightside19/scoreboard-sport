@@ -714,8 +714,8 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   display: flex;
   align-items: center;
   gap: 0.55rem;
-  width: min(648px, 79vw);
-  max-width: 738px;
+  width: min(448px, 55vw);
+  max-width: 511px;
   margin-top: 0.35rem;
   padding: 0.4rem 0.65rem;
   background: rgba(12, 16, 24, 0.94);
