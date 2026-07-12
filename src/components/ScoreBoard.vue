@@ -172,19 +172,6 @@ function formatPenaltyShort(penalty: TeamPenalty, team: 'local' | 'visit'): stri
   const number = penalty.player.trim() || player?.number || '?'
   return `#${number} ${penalty.time}`
 }
-
-function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): string {
-  const roster = team === 'local' ? props.state.rosterLocal : props.state.rosterVisit
-  const player = findPlayerByNumber(roster, penalty.player)
-  const playerText = player?.name
-    ? `#${penalty.player} ${player.name}`
-    : penalty.player.trim()
-      ? `#${penalty.player}`
-      : ''
-  const typeText = penaltyTypeLabel(penalty.penaltyTypeId)
-  const parts = [playerText, typeText, penalty.time].filter(Boolean)
-  return parts.join(' · ')
-}
 </script>
 
 <template>
@@ -304,64 +291,55 @@ function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): stri
   >
     <div class="scoreboard__glow" />
 
-    <header class="scoreboard__header">
-      <span class="scoreboard__sport">Hockey en línea</span>
-      <span class="scoreboard__period">Periodo {{ state.gamePeriod }}</span>
-    </header>
-
     <div class="scoreboard__main">
-      <section class="scoreboard__team scoreboard__team--local">
-        <div class="scoreboard__team-meta">
-          <span class="scoreboard__team-label">Local</span>
+      <div class="scoreboard__column">
+        <section class="scoreboard__team scoreboard__team--local">
           <h2 class="scoreboard__team-name">{{ state.localTeam }}</h2>
-        </div>
-        <div
-          class="scoreboard__score"
-          :class="{ 'scoreboard__score--penalty': localPenalties.length > 0 }"
-        >
-          {{ state.goalLocal }}
-        </div>
+          <div
+            class="scoreboard__score"
+            :class="{ 'scoreboard__score--penalty': localPenalties.length > 0 }"
+          >
+            {{ state.goalLocal }}
+          </div>
+        </section>
         <div v-if="localPenalties.length" class="scoreboard__penalties">
           <div
             v-for="(penalty, index) in localPenalties"
             :key="`local-${index}`"
             class="scoreboard__penalty-badge"
           >
-            {{ formatPenaltyLabel(penalty, 'local') }}
+            {{ formatPenaltyShort(penalty, 'local') }}
           </div>
         </div>
-      </section>
+      </div>
 
       <section class="scoreboard__center">
         <div class="scoreboard__clock" :class="{ 'scoreboard__clock--paused': state.isPaused }">
           {{ clock }}
         </div>
-        <div class="scoreboard__status">
-          {{ state.isPaused ? 'PAUSA' : 'EN JUEGO' }}
-        </div>
+        <div class="scoreboard__period">Periodo {{ state.gamePeriod }}</div>
       </section>
 
-      <section class="scoreboard__team scoreboard__team--visit">
-        <div class="scoreboard__team-meta">
-          <span class="scoreboard__team-label">Visita</span>
+      <div class="scoreboard__column">
+        <section class="scoreboard__team scoreboard__team--visit">
           <h2 class="scoreboard__team-name">{{ state.visitTeam }}</h2>
-        </div>
-        <div
-          class="scoreboard__score"
-          :class="{ 'scoreboard__score--penalty': visitPenalties.length > 0 }"
-        >
-          {{ state.goalVisit }}
-        </div>
+          <div
+            class="scoreboard__score"
+            :class="{ 'scoreboard__score--penalty': visitPenalties.length > 0 }"
+          >
+            {{ state.goalVisit }}
+          </div>
+        </section>
         <div v-if="visitPenalties.length" class="scoreboard__penalties">
           <div
             v-for="(penalty, index) in visitPenalties"
             :key="`visit-${index}`"
             class="scoreboard__penalty-badge"
           >
-            {{ formatPenaltyLabel(penalty, 'visit') }}
+            {{ formatPenaltyShort(penalty, 'visit') }}
           </div>
         </div>
-      </section>
+      </div>
     </div>
   </div>
 </template>
@@ -666,7 +644,7 @@ function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): stri
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: clamp(1rem, 4vw, 3rem);
+  padding: clamp(0.5rem, 1.5vw, 1.25rem);
   background:
     radial-gradient(ellipse 80% 50% at 50% 0%, rgba(0, 212, 255, 0.08), transparent),
     radial-gradient(ellipse 60% 40% at 100% 100%, rgba(255, 107, 53, 0.06), transparent),
@@ -694,49 +672,42 @@ function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): stri
   pointer-events: none;
 }
 
-.scoreboard__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: clamp(1.5rem, 4vw, 3rem);
-  position: relative;
-  z-index: 1;
-}
-
-.scoreboard__sport {
-  font-size: 0.85rem;
-  font-weight: 600;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
 .scoreboard__period {
   font-family: 'Bebas Neue', sans-serif;
-  font-size: clamp(1.2rem, 3vw, 1.8rem);
-  letter-spacing: 0.08em;
-  padding: 0.35rem 1rem;
-  border-radius: 999px;
-  background: var(--panel);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: clamp(2.2rem, 5vw, 4rem);
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  text-transform: uppercase;
 }
 
 .scoreboard__main {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
-  gap: clamp(1rem, 3vw, 2.5rem);
-  align-items: center;
+  gap: clamp(0.75rem, 2vw, 2rem);
+  align-items: start;
   position: relative;
   z-index: 1;
+  width: 100%;
+}
+
+.scoreboard__column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  min-width: 0;
 }
 
 .scoreboard__team {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.75rem;
-  padding: clamp(1rem, 3vw, 2rem);
-  border-radius: 20px;
+  justify-content: center;
+  gap: 1.75rem;
+  width: 100%;
+  min-height: min(58vh, 620px);
+  padding: clamp(1rem, 2.5vw, 2rem);
+  border-radius: 24px;
   background: var(--panel);
   border: 1px solid rgba(255, 255, 255, 0.06);
   backdrop-filter: blur(12px);
@@ -752,22 +723,16 @@ function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): stri
   box-shadow: inset 0 0 40px rgba(255, 107, 53, 0.05);
 }
 
-.scoreboard__team-label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
 .scoreboard__team-name {
   margin: 0;
   font-family: 'Bebas Neue', sans-serif;
-  font-size: clamp(1.8rem, 5vw, 3.2rem);
+  font-size: clamp(3.5rem, 9vw, 7.5rem);
   font-weight: 400;
   letter-spacing: 0.04em;
   text-align: center;
-  line-height: 1.1;
+  line-height: 0.95;
+  max-width: 100%;
+  word-break: break-word;
 }
 
 .scoreboard__team--local .scoreboard__team-name {
@@ -780,10 +745,11 @@ function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): stri
 
 .scoreboard__score {
   font-family: 'Bebas Neue', sans-serif;
-  font-size: clamp(4rem, 12vw, 8rem);
-  line-height: 1;
+  font-size: clamp(11rem, 28vw, 22rem);
+  line-height: 0.85;
   font-weight: 400;
-  text-shadow: 0 0 40px rgba(255, 255, 255, 0.15);
+  margin-top: 0.35rem;
+  text-shadow: 0 0 50px rgba(255, 255, 255, 0.18);
   transition: color 0.2s, transform 0.2s;
 }
 
@@ -792,53 +758,51 @@ function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): stri
   animation: pulse 1.5s ease-in-out infinite;
 }
 
-.scoreboard__penalties {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  width: 100%;
-  align-items: center;
-}
-
-.scoreboard__penalty-badge {
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: clamp(0.95rem, 2.5vw, 1.2rem);
-  font-weight: 400;
-  letter-spacing: 0.06em;
-  color: #ff4757;
-  background: rgba(255, 71, 87, 0.15);
-  padding: 0.35rem 0.85rem;
-  border-radius: 8px;
-  min-width: 5.5rem;
-  text-align: center;
-}
-
 .scoreboard__center {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
+  align-self: center;
+  padding: 0 0.5rem;
 }
+
+.scoreboard__penalties {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+}
+
+.scoreboard__penalty-badge {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(2.8rem, 7vw, 5rem);
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  color: #fff;
+  background: rgba(255, 71, 87, 0.92);
+  padding: 0.65rem 1.5rem;
+  border-radius: 14px;
+  text-align: center;
+  line-height: 1.1;
+  min-width: 9.5rem;
+}
+
 
 .scoreboard__clock {
   font-family: 'Bebas Neue', sans-serif;
-  font-size: clamp(3rem, 10vw, 6.5rem);
-  line-height: 1;
-  letter-spacing: 0.06em;
+  font-size: clamp(9rem, 26vw, 18rem);
+  line-height: 0.9;
+  letter-spacing: 0.05em;
   color: #fff;
-  text-shadow: 0 0 60px rgba(0, 212, 255, 0.4);
+  text-shadow: 0 0 70px rgba(0, 212, 255, 0.45);
 }
 
 .scoreboard__clock--paused {
   opacity: 0.65;
   text-shadow: none;
-}
-
-.scoreboard__status {
-  font-size: 0.8rem;
-  font-weight: 700;
-  letter-spacing: 0.25em;
-  color: var(--muted);
 }
 
 @keyframes pulse {
