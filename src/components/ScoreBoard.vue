@@ -15,8 +15,11 @@ const props = defineProps<{
 }>()
 
 const GOAL_BANNER_MS = 12_000
+const PENALTY_BANNER_MS = 12_000
 const activeGoalId = ref<string | null>(null)
+const activePenaltyKey = ref<string | null>(null)
 let goalHideTimer: number | null = null
+let penaltyHideTimer: number | null = null
 
 const clock = computed(() => props.displayTime ?? props.state.timeGame)
 
@@ -48,6 +51,12 @@ const confirmedGoalIds = computed(() =>
     .join(','),
 )
 
+const penaltyIdsSignature = computed(() => {
+  const local = localPenalties.value.map((penalty) => `local:${penalty.id}`).join(',')
+  const visit = visitPenalties.value.map((penalty) => `visit:${penalty.id}`).join(',')
+  return `${local}|${visit}`
+})
+
 watch(
   confirmedGoalIds,
   (next, prev) => {
@@ -71,8 +80,39 @@ watch(
   },
 )
 
+watch(
+  penaltyIdsSignature,
+  (next, prev) => {
+    if (!props.overlay) return
+    if (prev === undefined) return
+
+    const prevIds = new Set(
+      prev
+        .split('|')
+        .flatMap((side) => side.split(','))
+        .filter(Boolean),
+    )
+    const current = [
+      ...localPenalties.value.map((penalty) => ({ team: 'local' as const, penalty })),
+      ...visitPenalties.value.map((penalty) => ({ team: 'visit' as const, penalty })),
+    ]
+    const newest = [...current]
+      .reverse()
+      .find(({ team, penalty }) => !prevIds.has(`${team}:${penalty.id}`))
+    if (!newest) return
+
+    activePenaltyKey.value = `${newest.team}:${newest.penalty.id}`
+    if (penaltyHideTimer) window.clearTimeout(penaltyHideTimer)
+    penaltyHideTimer = window.setTimeout(() => {
+      activePenaltyKey.value = null
+      penaltyHideTimer = null
+    }, PENALTY_BANNER_MS)
+  },
+)
+
 onUnmounted(() => {
   if (goalHideTimer) window.clearTimeout(goalHideTimer)
+  if (penaltyHideTimer) window.clearTimeout(penaltyHideTimer)
 })
 
 const goalBanner = computed(() => {
@@ -93,6 +133,36 @@ const goalBanner = computed(() => {
     scorer: scorer ? playerLabel(scorer) : 'Gol',
     assist: assist ? playerLabel(assist) : null,
     minute: goal.gameMinute,
+  }
+})
+
+const penaltyBanner = computed(() => {
+  if (!activePenaltyKey.value) return null
+  const [team, penaltyId] = activePenaltyKey.value.split(':') as [
+    'local' | 'visit',
+    string,
+  ]
+  const list = team === 'local' ? localPenalties.value : visitPenalties.value
+  const penalty = list.find((item) => item.id === penaltyId)
+  if (!penalty) return null
+
+  const roster = team === 'local' ? props.state.rosterLocal : props.state.rosterVisit
+  const teamName = team === 'local' ? props.state.localTeam : props.state.visitTeam
+  const player =
+    findPlayerById(roster, penalty.playerId) ??
+    findPlayerByNumber(roster, penalty.player)
+
+  return {
+    team,
+    teamName: truncateTeamName(teamName),
+    player: player
+      ? playerLabel(player)
+      : penalty.player.trim()
+        ? `#${penalty.player}`
+        : 'Falta',
+    type: penaltyTypeLabel(penalty.penaltyTypeId),
+    duration: penalty.time,
+    infraction: penalty.infraction.trim() || null,
   }
 })
 
@@ -120,50 +190,76 @@ function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): stri
 <template>
   <!-- NHL-style broadcast bug (OBS overlay) -->
   <div v-if="overlay" class="nhl-bug">
-    <div class="nhl-bug__bar">
-      <div class="nhl-bug__team nhl-bug__team--local">
-        <span class="nhl-bug__accent nhl-bug__accent--local" />
-        <div class="nhl-bug__logo">
-          <img
-            v-if="state.localLogo"
-            :src="state.localLogo"
-            :alt="state.localTeam"
-            class="nhl-bug__logo-img"
-          />
+    <div class="nhl-bug__row">
+      <div class="nhl-bug__side nhl-bug__side--local">
+        <div v-if="localPenalties.length" class="nhl-bug__timers">
+          <span
+            v-for="(penalty, index) in localPenalties"
+            :key="`local-${index}`"
+            class="nhl-bug__timer"
+          >
+            {{ formatPenaltyShort(penalty, 'local') }}
+          </span>
         </div>
-        <span class="nhl-bug__name">{{ truncateTeamName(state.localTeam) }}</span>
-        <span
-          class="nhl-bug__score"
-          :class="{ 'nhl-bug__score--penalty': localPenalties.length > 0 }"
-        >
-          {{ state.goalLocal }}
-        </span>
       </div>
 
-      <div class="nhl-bug__center">
-        <span class="nhl-bug__period">{{ periodLabel }}</span>
-        <span class="nhl-bug__clock" :class="{ 'nhl-bug__clock--paused': state.isPaused }">
-          {{ clock }}
-        </span>
+      <div class="nhl-bug__bar">
+        <div class="nhl-bug__team nhl-bug__team--local">
+          <span class="nhl-bug__accent nhl-bug__accent--local" />
+          <div class="nhl-bug__logo">
+            <img
+              v-if="state.localLogo"
+              :src="state.localLogo"
+              :alt="state.localTeam"
+              class="nhl-bug__logo-img"
+            />
+          </div>
+          <span class="nhl-bug__name">{{ truncateTeamName(state.localTeam) }}</span>
+          <span
+            class="nhl-bug__score"
+            :class="{ 'nhl-bug__score--penalty': localPenalties.length > 0 }"
+          >
+            {{ state.goalLocal }}
+          </span>
+        </div>
+
+        <div class="nhl-bug__center">
+          <span class="nhl-bug__period">{{ periodLabel }}</span>
+          <span class="nhl-bug__clock" :class="{ 'nhl-bug__clock--paused': state.isPaused }">
+            {{ clock }}
+          </span>
+        </div>
+
+        <div class="nhl-bug__team nhl-bug__team--visit">
+          <span
+            class="nhl-bug__score"
+            :class="{ 'nhl-bug__score--penalty': visitPenalties.length > 0 }"
+          >
+            {{ state.goalVisit }}
+          </span>
+          <span class="nhl-bug__name nhl-bug__name--visit">{{ truncateTeamName(state.visitTeam) }}</span>
+          <div class="nhl-bug__logo">
+            <img
+              v-if="state.visitLogo"
+              :src="state.visitLogo"
+              :alt="state.visitTeam"
+              class="nhl-bug__logo-img"
+            />
+          </div>
+          <span class="nhl-bug__accent nhl-bug__accent--visit" />
+        </div>
       </div>
 
-      <div class="nhl-bug__team nhl-bug__team--visit">
-        <span
-          class="nhl-bug__score"
-          :class="{ 'nhl-bug__score--penalty': visitPenalties.length > 0 }"
-        >
-          {{ state.goalVisit }}
-        </span>
-        <span class="nhl-bug__name nhl-bug__name--visit">{{ truncateTeamName(state.visitTeam) }}</span>
-        <div class="nhl-bug__logo">
-          <img
-            v-if="state.visitLogo"
-            :src="state.visitLogo"
-            :alt="state.visitTeam"
-            class="nhl-bug__logo-img"
-          />
+      <div class="nhl-bug__side nhl-bug__side--visit">
+        <div v-if="visitPenalties.length" class="nhl-bug__timers">
+          <span
+            v-for="(penalty, index) in visitPenalties"
+            :key="`visit-${index}`"
+            class="nhl-bug__timer"
+          >
+            {{ formatPenaltyShort(penalty, 'visit') }}
+          </span>
         </div>
-        <span class="nhl-bug__accent nhl-bug__accent--visit" />
       </div>
     </div>
 
@@ -183,29 +279,21 @@ function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): stri
       </div>
     </Transition>
 
-    <div
-      v-if="localPenalties.length || visitPenalties.length"
-      class="nhl-bug__penalties"
-    >
-      <div class="nhl-bug__penalties-side nhl-bug__penalties-side--local">
-        <span
-          v-for="(penalty, index) in localPenalties"
-          :key="`local-${index}`"
-          class="nhl-bug__penalty"
-        >
-          {{ formatPenaltyShort(penalty, 'local') }}
+    <Transition name="nhl-goal">
+      <div
+        v-if="penaltyBanner"
+        class="nhl-bug__goal nhl-bug__goal--penalty"
+        :class="`nhl-bug__goal--${penaltyBanner.team}`"
+      >
+        <span class="nhl-bug__goal-tag nhl-bug__goal-tag--penalty">FALTA</span>
+        <span class="nhl-bug__goal-team">{{ penaltyBanner.teamName }}</span>
+        <span class="nhl-bug__goal-scorer">{{ penaltyBanner.player }}</span>
+        <span class="nhl-bug__goal-assist">{{ penaltyBanner.type }}</span>
+        <span v-if="penaltyBanner.infraction" class="nhl-bug__goal-assist">
+          · {{ penaltyBanner.infraction }}
         </span>
       </div>
-      <div class="nhl-bug__penalties-side nhl-bug__penalties-side--visit">
-        <span
-          v-for="(penalty, index) in visitPenalties"
-          :key="`visit-${index}`"
-          class="nhl-bug__penalty"
-        >
-          {{ formatPenaltyShort(penalty, 'visit') }}
-        </span>
-      </div>
-    </div>
+    </Transition>
   </div>
 
   <!-- Full / TV scoreboard -->
@@ -302,11 +390,55 @@ function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): stri
   font-family: 'Inter', system-ui, sans-serif;
 }
 
+.nhl-bug__row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 1100px;
+}
+
+.nhl-bug__side {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+
+  &--local {
+    justify-content: flex-end;
+  }
+
+  &--visit {
+    justify-content: flex-start;
+  }
+}
+
+.nhl-bug__timers {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.nhl-bug__timer {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 0.9rem;
+  letter-spacing: 0.05em;
+  color: #fff;
+  background: rgba(255, 55, 70, 0.9);
+  padding: 0.2rem 0.5rem;
+  border-radius: 3px;
+  line-height: 1.2;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
 .nhl-bug__bar {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: stretch;
-  min-width: min(520px, 92vw);
+  flex: 0 0 auto;
+  width: min(520px, 70vw);
   max-width: 640px;
   height: 48px;
   background: var(--bug-bg);
@@ -434,37 +566,6 @@ function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): stri
   }
 }
 
-.nhl-bug__penalties {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.35rem 1.5rem;
-  width: min(520px, 92vw);
-  max-width: 640px;
-  margin-top: 0.35rem;
-  padding: 0 0.25rem;
-}
-
-.nhl-bug__penalties-side {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-
-  &--visit {
-    justify-content: flex-end;
-  }
-}
-
-.nhl-bug__penalty {
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: 0.85rem;
-  letter-spacing: 0.05em;
-  color: #fff;
-  background: rgba(255, 55, 70, 0.88);
-  padding: 0.15rem 0.45rem;
-  border-radius: 2px;
-  line-height: 1.2;
-}
-
 .nhl-bug__goal {
   display: flex;
   align-items: center;
@@ -497,6 +598,11 @@ function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): stri
   background: #ffe566;
   padding: 0.2rem 0.4rem;
   border-radius: 2px;
+
+  &--penalty {
+    color: #fff;
+    background: #ff3b4e;
+  }
 }
 
 .nhl-bug__goal-team {
@@ -752,6 +858,7 @@ function formatPenaltyLabel(penalty: TeamPenalty, team: 'local' | 'visit'): stri
 
   .nhl-bug__bar {
     height: 46px;
+    width: min(420px, 62vw);
   }
 
   .nhl-bug__name {
