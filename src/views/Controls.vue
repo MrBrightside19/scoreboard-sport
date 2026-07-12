@@ -11,7 +11,8 @@ import {
 } from '@/services/tournamentService'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
 import { readMatchIdFromStorage } from '@/utils/localSync'
-import { normalizeGameTime } from '@/utils/clock'
+import { normalizeGameTime, parseTimeToSeconds } from '@/utils/clock'
+import { playCountdownBeep } from '@/utils/countdownBeep'
 import { buildAppUrl, tournamentLivePath, tournamentOverlayPath } from '@/utils/appUrl'
 import { getLiveClockUpdateMs } from '@/config/poll'
 import { MAX_PERIODS, isGoalPending } from '@/types/hockeyScoreboard'
@@ -47,6 +48,9 @@ const tournamentContext = ref<{ tournamentId: string; court: string } | null>(nu
 const hasNextMatch = ref(false)
 const skipLeaveGuard = ref(false)
 const activeTab = ref('match')
+const clockDraft = ref(store.state.timeGame)
+const clockEditing = ref(false)
+let lastCountdownBeepSecond: number | null = null
 
 const pendingGoalsCount = computed(
   () => store.state.goals.filter((goal) => isGoalPending(goal)).length,
@@ -54,6 +58,52 @@ const pendingGoalsCount = computed(
 
 function markGoal(team: 'local' | 'visit'): void {
   store.markGoal(team)
+}
+
+watch(
+  () => store.state.timeGame,
+  (time) => {
+    if (!clockEditing.value) clockDraft.value = time
+  },
+)
+
+watch(
+  () => ({
+    seconds: parseTimeToSeconds(store.state.timeGame),
+    paused: store.state.isPaused,
+  }),
+  ({ seconds, paused }) => {
+    if (paused) {
+      lastCountdownBeepSecond = null
+      return
+    }
+    if (seconds < 0 || seconds > 10) {
+      lastCountdownBeepSecond = null
+      return
+    }
+    if (lastCountdownBeepSecond === seconds) return
+    lastCountdownBeepSecond = seconds
+    void playCountdownBeep(seconds === 0)
+  },
+)
+
+function onClockFocus(): void {
+  clockEditing.value = true
+  clockDraft.value = store.state.timeGame
+}
+
+function onClockDraftUpdate(value: string): void {
+  clockDraft.value = value
+}
+
+function commitClockDraft(): void {
+  clockEditing.value = false
+  if (!store.state.isPaused) {
+    clockDraft.value = store.state.timeGame
+    return
+  }
+  store.setGameTime(clockDraft.value)
+  clockDraft.value = store.state.timeGame
 }
 
 let publishTimer: number | null = null
@@ -371,7 +421,15 @@ onUnmounted(() => {
                   <a-input
                     :value="store.state.localTeam"
                     size="large"
+                    :maxlength="18"
+                    show-count
                     @update:value="(v: string) => store.setTeams(v, store.state.visitTeam)"
+                  />
+                  <a-input
+                    :value="store.state.localLogo"
+                    size="small"
+                    placeholder="URL logo local"
+                    @update:value="(v: string) => store.setTeamLogos(v, store.state.visitLogo)"
                   />
                   <div class="controls__score-controls">
                     <a-button size="large" @click="store.removeLastGoal('local')">−</a-button>
@@ -387,7 +445,15 @@ onUnmounted(() => {
                   <a-input
                     :value="store.state.visitTeam"
                     size="large"
+                    :maxlength="18"
+                    show-count
                     @update:value="(v: string) => store.setTeams(store.state.localTeam, v)"
+                  />
+                  <a-input
+                    :value="store.state.visitLogo"
+                    size="small"
+                    placeholder="URL logo visita"
+                    @update:value="(v: string) => store.setTeamLogos(store.state.localLogo, v)"
                   />
                   <div class="controls__score-controls">
                     <a-button size="large" @click="store.removeLastGoal('visit')">−</a-button>
@@ -424,9 +490,17 @@ onUnmounted(() => {
                     <label for="controls-game-time">Ajustar tiempo</label>
                     <a-input
                       id="controls-game-time"
-                      :value="store.state.timeGame"
-                      @update:value="(v: string) => store.setGameTime(v)"
+                      :value="clockDraft"
+                      :disabled="!store.state.isPaused"
+                      placeholder="mm:ss"
+                      @focus="onClockFocus"
+                      @blur="commitClockDraft"
+                      @pressEnter="commitClockDraft"
+                      @update:value="onClockDraftUpdate"
                     />
+                    <span class="controls__clock-hint">
+                      {{ store.state.isPaused ? 'Escribe el tiempo y confirma con Enter o al salir del campo.' : 'Pausa el reloj para ajustarlo.' }}
+                    </span>
                   </div>
 
                   <div class="controls__clock-field controls__clock-field--period">
@@ -733,6 +807,12 @@ onUnmounted(() => {
     font-size: 0.75rem;
     opacity: 0.6;
   }
+}
+
+.controls__clock-hint {
+  font-size: 0.72rem;
+  opacity: 0.5;
+  line-height: 1.3;
 }
 
 .controls__clock-period {

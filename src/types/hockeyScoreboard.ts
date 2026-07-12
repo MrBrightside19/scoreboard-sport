@@ -37,6 +37,8 @@ export function isGoalPending(goal: GoalEvent): boolean {
 export interface ScoreboardState {
   localTeam: string
   visitTeam: string
+  localLogo: string
+  visitLogo: string
   goalLocal: number
   goalVisit: number
   gamePeriod: number
@@ -63,6 +65,8 @@ export function createDefaultScoreboardState(
   return {
     localTeam,
     visitTeam,
+    localLogo: '',
+    visitLogo: '',
     goalLocal: 0,
     goalVisit: 0,
     gamePeriod: 1,
@@ -137,6 +141,8 @@ export function normalizeScoreboardState(raw: unknown): ScoreboardState {
     ...source,
     localTeam: (source.localTeam as string) ?? base.localTeam,
     visitTeam: (source.visitTeam as string) ?? base.visitTeam,
+    localLogo: String(source.localLogo ?? base.localLogo),
+    visitLogo: String(source.visitLogo ?? base.visitLogo),
     goalLocal: typeof source.goalLocal === 'number' ? source.goalLocal : base.goalLocal,
     goalVisit: typeof source.goalVisit === 'number' ? source.goalVisit : base.goalVisit,
     gamePeriod: typeof source.gamePeriod === 'number' ? source.gamePeriod : base.gamePeriod,
