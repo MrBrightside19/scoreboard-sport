@@ -11,7 +11,8 @@ import {
 } from '@/services/tournamentService'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
 import { readMatchIdFromStorage } from '@/utils/localSync'
-import { normalizeGameTime } from '@/utils/clock'
+import { normalizeGameTime, parseTimeToSeconds } from '@/utils/clock'
+import { playCountdownBeep } from '@/utils/countdownBeep'
 import { buildAppUrl, tournamentLivePath, tournamentOverlayPath } from '@/utils/appUrl'
 import { getLiveClockUpdateMs } from '@/config/poll'
 import { MAX_PERIODS, isGoalPending } from '@/types/hockeyScoreboard'
@@ -49,6 +50,7 @@ const skipLeaveGuard = ref(false)
 const activeTab = ref('match')
 const clockDraft = ref(store.state.timeGame)
 const clockEditing = ref(false)
+let lastCountdownBeepSecond: number | null = null
 
 const pendingGoalsCount = computed(
   () => store.state.goals.filter((goal) => isGoalPending(goal)).length,
@@ -62,6 +64,26 @@ watch(
   () => store.state.timeGame,
   (time) => {
     if (!clockEditing.value) clockDraft.value = time
+  },
+)
+
+watch(
+  () => ({
+    seconds: parseTimeToSeconds(store.state.timeGame),
+    paused: store.state.isPaused,
+  }),
+  ({ seconds, paused }) => {
+    if (paused) {
+      lastCountdownBeepSecond = null
+      return
+    }
+    if (seconds < 0 || seconds > 10) {
+      lastCountdownBeepSecond = null
+      return
+    }
+    if (lastCountdownBeepSecond === seconds) return
+    lastCountdownBeepSecond = seconds
+    void playCountdownBeep(seconds === 0)
   },
 )
 
