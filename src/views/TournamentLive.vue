@@ -14,7 +14,7 @@ const court = computed(() => route.params.court as string)
 const isOverlay = computed(() => route.name === 'tournament-overlay')
 const activeMatchId = ref<string | null>(null)
 
-const { remoteState, displayTime, displayPenaltiesLocal, displayPenaltiesVisit, refresh } =
+const { remoteState, displayTime, displayIntermissionTime, displayPenaltiesLocal, displayPenaltiesVisit, refresh } =
   useRemoteHockeyBoardCore(() => activeMatchId.value)
 
 const displayState = computed(
@@ -64,6 +64,7 @@ onUnmounted(() => {
       :overlay="isOverlay"
       :state="displayState"
       :display-time="displayTime"
+      :display-intermission-time="displayIntermissionTime"
       :display-penalties-local="displayPenaltiesLocal"
       :display-penalties-visit="displayPenaltiesVisit"
       :event-title="isOverlay ? null : eventTitle"

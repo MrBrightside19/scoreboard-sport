@@ -9,7 +9,7 @@ import { loadLiveEventMeta } from '@/utils/liveEventMeta'
 const route = useRoute()
 const matchId = computed(() => route.params.matchId as string)
 
-const { remoteState, loading, error, displayTime, displayPenaltiesLocal, displayPenaltiesVisit } =
+const { remoteState, loading, error, displayTime, displayIntermissionTime, displayPenaltiesLocal, displayPenaltiesVisit } =
   useRemoteHockeyBoardCore(() => matchId.value)
 
 const displayState = computed(
@@ -46,6 +46,7 @@ onMounted(() => {
     <ScoreBoard
       :state="displayState"
       :display-time="displayTime"
+      :display-intermission-time="displayIntermissionTime"
       :display-penalties-local="displayPenaltiesLocal"
       :display-penalties-visit="displayPenaltiesVisit"
       :event-title="eventTitle"

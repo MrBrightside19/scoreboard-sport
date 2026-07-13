@@ -15,7 +15,7 @@ import { normalizeGameTime, parseTimeToSeconds } from '@/utils/clock'
 import { playCountdownBeep } from '@/utils/countdownBeep'
 import { buildAppUrl, tournamentBoardPath, tournamentLivePath, tournamentOverlayPath } from '@/utils/appUrl'
 import { getLiveClockUpdateMs } from '@/config/poll'
-import { MAX_PERIODS, isGoalPending } from '@/types/hockeyScoreboard'
+import { MAX_PERIODS, isGoalPending, DEFAULT_INTERMISSION_TIME } from '@/types/hockeyScoreboard'
 import type { TeamPenalty } from '@/types/hockeyScoreboard'
 import { penaltyTypeLabel } from '@/data/penaltyCatalog'
 import { findPlayerById, findPlayerByNumber, playerLabel } from '@/utils/roster'
@@ -60,7 +60,37 @@ const pendingGoalsCount = computed(
 )
 
 const canAdvancePeriod = computed(
-  () => store.state.isPaused || parseTimeToSeconds(store.state.timeGame) <= 0,
+  () =>
+    store.state.intermissionActive ||
+    store.state.isPaused ||
+    parseTimeToSeconds(store.state.timeGame) <= 0,
+)
+
+const showIntermissionControls = computed(
+  () =>
+    store.state.intermissionActive || parseTimeToSeconds(store.state.timeGame) <= 0,
+)
+
+const intermissionDraft = ref(DEFAULT_INTERMISSION_TIME)
+
+watch(
+  () => store.state.intermissionActive,
+  (active) => {
+    if (!active) {
+      intermissionDraft.value = DEFAULT_INTERMISSION_TIME
+    }
+  },
+)
+
+watch(
+  () => store.state.intermissionTime,
+  (time) => {
+    if (store.state.intermissionActive) {
+      intermissionDraft.value = time
+    } else {
+      intermissionDraft.value = DEFAULT_INTERMISSION_TIME
+    }
+  },
 )
 
 function goToNextPeriod(): void {
@@ -69,7 +99,6 @@ function goToNextPeriod(): void {
   if (typeof store.advanceToNextPeriod === 'function') {
     store.advanceToNextPeriod()
   } else {
-    // Fallback si el store de Pinia aún no recargó el método (HMR).
     if (!store.state.isPaused && parseTimeToSeconds(store.state.timeGame) > 0) {
       store.syncElapsedAndPause()
     } else if (!store.state.isPaused) {
@@ -77,10 +106,51 @@ function goToNextPeriod(): void {
     }
     store.setPeriod(store.state.gamePeriod + 1)
     store.setGameTime('20:00')
-    store.patch({ isPaused: true })
+    store.patch({
+      intermissionActive: false,
+      intermissionTime: DEFAULT_INTERMISSION_TIME,
+      isPaused: true,
+    })
   }
 
   clockDraft.value = store.state.timeGame
+  intermissionDraft.value = DEFAULT_INTERMISSION_TIME
+}
+
+function startOrToggleIntermission(): void {
+  if (store.state.intermissionActive) {
+    store.togglePause()
+    return
+  }
+  const duration = intermissionDraft.value.trim() || DEFAULT_INTERMISSION_TIME
+  intermissionDraft.value = duration
+  store.setIntermissionTime(duration)
+  store.startIntermission(duration)
+}
+
+function commitIntermissionDraft(): void {
+  const normalized = intermissionDraft.value.trim() || DEFAULT_INTERMISSION_TIME
+  store.setIntermissionTime(normalized)
+  intermissionDraft.value = store.state.intermissionTime
+}
+
+function stopIntermission(): void {
+  if (typeof store.stopIntermission === 'function') {
+    store.stopIntermission()
+  } else if (
+    typeof store.advanceToNextPeriod === 'function' &&
+    store.state.gamePeriod < MAX_PERIODS
+  ) {
+    store.advanceToNextPeriod()
+  } else {
+    store.patch({
+      intermissionActive: false,
+      intermissionTime: DEFAULT_INTERMISSION_TIME,
+      isPaused: true,
+    })
+  }
+  clockDraft.value = store.state.timeGame
+  intermissionDraft.value = DEFAULT_INTERMISSION_TIME
 }
 
 const powerPlayModalOpen = ref(false)
@@ -136,9 +206,10 @@ watch(
   () => ({
     seconds: parseTimeToSeconds(store.state.timeGame),
     paused: store.state.isPaused,
+    intermission: store.state.intermissionActive,
   }),
-  ({ seconds, paused }) => {
-    if (paused) {
+  ({ seconds, paused, intermission }) => {
+    if (paused || intermission) {
       lastCountdownBeepSecond = null
       return
     }
@@ -148,6 +219,29 @@ watch(
     }
     if (lastCountdownBeepSecond === seconds) return
     lastCountdownBeepSecond = seconds
+    void playCountdownBeep(seconds === 0)
+  },
+)
+
+let lastIntermissionBeepSecond: number | null = null
+
+watch(
+  () => ({
+    seconds: parseTimeToSeconds(store.state.intermissionTime),
+    active: store.state.intermissionActive,
+    paused: store.state.isPaused,
+  }),
+  ({ seconds, active, paused }) => {
+    if (!active || paused) {
+      lastIntermissionBeepSecond = null
+      return
+    }
+    if (seconds < 0 || seconds > 10) {
+      lastIntermissionBeepSecond = null
+      return
+    }
+    if (lastIntermissionBeepSecond === seconds) return
+    lastIntermissionBeepSecond = seconds
     void playCountdownBeep(seconds === 0)
   },
 )
@@ -559,9 +653,20 @@ onUnmounted(() => {
             <a-card title="Reloj y periodo" class="controls__card controls__card--wide controls__card--clock">
               <div class="controls__clock">
                 <div class="controls__clock-main">
-                  <div class="controls__clock-display">{{ store.state.timeGame }}</div>
+                  <div class="controls__clock-display">
+                    {{
+                      store.state.intermissionActive
+                        ? store.state.intermissionTime
+                        : store.state.timeGame
+                    }}
+                  </div>
                   <p class="controls__clock-status">
-                    {{ store.state.isPaused ? 'En pausa' : 'En juego' }}
+                    <template v-if="store.state.intermissionActive">
+                      {{ store.state.isPaused ? 'Descanso en pausa' : 'Descanso' }}
+                    </template>
+                    <template v-else>
+                      {{ store.state.isPaused ? 'En pausa' : 'En juego' }}
+                    </template>
                   </p>
                 </div>
 
@@ -580,7 +685,7 @@ onUnmounted(() => {
                     <a-input
                       id="controls-game-time"
                       :value="clockDraft"
-                      :disabled="!store.state.isPaused"
+                      :disabled="!store.state.isPaused || store.state.intermissionActive"
                       placeholder="mm:ss"
                       @focus="onClockFocus"
                       @blur="commitClockDraft"
@@ -588,7 +693,13 @@ onUnmounted(() => {
                       @update:value="onClockDraftUpdate"
                     />
                     <span class="controls__clock-hint">
-                      {{ store.state.isPaused ? 'Escribe el tiempo y confirma con Enter o al salir del campo.' : 'Pausa el reloj para ajustarlo.' }}
+                      {{
+                        store.state.intermissionActive
+                          ? 'Durante el descanso usa el campo de abajo.'
+                          : store.state.isPaused
+                            ? 'Escribe el tiempo y confirma con Enter o al salir del campo.'
+                            : 'Pausa el reloj para ajustarlo.'
+                      }}
                     </span>
                   </div>
 
@@ -610,9 +721,53 @@ onUnmounted(() => {
                       Siguiente periodo
                     </a-button>
                     <span class="controls__clock-hint">
-                      Las faltas con tiempo restante continúan en el siguiente periodo. Disponible en pausa o al llegar a 00:00.
+                      Las faltas con tiempo restante continúan en el siguiente periodo.
                     </span>
                   </div>
+                </div>
+
+                <div
+                  v-if="showIntermissionControls"
+                  class="controls__intermission"
+                >
+                  <div class="controls__clock-field">
+                    <label for="controls-intermission-time">Descanso</label>
+                    <a-input
+                      id="controls-intermission-time"
+                      v-model:value="intermissionDraft"
+                      :disabled="store.state.intermissionActive && !store.state.isPaused"
+                      placeholder="mm:ss"
+                      @blur="commitIntermissionDraft"
+                      @pressEnter="commitIntermissionDraft"
+                    />
+                  </div>
+                  <div class="controls__intermission-actions">
+                    <a-button
+                      type="primary"
+                      @click="startOrToggleIntermission"
+                    >
+                      <template v-if="!store.state.intermissionActive">
+                        Iniciar descanso
+                      </template>
+                      <template v-else-if="store.state.isPaused">
+                        Reanudar descanso
+                      </template>
+                      <template v-else>
+                        Pausar descanso
+                      </template>
+                    </a-button>
+                    <a-button
+                      v-if="store.state.intermissionActive"
+                      @click="stopIntermission"
+                    >
+                      Terminar descanso
+                    </a-button>
+                  </div>
+                  <span class="controls__clock-hint">
+                    El marcador TV muestra la cuenta de descanso. Beep en los últimos 10 s.
+                    Al terminar (o al pulsar Terminar descanso), pasa solo al siguiente periodo
+                    (salvo el último). Las faltas pendientes no corren hasta entonces.
+                  </span>
                 </div>
               </div>
             </a-card>
@@ -976,6 +1131,26 @@ onUnmounted(() => {
 
 .controls__next-period {
   margin-top: 0.35rem;
+}
+
+.controls__intermission {
+  display: grid;
+  grid-template-columns: minmax(140px, 200px) auto;
+  gap: 0.75rem 1rem;
+  align-items: end;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.controls__intermission-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.controls__intermission .controls__clock-hint {
+  grid-column: 1 / -1;
 }
 
 .controls__clock-period-label {

@@ -10,6 +10,7 @@ export function useRemoteHockeyBoardCore(matchId: () => string | null) {
   const loading = ref(true)
   const error = ref<string | null>(null)
   const displayTime = ref('20:00')
+  const displayIntermissionTime = ref('05:00')
   const displayPenaltiesLocal = ref<TeamPenalty[]>([])
   const displayPenaltiesVisit = ref<TeamPenalty[]>([])
 
@@ -32,18 +33,37 @@ export function useRemoteHockeyBoardCore(matchId: () => string | null) {
 
   function updateDisplayClock(): void {
     if (!remoteState.value) return
-    const { timeGame, isPaused, updatedAt, penaltiesLocal, penaltiesVisit } =
-      remoteState.value
-    displayTime.value = interpolateClock(timeGame, isPaused, updatedAt)
+    const {
+      timeGame,
+      isPaused,
+      updatedAt,
+      penaltiesLocal,
+      penaltiesVisit,
+      intermissionActive,
+      intermissionTime,
+    } = remoteState.value
+
+    if (intermissionActive) {
+      displayIntermissionTime.value = interpolateClock(
+        intermissionTime,
+        isPaused,
+        updatedAt,
+      )
+      displayTime.value = timeGame
+    } else {
+      displayTime.value = interpolateClock(timeGame, isPaused, updatedAt)
+      displayIntermissionTime.value = intermissionTime
+    }
+
     displayPenaltiesLocal.value = interpolatePenalties(
       penaltiesLocal,
-      isPaused,
+      isPaused || intermissionActive,
       updatedAt,
       timeGame,
     )
     displayPenaltiesVisit.value = interpolatePenalties(
       penaltiesVisit,
-      isPaused,
+      isPaused || intermissionActive,
       updatedAt,
       timeGame,
     )
@@ -82,6 +102,7 @@ export function useRemoteHockeyBoardCore(matchId: () => string | null) {
     loading,
     error,
     displayTime,
+    displayIntermissionTime,
     displayPenaltiesLocal,
     displayPenaltiesVisit,
     refresh: poll,
