@@ -15,6 +15,27 @@ const matches = ref<TournamentMatch[]>([])
 const loading = ref(true)
 const standings = ref(calculateStandings([]))
 
+const tournamentStatusLabels: Record<Tournament['status'], string> = {
+  draft: 'Borrador',
+  active: 'Activo',
+  finished: 'Finalizado',
+}
+
+function matchStatusLabel(status: TournamentMatch['status']): string {
+  const labels: Record<TournamentMatch['status'], string> = {
+    scheduled: 'Programado',
+    live: 'En vivo',
+    finished: 'Finalizado',
+  }
+  return labels[status]
+}
+
+function matchStatusColor(status: TournamentMatch['status']): string {
+  if (status === 'live') return 'green'
+  if (status === 'finished') return 'default'
+  return 'blue'
+}
+
 onMounted(async () => {
   const id = route.params.id as string
   try {
@@ -44,7 +65,7 @@ onMounted(async () => {
         <h1>{{ tournament.name }}</h1>
         <p v-if="tournament.description">{{ tournament.description }}</p>
         <a-tag :color="tournament.status === 'active' ? 'green' : 'default'">
-          {{ tournament.status }}
+          {{ tournamentStatusLabels[tournament.status] }}
         </a-tag>
       </header>
 
@@ -71,7 +92,13 @@ onMounted(async () => {
               </template>
             </a-table-column>
             <a-table-column title="Cancha" data-index="court" :width="80" :ellipsis="true" />
-            <a-table-column title="Estado" data-index="status" :width="100" />
+            <a-table-column title="Estado" :width="110">
+              <template #default="{ record }">
+                <a-tag :color="matchStatusColor(record.status)">
+                  {{ matchStatusLabel(record.status) }}
+                </a-tag>
+              </template>
+            </a-table-column>
             <a-table-column title="Resultado" :width="100">
               <template #default="{ record }">
                 <span v-if="record.status === 'finished'">
