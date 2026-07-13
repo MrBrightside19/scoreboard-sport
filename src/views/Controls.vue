@@ -4,9 +4,11 @@ import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { Modal } from 'ant-design-vue'
 import { useScoreboardStore } from '@/stores/scoreboard'
 import { useAuthStore } from '@/stores/auth'
-import { fetchMatchState, publishMatchState } from '@/services/matchSync'
+import { fetchMatchState, finishMatch, publishMatchState } from '@/services/matchSync'
 import {
   advanceToNextTournamentMatch,
+  fetchTournamentMatchByMatchId,
+  finishTournamentMatch,
   getNextScheduledMatch,
 } from '@/services/tournamentService'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
@@ -47,6 +49,7 @@ const matchFallback = computed((): Pick<
 const copied = ref<string | null>(null)
 const hydrated = ref(false)
 const advancing = ref(false)
+const finishing = ref(false)
 const advanceError = ref<string | null>(null)
 const tournamentContext = ref<{ tournamentId: string; court: string } | null>(null)
 const hasNextMatch = ref(false)
@@ -367,10 +370,14 @@ async function goToNextMatch(): Promise<void> {
     )
 
     if (!result) {
-      advanceError.value = 'No hay más partidos programados en esta cancha.'
-      hasNextMatch.value = false
-      hydrated.value = true
-      store.startWriterTick()
+      // El partido actual ya quedó finalizado; no volver a publicar como en vivo.
+      skipLeaveGuard.value = true
+      const tournamentId = tournamentContext.value?.tournamentId
+      if (tournamentId) {
+        await router.replace({ name: 'tournament-detail', params: { id: tournamentId } })
+      } else {
+        await router.replace({ name: 'tournaments' })
+      }
       return
     }
 
@@ -392,6 +399,48 @@ async function goToNextMatch(): Promise<void> {
     store.startWriterTick()
   } finally {
     advancing.value = false
+  }
+}
+
+async function finishCurrentMatch(): Promise<void> {
+  if (!matchId.value || finishing.value) return
+
+  finishing.value = true
+  advanceError.value = null
+  store.stopWriterTick()
+  if (publishTimer) {
+    clearInterval(publishTimer)
+    publishTimer = null
+  }
+  if (publishDebounceTimer) {
+    clearTimeout(publishDebounceTimer)
+    publishDebounceTimer = null
+  }
+
+  try {
+    store.syncElapsedAndPause()
+    const tm = await fetchTournamentMatchByMatchId(matchId.value)
+    if (tm) {
+      await finishTournamentMatch(tm, store.state)
+    } else {
+      await finishMatch(matchId.value, store.state)
+    }
+
+    skipLeaveGuard.value = true
+    hydrated.value = false
+
+    const tournamentId = tournamentContext.value?.tournamentId ?? tm?.tournament_id
+    if (tournamentId) {
+      await router.replace({ name: 'tournament-detail', params: { id: tournamentId } })
+    } else {
+      await router.replace({ name: 'home' })
+    }
+  } catch (err) {
+    advanceError.value = err instanceof Error ? err.message : 'Error al finalizar el partido'
+    hydrated.value = true
+    store.startWriterTick()
+  } finally {
+    finishing.value = false
   }
 }
 
@@ -796,20 +845,37 @@ onUnmounted(() => {
                 title="¿Finalizar este partido e iniciar el siguiente de la cancha?"
                 ok-text="Sí, continuar"
                 cancel-text="Cancelar"
-                :disabled="!hasNextMatch || advancing"
+                :disabled="!hasNextMatch || advancing || finishing"
                 @confirm="goToNextMatch"
               >
                 <a-button
                   type="primary"
                   block
                   :loading="advancing"
-                  :disabled="!hasNextMatch"
+                  :disabled="!hasNextMatch || finishing"
                 >
                   Siguiente partido
                 </a-button>
               </a-popconfirm>
+              <a-popconfirm
+                title="¿Finalizar este partido? Dejará de aparecer en En vivo."
+                ok-text="Finalizar"
+                cancel-text="Cancelar"
+                :disabled="advancing || finishing"
+                @confirm="finishCurrentMatch"
+              >
+                <a-button
+                  block
+                  danger
+                  :loading="finishing"
+                  :disabled="advancing"
+                  style="margin-top: 0.5rem"
+                >
+                  Finalizar partido
+                </a-button>
+              </a-popconfirm>
               <p v-if="!hasNextMatch" class="controls__tournament-hint">
-                No quedan partidos programados en esta cancha.
+                No quedan partidos programados en esta cancha. Usa Finalizar partido para cerrarlo.
               </p>
             </a-card>
           </div>
