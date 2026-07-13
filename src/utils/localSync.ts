@@ -19,6 +19,10 @@ export function writeMatchIdToStorage(matchId: string): void {
   localStorage.setItem('activeMatchId', matchId)
 }
 
+export function clearMatchIdFromStorage(): void {
+  localStorage.removeItem('activeMatchId')
+}
+
 export function readCourtActiveMatch(
   tournamentId: string,
   court: string,

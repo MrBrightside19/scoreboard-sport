@@ -67,6 +67,26 @@ export async function createMatch(
   })
 }
 
+/** Partido libre en vivo del organizador (sin torneo). Solo debe haber uno. */
+export async function fetchActiveFreeMatch(
+  organizerId: string,
+): Promise<MatchRecord | null> {
+  const rows = await supabaseRest<MatchRecord[]>(
+    `matches?organizer_id=eq.${organizerId}&tournament_id=is.null&is_live=eq.true&finished_at=is.null&select=*&order=updated_at.desc`,
+  )
+  if (!rows.length) return null
+
+  const [active, ...stale] = rows
+  for (const extra of stale) {
+    try {
+      await finishMatch(extra.id, extra.state)
+    } catch {
+      // No bloquear si falla el cierre de un fantasma.
+    }
+  }
+  return active ?? null
+}
+
 export async function finishMatch(matchId: string, state: ScoreboardState): Promise<void> {
   await supabaseRest(`matches?id=eq.${matchId}`, {
     method: 'PATCH',

@@ -12,7 +12,7 @@ import {
   getNextScheduledMatch,
 } from '@/services/tournamentService'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
-import { readMatchIdFromStorage, writeCourtActiveMatch } from '@/utils/localSync'
+import { readMatchIdFromStorage, writeCourtActiveMatch, clearMatchIdFromStorage } from '@/utils/localSync'
 import { normalizeGameTime, parseTimeToSeconds } from '@/utils/clock'
 import { playCountdownBeep } from '@/utils/countdownBeep'
 import { buildAppUrl, tournamentBoardPath, tournamentLivePath, tournamentOverlayPath } from '@/utils/appUrl'
@@ -428,6 +428,7 @@ async function finishCurrentMatch(): Promise<void> {
 
     skipLeaveGuard.value = true
     hydrated.value = false
+    if (!tm) clearMatchIdFromStorage()
 
     const tournamentId = tournamentContext.value?.tournamentId ?? tm?.tournament_id
     if (tournamentId) {
@@ -547,7 +548,7 @@ onBeforeRouteLeave((_to, _from, next) => {
   Modal.confirm({
     title: '¿Cerrar la mesa de control?',
     content:
-      'Si sales, el reloj se pausará y dejarás de operar el partido. El overlay seguirá mostrando el marcador pausado.',
+      'Si sales, el reloj se pausará y dejarás de operar el partido. El overlay seguirá mostrando el marcador pausado. Usa «Finalizar partido» si quieres cerrarlo del todo.',
     okText: 'Salir',
     cancelText: 'Quedarme',
     okType: 'danger',
@@ -823,6 +824,34 @@ onUnmounted(() => {
                   </span>
                 </div>
               </div>
+            </a-card>
+
+            <a-card
+              v-if="!tournamentContext"
+              title="Partido libre"
+              class="controls__card controls__card--wide"
+            >
+              <a-alert
+                v-if="advanceError"
+                type="error"
+                :message="advanceError"
+                show-icon
+                style="margin-bottom: 0.75rem"
+              />
+              <p class="controls__tournament-hint">
+                Solo puede haber un partido libre a la vez. Al finalizarlo podrás crear otro desde el menú.
+              </p>
+              <a-popconfirm
+                title="¿Finalizar este partido? Dejará de aparecer en En vivo."
+                ok-text="Finalizar"
+                cancel-text="Cancelar"
+                :disabled="finishing"
+                @confirm="finishCurrentMatch"
+              >
+                <a-button block danger :loading="finishing">
+                  Finalizar partido
+                </a-button>
+              </a-popconfirm>
             </a-card>
 
             <a-card v-if="tournamentContext" title="Torneo" class="controls__card controls__card--wide">

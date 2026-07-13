@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
-import { createMatch } from '@/services/matchSync'
+import { createMatch, fetchActiveFreeMatch } from '@/services/matchSync'
 import { createDefaultScoreboardState } from '@/types/hockeyScoreboard'
 import { generateMatchId } from '@/utils/matchId'
-import { getStorageKey, readMatchIdFromStorage, writeMatchIdToStorage } from '@/utils/localSync'
+import {
+  getStorageKey,
+  readMatchIdFromStorage,
+  writeMatchIdToStorage,
+} from '@/utils/localSync'
 import AuthModal from '@/components/AuthModal.vue'
 
 const route = useRoute()
@@ -15,10 +19,18 @@ const auth = useAuthStore()
 const showAuth = ref(false)
 const mobileOpen = ref(false)
 const creating = ref(false)
+const activeFreeMatchId = ref<string | null>(null)
 
 const activeMatchId = computed(
   () => (route.query.matchId as string) || readMatchIdFromStorage() || '',
 )
+
+const createButtonLabel = computed(() => {
+  if (creating.value) {
+    return activeFreeMatchId.value ? 'Abriendo…' : 'Creando…'
+  }
+  return activeFreeMatchId.value ? 'Continuar partido' : 'Crear partido'
+})
 
 const navLinks = computed(() => {
   const links: { name: string; label: string; to: RouteLocationRaw }[] = [
@@ -90,26 +102,55 @@ async function handleLogout(): Promise<void> {
   await auth.logout()
 }
 
+async function refreshActiveFreeMatch(): Promise<void> {
+  if (!isSupabaseConfigured) {
+    const localId = readMatchIdFromStorage()
+    activeFreeMatchId.value =
+      localId && localStorage.getItem(getStorageKey(localId)) ? localId : null
+    return
+  }
+
+  if (!auth.profile?.id) {
+    activeFreeMatchId.value = null
+    return
+  }
+
+  try {
+    const active = await fetchActiveFreeMatch(auth.profile.id)
+    activeFreeMatchId.value = active?.id ?? null
+    if (active) writeMatchIdToStorage(active.id)
+  } catch {
+    activeFreeMatchId.value = null
+  }
+}
+
 async function createMatchFlow(): Promise<void> {
   if (!auth.isStaff && isSupabaseConfigured) {
     openAuth()
     return
   }
 
-  // Abrir ambas pestañas en el gesto del click (antes del await) evita el bloqueo de popups.
+  // Abrir pestañas en el gesto del click (antes del await) evita el bloqueo de popups.
   const boardWin = window.open('about:blank', '_blank')
   const controlsWin = window.open('about:blank', '_blank')
 
   creating.value = true
   closeMobile()
   try {
-    const matchId = generateMatchId()
-    const state = createDefaultScoreboardState()
+    await refreshActiveFreeMatch()
 
-    if (isSupabaseConfigured) {
-      await createMatch(matchId, state, auth.profile?.id)
-    } else {
-      localStorage.setItem(getStorageKey(matchId), JSON.stringify(state))
+    let matchId = activeFreeMatchId.value
+    if (!matchId) {
+      matchId = generateMatchId()
+      const state = createDefaultScoreboardState()
+
+      if (isSupabaseConfigured) {
+        await createMatch(matchId, state, auth.profile?.id)
+      } else {
+        localStorage.setItem(getStorageKey(matchId), JSON.stringify(state))
+      }
+
+      activeFreeMatchId.value = matchId
     }
 
     writeMatchIdToStorage(matchId)
@@ -130,6 +171,29 @@ async function createMatchFlow(): Promise<void> {
     creating.value = false
   }
 }
+
+onMounted(() => {
+  void refreshActiveFreeMatch()
+  window.addEventListener('focus', refreshActiveFreeMatch)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('focus', refreshActiveFreeMatch)
+})
+
+watch(
+  () => auth.profile?.id,
+  () => {
+    void refreshActiveFreeMatch()
+  },
+)
+
+watch(
+  () => route.name,
+  () => {
+    void refreshActiveFreeMatch()
+  },
+)
 </script>
 
 <template>
@@ -148,7 +212,7 @@ async function createMatchFlow(): Promise<void> {
           :loading="creating"
           @click="createMatchFlow"
         >
-          Crear partido
+          {{ createButtonLabel }}
         </a-button>
         <RouterLink
           v-for="link in navLinks"
@@ -214,7 +278,7 @@ async function createMatchFlow(): Promise<void> {
         :disabled="creating"
         @click="createMatchFlow"
       >
-        {{ creating ? 'Creando…' : 'Crear partido' }}
+        {{ createButtonLabel }}
       </button>
       <RouterLink
         v-for="link in navLinks"
