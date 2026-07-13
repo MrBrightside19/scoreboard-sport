@@ -59,6 +59,30 @@ const pendingGoalsCount = computed(
   () => store.state.goals.filter((goal) => isGoalPending(goal)).length,
 )
 
+const canAdvancePeriod = computed(
+  () => store.state.isPaused || parseTimeToSeconds(store.state.timeGame) <= 0,
+)
+
+function goToNextPeriod(): void {
+  if (!canAdvancePeriod.value) return
+
+  if (typeof store.advanceToNextPeriod === 'function') {
+    store.advanceToNextPeriod()
+  } else {
+    // Fallback si el store de Pinia aún no recargó el método (HMR).
+    if (!store.state.isPaused && parseTimeToSeconds(store.state.timeGame) > 0) {
+      store.syncElapsedAndPause()
+    } else if (!store.state.isPaused) {
+      store.patch({ isPaused: true })
+    }
+    store.setPeriod(store.state.gamePeriod + 1)
+    store.setGameTime('20:00')
+    store.patch({ isPaused: true })
+  }
+
+  clockDraft.value = store.state.timeGame
+}
+
 const powerPlayModalOpen = ref(false)
 const powerPlayTeam = ref<'local' | 'visit'>('local')
 const powerPlayPenalties = ref<TeamPenalty[]>([])
@@ -529,7 +553,6 @@ onUnmounted(() => {
               <p class="controls__score-hint">
                 El botón <strong>+</strong> marca el gol y captura el minuto del reloj. Completa autor y asistencia en <strong>Goles</strong>.
                 Si el rival tiene una penalidad activa, se te preguntará si corresponde liberar al jugador.
-                Si el rival tiene una penalidad activa, se te preguntará si corresponde liberar al jugador.
               </p>
             </a-card>
 
@@ -578,6 +601,17 @@ onUnmounted(() => {
                       </span>
                       <a-button @click="store.setPeriod(store.state.gamePeriod + 1)">+</a-button>
                     </div>
+                    <a-button
+                      block
+                      class="controls__next-period"
+                      :disabled="!canAdvancePeriod"
+                      @click="goToNextPeriod"
+                    >
+                      Siguiente periodo
+                    </a-button>
+                    <span class="controls__clock-hint">
+                      Las faltas con tiempo restante continúan en el siguiente periodo. Disponible en pausa o al llegar a 00:00.
+                    </span>
                   </div>
                 </div>
               </div>
@@ -938,6 +972,10 @@ onUnmounted(() => {
   grid-template-columns: 40px 1fr 40px;
   align-items: center;
   gap: 0.5rem;
+}
+
+.controls__next-period {
+  margin-top: 0.35rem;
 }
 
 .controls__clock-period-label {

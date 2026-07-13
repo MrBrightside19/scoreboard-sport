@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref } from 'vue'
 import type {
   GoalEvent,
@@ -8,6 +8,7 @@ import type {
 } from '@/types/hockeyScoreboard'
 import {
   createDefaultScoreboardState,
+  DEFAULT_GAME_TIME,
   DEFAULT_PENALTY_TYPE_ID,
   isGoalPending,
   MAX_PENALTIES_PER_TEAM,
@@ -23,7 +24,12 @@ import {
 } from '@/utils/localSync'
 import { generateId } from '@/utils/id'
 import { canSetRole, findPlayerById } from '@/utils/roster'
-import { normalizeGameTime, parseTimeToSeconds, tickDown, interpolateClock } from '@/utils/clock'
+import {
+  interpolateClock,
+  normalizeGameTime,
+  parseTimeToSeconds,
+  tickDown,
+} from '@/utils/clock'
 
 export const useScoreboardStore = defineStore('scoreboard', () => {
   const matchId = ref<string | null>(null)
@@ -111,25 +117,35 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
       return
     }
 
+    const clockSeconds = parseTimeToSeconds(state.value.timeGame)
+    if (clockSeconds <= 0) {
+      patch({ isPaused: true })
+      return
+    }
+
     const syncedTime = interpolateClock(
       state.value.timeGame,
       state.value.isPaused,
       state.value.updatedAt,
     )
+    const playedSeconds = Math.max(
+      0,
+      clockSeconds - parseTimeToSeconds(syncedTime),
+    )
+
+    const syncPenaltyList = (penalties: TeamPenalty[]): TeamPenalty[] =>
+      penalties
+        .map((penalty) => ({
+          ...penalty,
+          time: tickDown(penalty.time, playedSeconds),
+        }))
+        .filter((penalty) => parseTimeToSeconds(penalty.time) > 0)
 
     state.value = {
       ...state.value,
       timeGame: syncedTime,
-      penaltiesLocal: interpolatePenalties(
-        state.value.penaltiesLocal,
-        state.value.isPaused,
-        state.value.updatedAt,
-      ),
-      penaltiesVisit: interpolatePenalties(
-        state.value.penaltiesVisit,
-        state.value.isPaused,
-        state.value.updatedAt,
-      ),
+      penaltiesLocal: syncPenaltyList(state.value.penaltiesLocal),
+      penaltiesVisit: syncPenaltyList(state.value.penaltiesVisit),
       isPaused: true,
       updatedAt: new Date().toISOString(),
     }
@@ -299,6 +315,21 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     patch({ gamePeriod: Math.max(1, period) })
   }
 
+  /** Pasa al siguiente periodo conservando el tiempo restante de las faltas. */
+  function advanceToNextPeriod(periodLength = DEFAULT_GAME_TIME): void {
+    if (!state.value.isPaused && parseTimeToSeconds(state.value.timeGame) > 0) {
+      syncElapsedAndPause()
+    } else if (!state.value.isPaused) {
+      patch({ isPaused: true })
+    }
+
+    patch({
+      gamePeriod: state.value.gamePeriod + 1,
+      timeGame: normalizeGameTime(periodLength),
+      isPaused: true,
+    })
+  }
+
   function setTeams(localTeam: string, visitTeam: string): void {
     patch({
       localTeam: localTeam.slice(0, 18),
@@ -375,29 +406,26 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
       .filter((penalty) => parseTimeToSeconds(penalty.time) > 0)
   }
 
-  function interpolatePenalties(
-    penalties: TeamPenalty[],
-    isPaused: boolean,
-    updatedAt: string,
-  ): TeamPenalty[] {
-    return penalties
-      .map((penalty) => ({
-        ...penalty,
-        time: interpolateClock(penalty.time, isPaused, updatedAt),
-      }))
-      .filter((penalty) => parseTimeToSeconds(penalty.time) > 0)
-  }
-
   function startWriterTick(): void {
     if (tickInterval.value) return
     isWriter.value = true
     tickInterval.value = window.setInterval(() => {
       if (state.value.isPaused) return
 
+      const clockSeconds = parseTimeToSeconds(state.value.timeGame)
+      if (clockSeconds <= 0) {
+        patch({ isPaused: true })
+        return
+      }
+
+      const nextTime = tickDown(state.value.timeGame)
+      const periodEnded = parseTimeToSeconds(nextTime) <= 0
+
       const next: Partial<ScoreboardState> = {
-        timeGame: tickDown(state.value.timeGame),
+        timeGame: nextTime,
         penaltiesLocal: tickPenaltyList(state.value.penaltiesLocal),
         penaltiesVisit: tickPenaltyList(state.value.penaltiesVisit),
+        isPaused: periodEnded,
         updatedAt: new Date().toISOString(),
       }
 
@@ -436,6 +464,7 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     adjustGoal,
     togglePause,
     setPeriod,
+    advanceToNextPeriod,
     setTeams,
     setTeamLogos,
     setGameTime,
@@ -449,3 +478,7 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     syncElapsedAndPause,
   }
 })
+
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useScoreboardStore, import.meta.hot))
+}

@@ -1,7 +1,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import type { ScoreboardState, TeamPenalty } from '@/types/hockeyScoreboard'
 import { getLiveClockUpdateMs } from '@/config/poll'
-import { interpolateClock, parseTimeToSeconds } from '@/utils/clock'
+import { interpolateClock, interpolatePenaltyTime, parseTimeToSeconds } from '@/utils/clock'
 import { fetchMatchState } from '@/services/matchSync'
 import { normalizeScoreboardState } from '@/types/hockeyScoreboard'
 
@@ -20,31 +20,32 @@ export function useRemoteHockeyBoardCore(matchId: () => string | null) {
     penalties: TeamPenalty[],
     isPaused: boolean,
     updatedAt: string,
+    timeGame: string,
   ): TeamPenalty[] {
     return penalties
       .map((penalty) => ({
         ...penalty,
-        time: interpolateClock(penalty.time, isPaused, updatedAt),
+        time: interpolatePenaltyTime(penalty.time, isPaused, updatedAt, timeGame),
       }))
       .filter((penalty) => parseTimeToSeconds(penalty.time) > 0)
   }
 
   function updateDisplayClock(): void {
     if (!remoteState.value) return
-    displayTime.value = interpolateClock(
-      remoteState.value.timeGame,
-      remoteState.value.isPaused,
-      remoteState.value.updatedAt,
-    )
+    const { timeGame, isPaused, updatedAt, penaltiesLocal, penaltiesVisit } =
+      remoteState.value
+    displayTime.value = interpolateClock(timeGame, isPaused, updatedAt)
     displayPenaltiesLocal.value = interpolatePenalties(
-      remoteState.value.penaltiesLocal,
-      remoteState.value.isPaused,
-      remoteState.value.updatedAt,
+      penaltiesLocal,
+      isPaused,
+      updatedAt,
+      timeGame,
     )
     displayPenaltiesVisit.value = interpolatePenalties(
-      remoteState.value.penaltiesVisit,
-      remoteState.value.isPaused,
-      remoteState.value.updatedAt,
+      penaltiesVisit,
+      isPaused,
+      updatedAt,
+      timeGame,
     )
   }
 
