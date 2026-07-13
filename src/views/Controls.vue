@@ -723,29 +723,31 @@ onUnmounted(() => {
                       {{ store.state.isPaused ? 'En pausa' : 'En juego' }}
                     </template>
                   </p>
-                </div>
-
-                <div class="controls__clock-actions">
                   <a-button
-                    block
+                    class="controls__clock-toggle"
                     size="large"
                     :type="store.state.isPaused ? 'primary' : 'default'"
                     @click="store.togglePause()"
                   >
                     {{ store.state.isPaused ? 'Reanudar' : 'Pausar' }}
                   </a-button>
+                </div>
 
-                  <div class="controls__clock-field">
-                    <label for="controls-game-time">Ajustar tiempo</label>
-                    <TimeInput
-                      id="controls-game-time"
-                      :value="clockDraft"
-                      :disabled="!store.state.isPaused || store.state.intermissionActive"
-                      @update:value="onClockDraftUpdate"
-                      @focus="onClockFocus"
-                      @blur="commitClockDraft"
-                      @enter="commitClockDraft"
-                    />
+                <div class="controls__clock-panels">
+                  <div class="controls__clock-field controls__clock-field--time">
+                    <div class="controls__clock-field-head">
+                      <label for="controls-game-time">Ajustar tiempo</label>
+                      <TimeInput
+                        id="controls-game-time"
+                        compact
+                        :value="clockDraft"
+                        :disabled="!store.state.isPaused || store.state.intermissionActive"
+                        @update:value="onClockDraftUpdate"
+                        @focus="onClockFocus"
+                        @blur="commitClockDraft"
+                        @enter="commitClockDraft"
+                      />
+                    </div>
                     <span class="controls__clock-hint">
                       {{
                         store.state.intermissionActive
@@ -784,16 +786,19 @@ onUnmounted(() => {
                   v-if="showIntermissionControls"
                   class="controls__intermission"
                 >
-                  <div class="controls__clock-field">
-                    <label for="controls-intermission-time">Descanso</label>
-                    <TimeInput
-                      id="controls-intermission-time"
-                      :value="intermissionDraft"
-                      :disabled="store.state.intermissionActive && !store.state.isPaused"
-                      @update:value="onIntermissionDraftUpdate"
-                      @blur="commitIntermissionDraft"
-                      @enter="commitIntermissionDraft"
-                    />
+                  <div class="controls__clock-field controls__clock-field--time">
+                    <div class="controls__clock-field-head">
+                      <label for="controls-intermission-time">Descanso</label>
+                      <TimeInput
+                        id="controls-intermission-time"
+                        compact
+                        :value="intermissionDraft"
+                        :disabled="store.state.intermissionActive && !store.state.isPaused"
+                        @update:value="onIntermissionDraftUpdate"
+                        @blur="commitIntermissionDraft"
+                        @enter="commitIntermissionDraft"
+                      />
+                    </div>
                   </div>
                   <div class="controls__intermission-actions">
                     <a-button
@@ -1168,93 +1173,162 @@ onUnmounted(() => {
 
 .controls__clock-display {
   font-family: 'Bebas Neue', sans-serif;
-  font-size: 3.25rem;
+  font-size: clamp(2.8rem, 4vw, 3.6rem);
   text-align: center;
   line-height: 1;
   margin: 0;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
 }
 
 .controls__clock {
   display: grid;
-  grid-template-columns: minmax(140px, 200px) 1fr;
-  gap: 1.5rem;
-  align-items: center;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  gap: 1.25rem 1.75rem;
+  align-items: stretch;
 }
 
 .controls__clock-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  padding: 1rem 1.25rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   text-align: center;
-  padding-right: 1.5rem;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .controls__clock-status {
-  margin: 0.35rem 0 0;
+  margin: 0;
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  opacity: 0.5;
+  opacity: 0.55;
 }
 
-.controls__clock-actions {
+.controls__clock-toggle {
+  width: min(100%, 9.5rem);
+  margin-top: 0.25rem;
+}
+
+.controls__clock-panels {
   display: grid;
-  grid-template-columns: minmax(130px, 160px) minmax(140px, 200px) minmax(160px, 220px);
-  gap: 0.75rem;
-  align-items: end;
+  grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: stretch;
+  min-width: 0;
 }
 
 .controls__clock-field {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
   min-width: 0;
+  height: 100%;
+  padding: 0.9rem 1rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: center;
 
   label {
     font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
     opacity: 0.6;
   }
 }
 
+.controls__clock-field-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.controls__clock-field--time {
+  .controls__clock-field-head {
+    flex-direction: column;
+    align-items: center;
+  }
+}
+
 .controls__clock-hint {
+  max-width: 18rem;
+  margin-top: 0.15rem;
   font-size: 0.72rem;
   opacity: 0.5;
-  line-height: 1.3;
+  line-height: 1.35;
+  text-align: center;
 }
 
 .controls__clock-period {
   display: grid;
-  grid-template-columns: 40px 1fr 40px;
+  grid-template-columns: 40px minmax(0, 1fr) 40px;
   align-items: center;
   gap: 0.5rem;
+  width: 100%;
+  max-width: 11rem;
 }
 
 .controls__next-period {
-  margin-top: 0.35rem;
+  margin-top: 0.15rem;
+  width: 100%;
+  max-width: 12rem;
 }
 
 .controls__intermission {
+  grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(140px, 200px) auto;
-  gap: 0.75rem 1rem;
-  align-items: end;
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  grid-template-columns: auto auto;
+  justify-content: center;
+  justify-items: center;
+  gap: 0.85rem 1.5rem;
+  align-items: center;
+  margin-top: 0.15rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: center;
+
+  .controls__clock-field {
+    padding: 0;
+    background: transparent;
+    border: none;
+    height: auto;
+  }
+
+  .controls__clock-field-head {
+    flex-direction: column;
+    align-items: center;
+  }
 }
 
 .controls__intermission-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+  align-items: center;
+  justify-content: center;
 }
 
 .controls__intermission .controls__clock-hint {
   grid-column: 1 / -1;
+  margin-top: 0;
+  max-width: 36rem;
 }
 
 .controls__clock-period-label {
   text-align: center;
-  font-size: 0.95rem;
+  font-size: 1rem;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -1268,6 +1342,16 @@ onUnmounted(() => {
   margin-top: 0.75rem;
 }
 
+@media (max-width: 900px) {
+  .controls__clock {
+    grid-template-columns: 1fr;
+  }
+
+  .controls__clock-panels {
+    grid-template-columns: minmax(10rem, 13rem) minmax(0, 1fr);
+  }
+}
+
 @media (max-width: 720px) {
   .controls__match {
     grid-template-columns: 1fr;
@@ -1278,19 +1362,16 @@ onUnmounted(() => {
     text-align: center;
   }
 
-  .controls__clock {
+  .controls__clock-panels {
     grid-template-columns: 1fr;
-    gap: 1rem;
   }
 
-  .controls__clock-main {
-    padding-right: 0;
-    border-right: none;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  .controls__clock-period,
+  .controls__next-period {
+    max-width: none;
   }
 
-  .controls__clock-actions {
+  .controls__intermission {
     grid-template-columns: 1fr;
   }
 }

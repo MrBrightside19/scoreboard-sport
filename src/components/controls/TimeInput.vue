@@ -8,10 +8,12 @@ const props = withDefaults(
     disabled?: boolean
     id?: string
     placeholder?: string
+    compact?: boolean
   }>(),
   {
     disabled: false,
     placeholder: 'mm:ss',
+    compact: false,
   },
 )
 
@@ -238,6 +240,7 @@ function onPaste(event: ClipboardEvent): void {
     autocomplete="off"
     spellcheck="false"
     class="time-input"
+    :class="{ 'time-input--compact': compact }"
     @keydown="onKeyDown"
     @focus="onFocus"
     @blur="onBlur"
@@ -249,6 +252,19 @@ function onPaste(event: ClipboardEvent): void {
 <style scoped>
 .time-input {
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
+}
+
+.time-input--compact {
+  width: 5.5rem;
+  max-width: 100%;
+  text-align: center;
+}
+
+.time-input--compact :deep(input) {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+  padding-inline: 0.5rem;
 }
 </style>
