@@ -15,6 +15,27 @@ const matches = ref<TournamentMatch[]>([])
 const loading = ref(true)
 const standings = ref(calculateStandings([]))
 
+const tournamentStatusLabels: Record<Tournament['status'], string> = {
+  draft: 'Borrador',
+  active: 'Activo',
+  finished: 'Finalizado',
+}
+
+function matchStatusLabel(status: TournamentMatch['status']): string {
+  const labels: Record<TournamentMatch['status'], string> = {
+    scheduled: 'Programado',
+    live: 'En vivo',
+    finished: 'Finalizado',
+  }
+  return labels[status]
+}
+
+function matchStatusColor(status: TournamentMatch['status']): string {
+  if (status === 'live') return 'green'
+  if (status === 'finished') return 'default'
+  return 'blue'
+}
+
 onMounted(async () => {
   const id = route.params.id as string
   try {
@@ -44,7 +65,7 @@ onMounted(async () => {
         <h1>{{ tournament.name }}</h1>
         <p v-if="tournament.description">{{ tournament.description }}</p>
         <a-tag :color="tournament.status === 'active' ? 'green' : 'default'">
-          {{ tournament.status }}
+          {{ tournamentStatusLabels[tournament.status] }}
         </a-tag>
       </header>
 
@@ -55,29 +76,39 @@ onMounted(async () => {
 
       <section class="tournament-public__section">
         <h2>Calendario</h2>
-        <a-table
-          :data-source="matches.map((m) => ({ ...m, key: m.id }))"
-          :pagination="false"
-          size="small"
-        >
-          <a-table-column title="Local" data-index="local_team" />
-          <a-table-column title="Visita" data-index="visit_team" />
-          <a-table-column title="Categoría" width="100">
-            <template #default="{ record }">
-              {{ record.category || '—' }}
-            </template>
-          </a-table-column>
-          <a-table-column title="Cancha" data-index="court" width="80" />
-          <a-table-column title="Estado" data-index="status" width="100" />
-          <a-table-column title="Resultado" width="100">
-            <template #default="{ record }">
-              <span v-if="record.status === 'finished'">
-                {{ record.goal_local }} - {{ record.goal_visit }}
-              </span>
-              <span v-else>—</span>
-            </template>
-          </a-table-column>
-        </a-table>
+        <div class="tournament-public__table-wrap">
+          <a-table
+            :data-source="matches.map((m) => ({ ...m, key: m.id }))"
+            :pagination="false"
+            size="small"
+            :scroll="{ x: 720 }"
+            table-layout="fixed"
+          >
+            <a-table-column title="Local" data-index="local_team" :ellipsis="true" :width="140" />
+            <a-table-column title="Visita" data-index="visit_team" :ellipsis="true" :width="140" />
+            <a-table-column title="Categoría" :width="100" :ellipsis="true">
+              <template #default="{ record }">
+                {{ record.category || '—' }}
+              </template>
+            </a-table-column>
+            <a-table-column title="Cancha" data-index="court" :width="80" :ellipsis="true" />
+            <a-table-column title="Estado" :width="110">
+              <template #default="{ record }">
+                <a-tag :color="matchStatusColor(record.status)">
+                  {{ matchStatusLabel(record.status) }}
+                </a-tag>
+              </template>
+            </a-table-column>
+            <a-table-column title="Resultado" :width="100">
+              <template #default="{ record }">
+                <span v-if="record.status === 'finished'">
+                  {{ record.goal_local }} - {{ record.goal_visit }}
+                </span>
+                <span v-else>—</span>
+              </template>
+            </a-table-column>
+          </a-table>
+        </div>
       </section>
     </a-spin>
   </div>
@@ -85,9 +116,23 @@ onMounted(async () => {
 
 <style scoped lang="scss">
 .tournament-public {
-  max-width: 900px;
+  max-width: min(900px, 100%);
+  width: 100%;
   margin: 0 auto;
   padding: 2rem 1.5rem;
+  box-sizing: border-box;
+  overflow-x: clip;
+}
+
+.tournament-public__table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tournament-public__table-wrap :deep(.ant-table-cell) {
+  white-space: nowrap;
 }
 
 .tournament-public__header h1 {

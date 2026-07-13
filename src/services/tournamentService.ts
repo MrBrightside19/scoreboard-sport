@@ -9,7 +9,7 @@ import { createDefaultScoreboardState } from '@/types/hockeyScoreboard'
 import { generateMatchId } from '@/utils/matchId'
 import { normalizeGameTime } from '@/utils/clock'
 import { supabaseRest } from './supabaseRest'
-import { createMatch, finishMatch } from './matchSync'
+import { createMatch, fetchMatchState, finishMatch } from './matchSync'
 import { upsertCourtStream } from './tournamentCourtStream'
 import { fetchAssistantTournamentIds } from './tournamentAssistantService'
 
@@ -138,10 +138,53 @@ export async function importTournamentCsv(
   })
 }
 
+/** Cierra partidos en vivo de la misma cancha (p. ej. si se salió sin finalizar). */
+export async function finishLiveMatchesOnCourt(
+  tournamentId: string,
+  court: string,
+  exceptTournamentMatchId?: string,
+): Promise<void> {
+  const live = await supabaseRest<TournamentMatch[]>(
+    `tournament_matches?tournament_id=eq.${tournamentId}&court=eq.${encodeURIComponent(court)}&status=eq.live&select=*`,
+  )
+
+  for (const tm of live) {
+    if (exceptTournamentMatchId && tm.id === exceptTournamentMatchId) continue
+
+    if (tm.match_id) {
+      const record = await fetchMatchState(tm.match_id)
+      const fallback = createDefaultScoreboardState(
+        tm.local_team,
+        tm.visit_team,
+        normalizeGameTime(tm.game_time),
+      )
+      const state: ScoreboardState = record?.state
+        ? {
+            ...record.state,
+            goalLocal: record.goal_local ?? record.state.goalLocal,
+            goalVisit: record.goal_visit ?? record.state.goalVisit,
+          }
+        : fallback
+      await finishTournamentMatch(tm, state)
+    } else {
+      await supabaseRest(`tournament_matches?id=eq.${tm.id}`, {
+        method: 'PATCH',
+        body: { status: 'finished' },
+      })
+    }
+  }
+}
+
 export async function startTournamentMatch(
   tournamentMatch: TournamentMatch,
   organizerId: string,
 ): Promise<string> {
+  await finishLiveMatchesOnCourt(
+    tournamentMatch.tournament_id,
+    tournamentMatch.court,
+    tournamentMatch.id,
+  )
+
   const matchId = generateMatchId()
   const state = createDefaultScoreboardState(
     tournamentMatch.local_team,
@@ -181,7 +224,17 @@ export async function finishTournamentMatch(
   tournamentMatch: TournamentMatch,
   state: ScoreboardState,
 ): Promise<void> {
-  if (!tournamentMatch.match_id) return
+  if (!tournamentMatch.match_id) {
+    await supabaseRest(`tournament_matches?id=eq.${tournamentMatch.id}`, {
+      method: 'PATCH',
+      body: {
+        status: 'finished',
+        goal_local: state.goalLocal,
+        goal_visit: state.goalVisit,
+      },
+    })
+    return
+  }
 
   await finishMatch(tournamentMatch.match_id, state)
   await supabaseRest(`tournament_matches?id=eq.${tournamentMatch.id}`, {

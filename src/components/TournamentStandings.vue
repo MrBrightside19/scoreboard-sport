@@ -20,11 +20,24 @@ const columns = [
 </script>
 
 <template>
-  <a-table
-    :columns="columns"
-    :data-source="standings.map((row, i) => ({ ...row, key: row.team, rank: i + 1 }))"
-    :pagination="false"
-    size="small"
-    bordered
-  />
+  <div class="standings-wrap">
+    <a-table
+      :columns="columns"
+      :data-source="standings.map((row, i) => ({ ...row, key: row.team, rank: i + 1 }))"
+      :pagination="false"
+      size="small"
+      bordered
+      :scroll="{ x: 640 }"
+      table-layout="fixed"
+    />
+  </div>
 </template>
+
+<style scoped>
+.standings-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+</style>

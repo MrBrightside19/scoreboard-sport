@@ -46,3 +46,32 @@ export function interpolateClock(
   if (elapsedSeconds <= 0) return timeGame
   return tickDown(timeGame, elapsedSeconds)
 }
+
+/** Reloj de periodo agotado: las faltas no deben seguir corriendo. */
+export function isPeriodClockExpired(timeGame: string): boolean {
+  return parseTimeToSeconds(timeGame) <= 0
+}
+
+/** Congela faltas en pausa o al terminar el periodo (00:00). */
+export function arePenaltiesFrozen(isPaused: boolean, timeGame: string): boolean {
+  return isPaused || isPeriodClockExpired(timeGame)
+}
+
+/**
+ * Interpola el reloj de una falta solo por el tiempo de juego efectivamente corrido
+ * (no sigue bajando tras el 00:00 del periodo).
+ */
+export function interpolatePenaltyTime(
+  penaltyTime: string,
+  isPaused: boolean,
+  updatedAt: string,
+  timeGame: string,
+  now = Date.now(),
+): string {
+  if (arePenaltiesFrozen(isPaused, timeGame)) return penaltyTime
+  const clockSeconds = parseTimeToSeconds(timeGame)
+  const elapsedSeconds = Math.floor((now - new Date(updatedAt).getTime()) / 1000)
+  if (elapsedSeconds <= 0) return penaltyTime
+  const playable = Math.min(elapsedSeconds, clockSeconds)
+  return tickDown(penaltyTime, playable)
+}

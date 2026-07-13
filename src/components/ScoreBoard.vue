@@ -8,12 +8,17 @@ import { findPlayerById, findPlayerByNumber, playerLabel } from '@/utils/roster'
 const props = defineProps<{
   state: ScoreboardState
   displayTime?: string
+  displayIntermissionTime?: string
   displayPenaltiesLocal?: TeamPenalty[]
   displayPenaltiesVisit?: TeamPenalty[]
   overlay?: boolean
   /** Marcador grande para TV / cancha. Live usa el diseño responsivo. */
   tv?: boolean
   compact?: boolean
+  /** Nombre del torneo (reemplaza “Hockey en línea” en el live). */
+  eventTitle?: string | null
+  /** Fecha del partido o torneo, junto al nombre. */
+  eventDate?: string | null
 }>()
 
 const GOAL_BANNER_MS = 12_000
@@ -23,7 +28,24 @@ const activePenaltyKey = ref<string | null>(null)
 let goalHideTimer: number | null = null
 let penaltyHideTimer: number | null = null
 
-const clock = computed(() => props.displayTime ?? props.state.timeGame)
+const clock = computed(() => {
+  if (props.state.intermissionActive) {
+    return props.displayIntermissionTime ?? props.state.intermissionTime
+  }
+  return props.displayTime ?? props.state.timeGame
+})
+
+const centerLabel = computed(() => {
+  if (props.state.intermissionActive) return 'DESCANSO'
+  return `Periodo ${props.state.gamePeriod}`
+})
+
+const liveStatus = computed(() => {
+  if (props.state.intermissionActive) {
+    return props.state.isPaused ? 'DESCANSO · PAUSA' : 'DESCANSO'
+  }
+  return props.state.isPaused ? 'PAUSA' : 'EN JUEGO'
+})
 
 const localPenalties = computed(
   () => props.displayPenaltiesLocal ?? props.state.penaltiesLocal,
@@ -53,14 +75,22 @@ function truncateTeamName(name: string): string {
   return `${cleaned.slice(0, TEAM_NAME_MAX)}…`
 }
 
+function formatGoalPeriod(period: number): string {
+  if (period > MAX_PERIODS) return 'OT'
+  return `${period}'`
+}
+
 function formatGoalEntry(goal: GoalEvent, team: 'local' | 'visit'): string {
   const roster = team === 'local' ? props.state.rosterLocal : props.state.rosterVisit
+  const period = formatGoalPeriod(goal.period)
   if (isGoalPending(goal)) {
-    return `— · ${goal.gameMinute}`
+    return `— · ${goal.gameMinute} · ${period}`
   }
   const scorer = findPlayerById(roster, goal.scorerPlayerId)
   const number = scorer?.number.trim() || '?'
-  return `#${number} · ${goal.gameMinute}`
+  const name = scorer?.name.trim()
+  const who = name ? `#${number} ${name}` : `#${number}`
+  return `${who} · ${goal.gameMinute} · ${period}`
 }
 
 const confirmedGoalIds = computed(() =>
@@ -191,6 +221,16 @@ function formatPenaltyShort(penalty: TeamPenalty, team: 'local' | 'visit'): stri
   const number = penalty.player.trim() || player?.number || '?'
   return `#${number} ${penalty.time}`
 }
+
+function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): string {
+  const roster = team === 'local' ? props.state.rosterLocal : props.state.rosterVisit
+  const player =
+    findPlayerById(roster, penalty.playerId) ?? findPlayerByNumber(roster, penalty.player)
+  const number = penalty.player.trim() || player?.number.trim() || '?'
+  const name = player?.name.trim()
+  const who = name ? `#${number} ${name}` : `#${number}`
+  return `${who} · ${penalty.time}`
+}
 </script>
 
 <template>
@@ -230,7 +270,7 @@ function formatPenaltyShort(penalty: TeamPenalty, team: 'local' | 'visit'): stri
         </div>
 
         <div class="nhl-bug__center">
-          <span class="nhl-bug__period">{{ periodLabel }}</span>
+          <span class="nhl-bug__period">{{ state.intermissionActive ? 'DES' : periodLabel }}</span>
           <span class="nhl-bug__clock" :class="{ 'nhl-bug__clock--paused': state.isPaused }">
             {{ clock }}
           </span>
@@ -333,10 +373,21 @@ function formatPenaltyShort(penalty: TeamPenalty, team: 'local' | 'visit'): stri
       </div>
 
       <section class="scoreboard__center">
-        <div class="scoreboard__clock" :class="{ 'scoreboard__clock--paused': state.isPaused }">
+        <div
+          class="scoreboard__clock"
+          :class="{
+            'scoreboard__clock--paused': state.isPaused,
+            'scoreboard__clock--intermission': state.intermissionActive,
+          }"
+        >
           {{ clock }}
         </div>
-        <div class="scoreboard__period">Periodo {{ state.gamePeriod }}</div>
+        <div
+          class="scoreboard__period"
+          :class="{ 'scoreboard__period--intermission': state.intermissionActive }"
+        >
+          {{ centerLabel }}
+        </div>
       </section>
 
       <div class="scoreboard__column">
@@ -371,8 +422,16 @@ function formatPenaltyShort(penalty: TeamPenalty, team: 'local' | 'visit'): stri
     <div class="scoreboard__glow" />
 
     <header class="scoreboard__header">
-      <span class="scoreboard__sport">Hockey en línea</span>
-      <span class="scoreboard__period-pill">Periodo {{ state.gamePeriod }}</span>
+      <span
+        class="scoreboard__sport"
+        :class="{ 'scoreboard__sport--event': eventTitle }"
+      >
+        <template v-if="eventTitle">
+          {{ eventTitle }}<template v-if="eventDate"> · {{ eventDate }}</template>
+        </template>
+        <template v-else>Hockey en línea</template>
+      </span>
+      <span class="scoreboard__period-pill">{{ centerLabel }}</span>
     </header>
 
     <div class="scoreboard__main scoreboard__main--live">
@@ -414,7 +473,7 @@ function formatPenaltyShort(penalty: TeamPenalty, team: 'local' | 'visit'): stri
                 :key="`local-${index}`"
                 class="scoreboard__penalty-badge scoreboard__penalty-badge--live"
               >
-                {{ formatPenaltyShort(penalty, 'local') }}
+                {{ formatPenaltyLive(penalty, 'local') }}
               </div>
             </div>
             <span v-else class="scoreboard__detail-empty">Sin faltas</span>
@@ -427,7 +486,7 @@ function formatPenaltyShort(penalty: TeamPenalty, team: 'local' | 'visit'): stri
           {{ clock }}
         </div>
         <div class="scoreboard__status">
-          {{ state.isPaused ? 'PAUSA' : 'EN JUEGO' }}
+          {{ liveStatus }}
         </div>
       </section>
 
@@ -469,7 +528,7 @@ function formatPenaltyShort(penalty: TeamPenalty, team: 'local' | 'visit'): stri
                 :key="`visit-${index}`"
                 class="scoreboard__penalty-badge scoreboard__penalty-badge--live"
               >
-                {{ formatPenaltyShort(penalty, 'visit') }}
+                {{ formatPenaltyLive(penalty, 'visit') }}
               </div>
             </div>
             <span v-else class="scoreboard__detail-empty">Sin faltas</span>
@@ -684,8 +743,8 @@ function formatPenaltyShort(penalty: TeamPenalty, team: 'local' | 'visit'): stri
   display: flex;
   align-items: center;
   gap: 0.55rem;
-  width: min(648px, 79vw);
-  max-width: 738px;
+  width: min(448px, 55vw);
+  max-width: 511px;
   margin-top: 0.35rem;
   padding: 0.4rem 0.65rem;
   background: rgba(12, 16, 24, 0.94);
@@ -915,6 +974,14 @@ function formatPenaltyShort(penalty: TeamPenalty, team: 'local' | 'visit'): stri
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--muted);
+  max-width: min(70%, 28rem);
+  line-height: 1.3;
+}
+
+.scoreboard__sport--event {
+  letter-spacing: 0.04em;
+  text-transform: none;
+  font-size: clamp(0.85rem, 2.4vw, 1.05rem);
 }
 
 .scoreboard__period-pill {
@@ -1137,6 +1204,16 @@ function formatPenaltyShort(penalty: TeamPenalty, team: 'local' | 'visit'): stri
   letter-spacing: 0.12em;
   color: var(--muted);
   text-transform: uppercase;
+}
+
+.scoreboard--tv .scoreboard__period--intermission {
+  color: #f0c14d;
+  letter-spacing: 0.18em;
+}
+
+.scoreboard--tv .scoreboard__clock--intermission {
+  text-shadow: 0 0 70px rgba(240, 193, 77, 0.4);
+  color: #ffe9a8;
 }
 
 .scoreboard--tv .scoreboard__clock {
