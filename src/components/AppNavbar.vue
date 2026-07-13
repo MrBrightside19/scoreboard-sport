@@ -200,8 +200,8 @@ watch(
   <header class="app-nav">
     <div class="app-nav__inner">
       <RouterLink to="/" class="app-nav__brand" @click="closeMobile">
-        <span class="app-nav__brand-mark">HL</span>
-        <span class="app-nav__brand-text">Marcador Hockey</span>
+        <span class="app-nav__brand-mark">SD</span>
+        <span class="app-nav__brand-text">ScoreDesk</span>
       </RouterLink>
 
       <nav class="app-nav__links app-nav__links--desktop">

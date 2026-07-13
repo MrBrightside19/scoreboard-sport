@@ -36,7 +36,7 @@ onMounted(() => {
     <header class="home__hero">
       <div class="home__hero-content">
         <p class="home__eyebrow">Marcador deportivo en vivo</p>
-        <h1>Hockey en línea</h1>
+        <h1>ScoreDesk</h1>
         <p class="home__subtitle">
           Opera partidos desde la mesa de control, proyecta en pantalla TV y comparte enlaces públicos para espectadores.
         </p>
