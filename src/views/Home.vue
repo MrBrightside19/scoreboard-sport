@@ -1,24 +1,16 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import { useRoute } from 'vue-router'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
 import { fetchLiveMatches } from '@/services/liveMatchesService'
-import { createMatch } from '@/services/matchSync'
-import { createDefaultScoreboardState } from '@/types/hockeyScoreboard'
-import { generateMatchId } from '@/utils/matchId'
-import { writeMatchIdToStorage, getStorageKey } from '@/utils/localSync'
 import type { LiveMatchSummary } from '@/types/match'
 import LiveMatchCard from '@/components/LiveMatchCard.vue'
 import AuthModal from '@/components/AuthModal.vue'
 
-const auth = useAuthStore()
-const router = useRouter()
 const route = useRoute()
 
 const liveMatches = ref<LiveMatchSummary[]>([])
 const loadingLive = ref(false)
-const creating = ref(false)
 const showAuth = ref(false)
 
 async function loadLive(): Promise<void> {
@@ -28,34 +20,6 @@ async function loadLive(): Promise<void> {
     liveMatches.value = await fetchLiveMatches()
   } finally {
     loadingLive.value = false
-  }
-}
-
-async function createMatchFlow(): Promise<void> {
-  if (!auth.isStaff && isSupabaseConfigured) {
-    showAuth.value = true
-    return
-  }
-
-  creating.value = true
-  try {
-    const matchId = generateMatchId()
-    const state = createDefaultScoreboardState()
-
-    if (isSupabaseConfigured) {
-      await createMatch(matchId, state, auth.profile?.id)
-    } else {
-      localStorage.setItem(getStorageKey(matchId), JSON.stringify(state))
-    }
-
-    writeMatchIdToStorage(matchId)
-
-    const boardUrl = router.resolve({ name: 'board', query: { matchId } }).href
-    const controlsUrl = router.resolve({ name: 'controls', query: { matchId } }).href
-    window.open(boardUrl, '_blank')
-    await router.push(controlsUrl)
-  } finally {
-    creating.value = false
   }
 }
 
@@ -76,18 +40,6 @@ onMounted(() => {
         <p class="home__subtitle">
           Opera partidos desde la mesa de control, proyecta en pantalla TV y comparte enlaces públicos para espectadores.
         </p>
-
-        <div class="home__actions">
-          <a-button type="primary" size="large" :loading="creating" @click="createMatchFlow">
-            Crear partido
-          </a-button>
-          <router-link v-if="auth.isStaff" to="/tournaments">
-            <a-button size="large">Mis torneos</a-button>
-          </router-link>
-          <router-link to="/torneos-publicos">
-            <a-button size="large" ghost>Torneos públicos</a-button>
-          </router-link>
-        </div>
 
         <div v-if="!isSupabaseConfigured" class="home__warning">
           <a-alert
@@ -160,21 +112,15 @@ onMounted(() => {
 }
 
 .home__subtitle {
-  margin: 0 0 1.5rem;
-  max-width: 560px;
-  line-height: 1.6;
-  color: rgba(232, 237, 245, 0.75);
-}
-
-.home__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
+  margin: 0;
+  max-width: 36rem;
+  font-size: 1.05rem;
+  line-height: 1.55;
+  opacity: 0.75;
 }
 
 .home__warning {
-  margin-top: 1.5rem;
-  max-width: 560px;
+  margin-top: 1.25rem;
 }
 
 .home__section-header {

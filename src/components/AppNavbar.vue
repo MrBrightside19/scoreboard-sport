@@ -1,15 +1,20 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { RouterLink, useRoute, type RouteLocationRaw } from 'vue-router'
+import { RouterLink, useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
-import { readMatchIdFromStorage } from '@/utils/localSync'
+import { createMatch } from '@/services/matchSync'
+import { createDefaultScoreboardState } from '@/types/hockeyScoreboard'
+import { generateMatchId } from '@/utils/matchId'
+import { getStorageKey, readMatchIdFromStorage, writeMatchIdToStorage } from '@/utils/localSync'
 import AuthModal from '@/components/AuthModal.vue'
 
 const route = useRoute()
+const router = useRouter()
 const auth = useAuthStore()
 const showAuth = ref(false)
 const mobileOpen = ref(false)
+const creating = ref(false)
 
 const activeMatchId = computed(
   () => (route.query.matchId as string) || readMatchIdFromStorage() || '',
@@ -17,7 +22,6 @@ const activeMatchId = computed(
 
 const navLinks = computed(() => {
   const links: { name: string; label: string; to: RouteLocationRaw }[] = [
-    { name: 'home', label: 'Inicio', to: { name: 'home' } },
     {
       name: 'public-tournaments',
       label: 'Torneos públicos',
@@ -85,6 +89,35 @@ async function handleLogout(): Promise<void> {
   closeMobile()
   await auth.logout()
 }
+
+async function createMatchFlow(): Promise<void> {
+  if (!auth.isStaff && isSupabaseConfigured) {
+    openAuth()
+    return
+  }
+
+  creating.value = true
+  closeMobile()
+  try {
+    const matchId = generateMatchId()
+    const state = createDefaultScoreboardState()
+
+    if (isSupabaseConfigured) {
+      await createMatch(matchId, state, auth.profile?.id)
+    } else {
+      localStorage.setItem(getStorageKey(matchId), JSON.stringify(state))
+    }
+
+    writeMatchIdToStorage(matchId)
+
+    const boardUrl = router.resolve({ name: 'board', query: { matchId } }).href
+    const controlsUrl = router.resolve({ name: 'controls', query: { matchId } }).href
+    window.open(boardUrl, '_blank')
+    await router.push(controlsUrl)
+  } finally {
+    creating.value = false
+  }
+}
 </script>
 
 <template>
@@ -96,6 +129,15 @@ async function handleLogout(): Promise<void> {
       </RouterLink>
 
       <nav class="app-nav__links app-nav__links--desktop">
+        <a-button
+          type="primary"
+          size="small"
+          class="app-nav__create"
+          :loading="creating"
+          @click="createMatchFlow"
+        >
+          Crear partido
+        </a-button>
         <RouterLink
           v-for="link in navLinks"
           :key="link.name"
@@ -154,6 +196,14 @@ async function handleLogout(): Promise<void> {
       :class="{ 'app-nav__mobile--open': mobileOpen }"
       aria-label="Menú móvil"
     >
+      <button
+        type="button"
+        class="app-nav__mobile-create"
+        :disabled="creating"
+        @click="createMatchFlow"
+      >
+        {{ creating ? 'Creando…' : 'Crear partido' }}
+      </button>
       <RouterLink
         v-for="link in navLinks"
         :key="link.name"
@@ -257,6 +307,10 @@ async function handleLogout(): Promise<void> {
   gap: 0.25rem;
   flex: 1;
   min-width: 0;
+}
+
+.app-nav__create {
+  margin-right: 0.35rem;
 }
 
 .app-nav__link {
@@ -434,6 +488,29 @@ async function handleLogout(): Promise<void> {
 
   .app-nav__link {
     padding: 0.7rem 0.75rem;
+  }
+
+  .app-nav__mobile-create {
+    width: 100%;
+    margin-bottom: 0.25rem;
+    padding: 0.7rem 0.75rem;
+    border: none;
+    border-radius: 8px;
+    background: rgba(0, 212, 255, 0.16);
+    color: #00d4ff;
+    font-size: 0.88rem;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+      background: rgba(0, 212, 255, 0.24);
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
   }
 
   .app-nav__mobile-divider {
