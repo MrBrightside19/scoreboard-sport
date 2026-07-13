@@ -21,6 +21,50 @@ const teams = computed(() => [
 function rosterFor(team: 'local' | 'visit') {
   return team === 'local' ? store.state.rosterLocal : store.state.rosterVisit
 }
+
+function digitsOnly(value: string, max = 3): string {
+  return value.replace(/\D/g, '').slice(0, max)
+}
+
+function setPlayerNumber(
+  team: 'local' | 'visit',
+  playerId: string,
+  value: string,
+): void {
+  store.updateRosterPlayer(team, playerId, { number: digitsOnly(value) })
+}
+
+function onNumberKeydown(event: KeyboardEvent): void {
+  if (event.ctrlKey || event.metaKey || event.altKey) return
+  const allowed = [
+    'Backspace',
+    'Delete',
+    'Tab',
+    'Escape',
+    'Enter',
+    'ArrowLeft',
+    'ArrowRight',
+    'ArrowUp',
+    'ArrowDown',
+    'Home',
+    'End',
+  ]
+  if (allowed.includes(event.key)) return
+  if (!/^\d$/.test(event.key)) {
+    event.preventDefault()
+  }
+}
+
+function onNumberPaste(
+  event: ClipboardEvent,
+  team: 'local' | 'visit',
+  playerId: string,
+): void {
+  event.preventDefault()
+  event.stopPropagation()
+  const text = event.clipboardData?.getData('text') ?? ''
+  setPlayerNumber(team, playerId, text)
+}
 </script>
 
 <template>
@@ -47,7 +91,11 @@ function rosterFor(team: 'local' | 'visit') {
               :value="player.number"
               placeholder="#"
               class="roster-panel__number"
-              @update:value="(v: string) => store.updateRosterPlayer(team.key, player.id, { number: v })"
+              inputmode="numeric"
+              maxlength="3"
+              @keydown="onNumberKeydown"
+              @paste="onNumberPaste($event, team.key, player.id)"
+              @update:value="(v: string) => setPlayerNumber(team.key, player.id, v)"
             />
             <a-input
               :value="player.name"

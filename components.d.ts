@@ -46,6 +46,7 @@ declare module 'vue' {
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     ScoreBoard: typeof import('./src/components/ScoreBoard.vue')['default']
+    TimeInput: typeof import('./src/components/controls/TimeInput.vue')['default']
     TournamentStandings: typeof import('./src/components/TournamentStandings.vue')['default']
   }
 }

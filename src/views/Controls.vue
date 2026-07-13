@@ -22,6 +22,7 @@ import { findPlayerById, findPlayerByNumber, playerLabel } from '@/utils/roster'
 import ControlsRosterPanel from '@/components/controls/ControlsRosterPanel.vue'
 import ControlsGoalsPanel from '@/components/controls/ControlsGoalsPanel.vue'
 import ControlsPenaltiesPanel from '@/components/controls/ControlsPenaltiesPanel.vue'
+import TimeInput from '@/components/controls/TimeInput.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -126,6 +127,10 @@ function startOrToggleIntermission(): void {
   intermissionDraft.value = duration
   store.setIntermissionTime(duration)
   store.startIntermission(duration)
+}
+
+function onIntermissionDraftUpdate(value: string): void {
+  intermissionDraft.value = value
 }
 
 function commitIntermissionDraft(): void {
@@ -682,22 +687,21 @@ onUnmounted(() => {
 
                   <div class="controls__clock-field">
                     <label for="controls-game-time">Ajustar tiempo</label>
-                    <a-input
+                    <TimeInput
                       id="controls-game-time"
                       :value="clockDraft"
                       :disabled="!store.state.isPaused || store.state.intermissionActive"
-                      placeholder="mm:ss"
+                      @update:value="onClockDraftUpdate"
                       @focus="onClockFocus"
                       @blur="commitClockDraft"
-                      @pressEnter="commitClockDraft"
-                      @update:value="onClockDraftUpdate"
+                      @enter="commitClockDraft"
                     />
                     <span class="controls__clock-hint">
                       {{
                         store.state.intermissionActive
                           ? 'Durante el descanso usa el campo de abajo.'
                           : store.state.isPaused
-                            ? 'Escribe el tiempo y confirma con Enter o al salir del campo.'
+                            ? 'Escribe minutos y segundos (solo números). Tab o flechas cambian de campo.'
                             : 'Pausa el reloj para ajustarlo.'
                       }}
                     </span>
@@ -732,13 +736,13 @@ onUnmounted(() => {
                 >
                   <div class="controls__clock-field">
                     <label for="controls-intermission-time">Descanso</label>
-                    <a-input
+                    <TimeInput
                       id="controls-intermission-time"
-                      v-model:value="intermissionDraft"
+                      :value="intermissionDraft"
                       :disabled="store.state.intermissionActive && !store.state.isPaused"
-                      placeholder="mm:ss"
+                      @update:value="onIntermissionDraftUpdate"
                       @blur="commitIntermissionDraft"
-                      @pressEnter="commitIntermissionDraft"
+                      @enter="commitIntermissionDraft"
                     />
                   </div>
                   <div class="controls__intermission-actions">
