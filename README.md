@@ -2,6 +2,8 @@
 
 Aplicación web de marcadores en vivo para **hockey en línea**. Permite operar partidos desde una mesa de control, mostrarlos en pantalla o en OBS, y compartir enlaces públicos para espectadores y torneos.
 
+**App en producción (GitHub Pages):** [https://mrbrightside19.github.io/scoreboard-sport/](https://mrbrightside19.github.io/scoreboard-sport/)
+
 ---
 
 ## Qué hace
