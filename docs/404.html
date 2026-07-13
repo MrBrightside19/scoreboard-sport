@@ -4,11 +4,18 @@
     <meta charset="utf-8" />
     <title>Marcador Hockey</title>
     <script>
-      const segment = window.location.pathname.split('/').pop() || ''
-      const base = window.location.pathname.replace(/\/[^/]*$/, '/')
-      const redirect = base + (segment === '404.html' ? '' : '?p=' + encodeURIComponent(window.location.pathname + window.location.search + window.location.hash))
+      // GitHub Pages (project site): conservar /<repo>/ como base de la SPA.
+      var pathSegmentsToKeep = 1
+      var l = window.location
+      var parts = l.pathname.split('/').filter(Boolean)
+      var base = '/' + parts.slice(0, pathSegmentsToKeep).join('/') + '/'
+      if (base === '//') base = '/'
+      var redirect =
+        base +
+        '?p=' +
+        encodeURIComponent(l.pathname + l.search + l.hash)
       sessionStorage.setItem('spa-redirect', redirect)
-      window.location.replace(base)
+      l.replace(l.protocol + '//' + l.host + base)
     </script>
   </head>
   <body></body>
