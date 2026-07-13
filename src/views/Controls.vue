@@ -75,24 +75,27 @@ const showIntermissionControls = computed(
     store.state.intermissionActive || parseTimeToSeconds(store.state.timeGame) <= 0,
 )
 
-const intermissionDraft = ref(DEFAULT_INTERMISSION_TIME)
+const intermissionDraft = ref(
+  store.state.intermissionDuration || DEFAULT_INTERMISSION_TIME,
+)
 
 watch(
   () => store.state.intermissionActive,
   (active) => {
     if (!active) {
-      intermissionDraft.value = DEFAULT_INTERMISSION_TIME
+      intermissionDraft.value =
+        store.state.intermissionDuration || DEFAULT_INTERMISSION_TIME
     }
   },
 )
 
 watch(
-  () => store.state.intermissionTime,
-  (time) => {
+  () => [store.state.intermissionTime, store.state.intermissionDuration] as const,
+  ([time, duration]) => {
     if (store.state.intermissionActive) {
       intermissionDraft.value = time
     } else {
-      intermissionDraft.value = DEFAULT_INTERMISSION_TIME
+      intermissionDraft.value = duration || DEFAULT_INTERMISSION_TIME
     }
   },
 )
@@ -112,13 +115,14 @@ function goToNextPeriod(): void {
     store.setGameTime('20:00')
     store.patch({
       intermissionActive: false,
-      intermissionTime: DEFAULT_INTERMISSION_TIME,
+      intermissionTime: store.state.intermissionDuration || DEFAULT_INTERMISSION_TIME,
       isPaused: true,
     })
   }
 
   clockDraft.value = store.state.timeGame
-  intermissionDraft.value = DEFAULT_INTERMISSION_TIME
+  intermissionDraft.value =
+    store.state.intermissionDuration || DEFAULT_INTERMISSION_TIME
 }
 
 function startOrToggleIntermission(): void {
@@ -126,9 +130,11 @@ function startOrToggleIntermission(): void {
     store.togglePause()
     return
   }
-  const duration = intermissionDraft.value.trim() || DEFAULT_INTERMISSION_TIME
+  const duration =
+    intermissionDraft.value.trim() ||
+    store.state.intermissionDuration ||
+    DEFAULT_INTERMISSION_TIME
   intermissionDraft.value = duration
-  store.setIntermissionTime(duration)
   store.startIntermission(duration)
 }
 
@@ -137,9 +143,14 @@ function onIntermissionDraftUpdate(value: string): void {
 }
 
 function commitIntermissionDraft(): void {
-  const normalized = intermissionDraft.value.trim() || DEFAULT_INTERMISSION_TIME
+  const normalized =
+    intermissionDraft.value.trim() ||
+    store.state.intermissionDuration ||
+    DEFAULT_INTERMISSION_TIME
   store.setIntermissionTime(normalized)
-  intermissionDraft.value = store.state.intermissionTime
+  intermissionDraft.value = store.state.intermissionActive
+    ? store.state.intermissionTime
+    : store.state.intermissionDuration
 }
 
 function stopIntermission(): void {
@@ -153,12 +164,13 @@ function stopIntermission(): void {
   } else {
     store.patch({
       intermissionActive: false,
-      intermissionTime: DEFAULT_INTERMISSION_TIME,
+      intermissionTime: store.state.intermissionDuration || DEFAULT_INTERMISSION_TIME,
       isPaused: true,
     })
   }
   clockDraft.value = store.state.timeGame
-  intermissionDraft.value = DEFAULT_INTERMISSION_TIME
+  intermissionDraft.value =
+    store.state.intermissionDuration || DEFAULT_INTERMISSION_TIME
 }
 
 const powerPlayModalOpen = ref(false)

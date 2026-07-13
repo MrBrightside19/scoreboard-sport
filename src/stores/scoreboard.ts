@@ -344,19 +344,20 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
       gamePeriod: state.value.gamePeriod + 1,
       timeGame: normalizeGameTime(periodLength),
       intermissionActive: false,
-      intermissionTime: DEFAULT_INTERMISSION_TIME,
+      intermissionTime: state.value.intermissionDuration || DEFAULT_INTERMISSION_TIME,
       isPaused: true,
     })
   }
 
   function startIntermission(duration?: string): void {
-    const time = normalizeGameTime(
-      duration ?? (state.value.intermissionTime || DEFAULT_INTERMISSION_TIME),
+    const configured = normalizeGameTime(
+      duration ?? (state.value.intermissionDuration || DEFAULT_INTERMISSION_TIME),
     )
-    if (parseTimeToSeconds(time) <= 0) return
+    if (parseTimeToSeconds(configured) <= 0) return
     patch({
       intermissionActive: true,
-      intermissionTime: time,
+      intermissionDuration: configured,
+      intermissionTime: configured,
       isPaused: false,
     })
   }
@@ -367,7 +368,15 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
   }
 
   function setIntermissionTime(time: string): void {
-    patch({ intermissionTime: normalizeGameTime(time) })
+    const normalized = normalizeGameTime(time)
+    if (state.value.intermissionActive) {
+      patch({ intermissionTime: normalized })
+      return
+    }
+    patch({
+      intermissionDuration: normalized,
+      intermissionTime: normalized,
+    })
   }
 
   function setTeams(localTeam: string, visitTeam: string): void {
@@ -454,7 +463,7 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     }
     patch({
       intermissionActive: false,
-      intermissionTime: DEFAULT_INTERMISSION_TIME,
+      intermissionTime: state.value.intermissionDuration || DEFAULT_INTERMISSION_TIME,
       isPaused: true,
     })
   }

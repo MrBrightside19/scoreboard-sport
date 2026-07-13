@@ -51,7 +51,10 @@ export interface ScoreboardState {
   isPaused: boolean
   /** Descanso entre periodos activo (cuenta regresiva en TV). */
   intermissionActive: boolean
+  /** Tiempo restante del descanso (cuenta regresiva). */
   intermissionTime: string
+  /** Duración configurada del descanso (por defecto 05:00 al crear el partido). */
+  intermissionDuration: string
   updatedAt: string
 }
 
@@ -83,6 +86,7 @@ export function createDefaultScoreboardState(
     isPaused: true,
     intermissionActive: false,
     intermissionTime: DEFAULT_INTERMISSION_TIME,
+    intermissionDuration: DEFAULT_INTERMISSION_TIME,
     updatedAt: new Date().toISOString(),
   }
 }
@@ -159,6 +163,9 @@ export function normalizeScoreboardState(raw: unknown): ScoreboardState {
         ? source.intermissionActive
         : base.intermissionActive,
     intermissionTime: String(source.intermissionTime ?? base.intermissionTime),
+    intermissionDuration: String(
+      source.intermissionDuration ?? base.intermissionDuration,
+    ),
     updatedAt: (source.updatedAt as string) ?? base.updatedAt,
     rosterLocal: normalizeRoster(source.rosterLocal),
     rosterVisit: normalizeRoster(source.rosterVisit),
