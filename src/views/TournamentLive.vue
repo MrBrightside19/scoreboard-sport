@@ -60,6 +60,7 @@ onUnmounted(() => {
 <template>
   <div :class="{ 'overlay-root': isOverlay }">
     <ScoreBoard
+      v-if="activeMatchId"
       :overlay="isOverlay"
       :state="displayState"
       :display-time="displayTime"

@@ -35,6 +35,12 @@ const router = createRouter({
       meta: { bare: true, hideNav: true, transparent: true, title: 'Overlay torneo' },
     },
     {
+      path: '/board/torneo/:tournamentId/:court',
+      name: 'tournament-board',
+      component: () => import('@/views/TournamentBoard.vue'),
+      meta: { bare: true, hideNav: true, title: 'Marcador TV torneo' },
+    },
+    {
       path: '/torneo/:id',
       name: 'tournament-public',
       component: () => import('@/views/TournamentPublic.vue'),

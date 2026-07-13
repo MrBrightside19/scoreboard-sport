@@ -93,7 +93,8 @@ La app queda disponible en la URL que muestre Vite (por defecto `http://localhos
 |------|-----|
 | `/` | Inicio |
 | `/controls` | Mesa de control del partido |
-| `/board` | Marcador TV |
+| `/board` | Marcador TV (partido concreto) |
+| `/board/torneo/:tournamentId/:court` | Marcador TV fijo por cancha (sync local + cambio de partido) |
 | `/live/:matchId` | Marcador en vivo (público) |
 | `/overlay/:matchId` | Overlay para OBS (público) |
 | `/tournaments` | Gestión de torneos (personal) |

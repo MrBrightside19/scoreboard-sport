@@ -10,10 +10,10 @@ import {
   getNextScheduledMatch,
 } from '@/services/tournamentService'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
-import { readMatchIdFromStorage } from '@/utils/localSync'
+import { readMatchIdFromStorage, writeCourtActiveMatch } from '@/utils/localSync'
 import { normalizeGameTime, parseTimeToSeconds } from '@/utils/clock'
 import { playCountdownBeep } from '@/utils/countdownBeep'
-import { buildAppUrl, tournamentLivePath, tournamentOverlayPath } from '@/utils/appUrl'
+import { buildAppUrl, tournamentBoardPath, tournamentLivePath, tournamentOverlayPath } from '@/utils/appUrl'
 import { getLiveClockUpdateMs } from '@/config/poll'
 import { MAX_PERIODS, isGoalPending } from '@/types/hockeyScoreboard'
 import type { TeamPenalty } from '@/types/hockeyScoreboard'
@@ -209,6 +209,7 @@ async function loadTournamentContext(id: string): Promise<void> {
       tournamentId: record.tournament_id,
       court: record.court,
     }
+    writeCourtActiveMatch(record.tournament_id, record.court, id)
     const next = await getNextScheduledMatch(record.tournament_id, record.court)
     hasNextMatch.value = Boolean(next)
   } catch {
@@ -251,6 +252,7 @@ async function goToNextMatch(): Promise<void> {
     }
 
     skipLeaveGuard.value = true
+    writeCourtActiveMatch(result.tournamentId, result.court, result.matchId)
     await router.replace({
       name: 'controls',
       query: {
@@ -293,7 +295,7 @@ async function publish(): Promise<void> {
   }
 }
 
-type LinkType = 'live' | 'overlay' | 'live-torneo' | 'overlay-torneo'
+type LinkType = 'live' | 'overlay' | 'live-torneo' | 'overlay-torneo' | 'board-torneo'
 
 function copyLink(type: LinkType): void {
   let path = ''
@@ -304,6 +306,9 @@ function copyLink(type: LinkType): void {
   } else if (type === 'live-torneo' && tournamentContext.value) {
     const { tournamentId, court } = tournamentContext.value
     path = tournamentLivePath(tournamentId, court)
+  } else if (type === 'board-torneo' && tournamentContext.value) {
+    const { tournamentId, court } = tournamentContext.value
+    path = tournamentBoardPath(tournamentId, court)
   } else if (type === 'live') {
     path = `/live/${matchId.value}`
   } else {
@@ -404,6 +409,21 @@ onUnmounted(() => {
       </div>
       <div class="controls__links">
         <router-link
+          v-if="tournamentContext"
+          :to="{
+            name: 'tournament-board',
+            params: {
+              tournamentId: tournamentContext.tournamentId,
+              court: tournamentContext.court,
+            },
+            query: { matchId },
+          }"
+          target="_blank"
+        >
+          <a-button type="primary">Abrir Marcador TV</a-button>
+        </router-link>
+        <router-link
+          v-else
           :to="{
             name: 'board',
             query: {
@@ -418,7 +438,10 @@ onUnmounted(() => {
           <a-button>Abrir Marcador TV</a-button>
         </router-link>
         <template v-if="tournamentContext">
-          <a-button type="primary" @click="copyLink('overlay-torneo')">
+          <a-button @click="copyLink('board-torneo')">
+            {{ copied === 'board-torneo' ? '¡Copiado!' : 'Copiar TV torneo' }}
+          </a-button>
+          <a-button @click="copyLink('overlay-torneo')">
             {{ copied === 'overlay-torneo' ? '¡Copiado!' : 'Copiar OBS torneo' }}
           </a-button>
           <a-button @click="copyLink('live-torneo')">
@@ -565,7 +588,9 @@ onUnmounted(() => {
                 Cancha {{ tournamentContext.court }}
               </p>
               <p class="controls__tournament-hint controls__tournament-hint--info">
-                El enlace <strong>OBS torneo</strong> es fijo para esta cancha y se actualiza solo al pasar al siguiente partido.
+                Los enlaces <strong>TV torneo</strong>, <strong>OBS torneo</strong> y <strong>Live torneo</strong>
+                son fijos para esta cancha. El marcador TV se actualiza al instante si está en el mismo navegador;
+                al pasar de partido cambia solo sin cerrar la pestaña.
               </p>
               <a-alert
                 v-if="advanceError"
