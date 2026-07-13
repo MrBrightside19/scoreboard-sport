@@ -96,6 +96,10 @@ async function createMatchFlow(): Promise<void> {
     return
   }
 
+  // Abrir ambas pestañas en el gesto del click (antes del await) evita el bloqueo de popups.
+  const boardWin = window.open('about:blank', '_blank')
+  const controlsWin = window.open('about:blank', '_blank')
+
   creating.value = true
   closeMobile()
   try {
@@ -112,8 +116,16 @@ async function createMatchFlow(): Promise<void> {
 
     const boardUrl = router.resolve({ name: 'board', query: { matchId } }).href
     const controlsUrl = router.resolve({ name: 'controls', query: { matchId } }).href
-    window.open(boardUrl, '_blank')
-    await router.push(controlsUrl)
+
+    if (boardWin) boardWin.location.href = boardUrl
+    else window.open(boardUrl, '_blank')
+
+    if (controlsWin) controlsWin.location.href = controlsUrl
+    else window.open(controlsUrl, '_blank')
+  } catch (err) {
+    boardWin?.close()
+    controlsWin?.close()
+    throw err
   } finally {
     creating.value = false
   }
