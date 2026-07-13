@@ -114,25 +114,6 @@ onMounted(() => {
       </a-spin>
     </section>
 
-    <footer class="home__footer">
-      <template v-if="auth.isAuthenticated">
-        <span>{{ auth.profile?.display_name ?? auth.profile?.email }}</span>
-        <a-tag
-          :color="auth.isOrganizer ? 'cyan' : auth.isAssistant ? 'purple' : 'default'"
-        >
-          {{
-            auth.isOrganizer
-              ? 'Organizador'
-              : auth.isAssistant
-                ? 'Asistente'
-                : 'Espectador'
-          }}
-        </a-tag>
-        <a-button type="link" @click="auth.logout()">Cerrar sesión</a-button>
-      </template>
-      <a-button v-else type="link" @click="showAuth = true">Iniciar sesión / Registrarse</a-button>
-    </footer>
-
     <a-modal
       v-model:open="showAuth"
       title="Acceso"
@@ -212,15 +193,5 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 1rem;
-}
-
-.home__footer {
-  margin-top: 3rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
 }
 </style>
