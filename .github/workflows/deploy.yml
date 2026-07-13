@@ -56,6 +56,11 @@ jobs:
           VITE_POLL_INTERVAL_MS: ${{ vars.VITE_POLL_INTERVAL_MS || '5000' }}
           VITE_TOURNAMENT_TABLE_REFRESH_MS: ${{ vars.VITE_TOURNAMENT_TABLE_REFRESH_MS || '60000' }}
 
+      # GitHub Pages no reescribe rutas SPA: al abrir /overlay/... sirve 404.html.
+      # Duplicar index.html hace que esa respuesta cargue la app y Vue Router resuelva la ruta.
+      - name: SPA fallback for deep links
+        run: cp dist/index.html dist/404.html
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
