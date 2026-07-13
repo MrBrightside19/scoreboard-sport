@@ -415,64 +415,68 @@ onUnmounted(() => {
             </a-button>
           </div>
         </div>
-        <a-table
-          :data-source="matches.map((m) => ({ ...m, key: m.id }))"
-          :pagination="false"
-          size="small"
-          :row-class-name="(record: TournamentMatch) =>
-            record.status === 'live' ? 'detail__row--live' : ''"
-        >
-          <a-table-column title="Local" data-index="local_team" />
-          <a-table-column title="Visita" data-index="visit_team" />
-          <a-table-column title="Categoría" width="100">
-            <template #default="{ record }">
-              {{ record.category || '—' }}
-            </template>
-          </a-table-column>
-          <a-table-column title="Cancha" data-index="court" width="80" />
-          <a-table-column title="Tiempo" width="80">
-            <template #default="{ record }">
-              {{ normalizeGameTime(record.game_time) }}
-            </template>
-          </a-table-column>
-          <a-table-column title="Estado" width="110">
-            <template #default="{ record }">
-              <a-tag :color="statusColor(record.status)">
-                {{ statusLabel(record.status) }}
-              </a-tag>
-            </template>
-          </a-table-column>
-          <a-table-column title="Resultado" width="90">
-            <template #default="{ record }">
-              <span v-if="record.status === 'finished'">
-                {{ record.goal_local }} - {{ record.goal_visit }}
-              </span>
-              <span v-else>—</span>
-            </template>
-          </a-table-column>
-          <a-table-column title="Acciones" width="140">
-            <template #default="{ record }">
-              <div class="detail__match-actions">
-                <a-button
-                  v-if="record.status === 'scheduled'"
-                  type="primary"
-                  size="small"
-                  @click="startMatch(record)"
-                >
-                  Iniciar
-                </a-button>
-                <a-button
-                  v-if="record.status === 'live' && record.match_id"
-                  type="primary"
-                  size="small"
-                  @click="openControls(record)"
-                >
-                  Controles
-                </a-button>
-              </div>
-            </template>
-          </a-table-column>
-        </a-table>
+        <div class="detail__table-wrap">
+          <a-table
+            :data-source="matches.map((m) => ({ ...m, key: m.id }))"
+            :pagination="false"
+            size="small"
+            :scroll="{ x: 880 }"
+            table-layout="fixed"
+            :row-class-name="(record: TournamentMatch) =>
+              record.status === 'live' ? 'detail__row--live' : ''"
+          >
+            <a-table-column title="Local" data-index="local_team" :ellipsis="true" :width="140" />
+            <a-table-column title="Visita" data-index="visit_team" :ellipsis="true" :width="140" />
+            <a-table-column title="Categoría" :width="100" :ellipsis="true">
+              <template #default="{ record }">
+                {{ record.category || '—' }}
+              </template>
+            </a-table-column>
+            <a-table-column title="Cancha" data-index="court" :width="80" :ellipsis="true" />
+            <a-table-column title="Tiempo" :width="72">
+              <template #default="{ record }">
+                {{ normalizeGameTime(record.game_time) }}
+              </template>
+            </a-table-column>
+            <a-table-column title="Estado" :width="110">
+              <template #default="{ record }">
+                <a-tag :color="statusColor(record.status)">
+                  {{ statusLabel(record.status) }}
+                </a-tag>
+              </template>
+            </a-table-column>
+            <a-table-column title="Resultado" :width="90">
+              <template #default="{ record }">
+                <span v-if="record.status === 'finished'">
+                  {{ record.goal_local }} - {{ record.goal_visit }}
+                </span>
+                <span v-else>—</span>
+              </template>
+            </a-table-column>
+            <a-table-column title="Acciones" :width="120" fixed="right">
+              <template #default="{ record }">
+                <div class="detail__match-actions">
+                  <a-button
+                    v-if="record.status === 'scheduled'"
+                    type="primary"
+                    size="small"
+                    @click="startMatch(record)"
+                  >
+                    Iniciar
+                  </a-button>
+                  <a-button
+                    v-if="record.status === 'live' && record.match_id"
+                    type="primary"
+                    size="small"
+                    @click="openControls(record)"
+                  >
+                    Controles
+                  </a-button>
+                </div>
+              </template>
+            </a-table-column>
+          </a-table>
+        </div>
       </section>
     </a-spin>
   </div>
@@ -480,9 +484,27 @@ onUnmounted(() => {
 
 <style scoped lang="scss">
 .detail {
-  max-width: 1000px;
+  max-width: min(1000px, 100%);
+  width: 100%;
   margin: 0 auto;
   padding: 1.5rem;
+  box-sizing: border-box;
+  overflow-x: clip;
+}
+
+.detail__table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.detail__table-wrap :deep(.ant-table) {
+  min-width: 0;
+}
+
+.detail__table-wrap :deep(.ant-table-cell) {
+  white-space: nowrap;
 }
 
 .detail__header {
