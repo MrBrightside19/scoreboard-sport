@@ -25,5 +25,7 @@ export interface LiveMatchSummary {
   goalVisit: number
   updatedAt: string
   tournamentId: string | null
+  tournamentName: string | null
+  category: string | null
   court: string | null
 }

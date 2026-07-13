@@ -12,13 +12,15 @@ defineProps<{
       <span class="live-card__dot" />
       En vivo
     </div>
-    <h3 class="live-card__title">{{ match.title }}</h3>
+    <h3 class="live-card__title">
+      {{ match.tournamentName || 'Partido libre' }}
+    </h3>
     <div class="live-card__score">
       <span>{{ match.localTeam }}</span>
       <strong>{{ match.goalLocal }} — {{ match.goalVisit }}</strong>
       <span>{{ match.visitTeam }}</span>
     </div>
-    <p v-if="match.court" class="live-card__meta">Cancha {{ match.court }}</p>
+    <p v-if="match.category" class="live-card__meta">{{ match.category }}</p>
   </router-link>
 </template>
 
@@ -62,6 +64,9 @@ defineProps<{
 .live-card__title {
   margin: 0 0 0.75rem;
   font-size: 1.1rem;
+  font-family: 'Bebas Neue', sans-serif;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
 }
 
 .live-card__score {

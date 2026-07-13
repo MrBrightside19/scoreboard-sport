@@ -10,3 +10,7 @@ export function tournamentOverlayPath(tournamentId: string, court: string): stri
 export function tournamentLivePath(tournamentId: string, court: string): string {
   return `/live/torneo/${tournamentId}/${court}`
 }
+
+export function tournamentBoardPath(tournamentId: string, court: string): string {
+  return `/board/torneo/${tournamentId}/${court}`
+}

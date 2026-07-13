@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref } from 'vue'
 import type {
   GoalEvent,
@@ -8,9 +8,12 @@ import type {
 } from '@/types/hockeyScoreboard'
 import {
   createDefaultScoreboardState,
+  DEFAULT_GAME_TIME,
+  DEFAULT_INTERMISSION_TIME,
   DEFAULT_PENALTY_TYPE_ID,
   isGoalPending,
   MAX_PENALTIES_PER_TEAM,
+  MAX_PERIODS,
   normalizeScoreboardState,
 } from '@/types/hockeyScoreboard'
 import { getPenaltyType, secondsToClock } from '@/data/penaltyCatalog'
@@ -23,7 +26,12 @@ import {
 } from '@/utils/localSync'
 import { generateId } from '@/utils/id'
 import { canSetRole, findPlayerById } from '@/utils/roster'
-import { normalizeGameTime, parseTimeToSeconds, tickDown, interpolateClock } from '@/utils/clock'
+import {
+  interpolateClock,
+  normalizeGameTime,
+  parseTimeToSeconds,
+  tickDown,
+} from '@/utils/clock'
 
 export const useScoreboardStore = defineStore('scoreboard', () => {
   const matchId = ref<string | null>(null)
@@ -111,25 +119,35 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
       return
     }
 
+    const clockSeconds = parseTimeToSeconds(state.value.timeGame)
+    if (clockSeconds <= 0) {
+      patch({ isPaused: true })
+      return
+    }
+
     const syncedTime = interpolateClock(
       state.value.timeGame,
       state.value.isPaused,
       state.value.updatedAt,
     )
+    const playedSeconds = Math.max(
+      0,
+      clockSeconds - parseTimeToSeconds(syncedTime),
+    )
+
+    const syncPenaltyList = (penalties: TeamPenalty[]): TeamPenalty[] =>
+      penalties
+        .map((penalty) => ({
+          ...penalty,
+          time: tickDown(penalty.time, playedSeconds),
+        }))
+        .filter((penalty) => parseTimeToSeconds(penalty.time) > 0)
 
     state.value = {
       ...state.value,
       timeGame: syncedTime,
-      penaltiesLocal: interpolatePenalties(
-        state.value.penaltiesLocal,
-        state.value.isPaused,
-        state.value.updatedAt,
-      ),
-      penaltiesVisit: interpolatePenalties(
-        state.value.penaltiesVisit,
-        state.value.isPaused,
-        state.value.updatedAt,
-      ),
+      penaltiesLocal: syncPenaltyList(state.value.penaltiesLocal),
+      penaltiesVisit: syncPenaltyList(state.value.penaltiesVisit),
       isPaused: true,
       updatedAt: new Date().toISOString(),
     }
@@ -299,6 +317,68 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     patch({ gamePeriod: Math.max(1, period) })
   }
 
+  /** Pasa al siguiente periodo conservando el tiempo restante de las faltas. */
+  function advanceToNextPeriod(periodLength = DEFAULT_GAME_TIME): void {
+    if (state.value.intermissionActive) {
+      if (!state.value.isPaused && parseTimeToSeconds(state.value.intermissionTime) > 0) {
+        const synced = interpolateClock(
+          state.value.intermissionTime,
+          false,
+          state.value.updatedAt,
+        )
+        patch({
+          intermissionTime: synced,
+          intermissionActive: false,
+          isPaused: true,
+        })
+      } else {
+        patch({ intermissionActive: false, isPaused: true })
+      }
+    } else if (!state.value.isPaused && parseTimeToSeconds(state.value.timeGame) > 0) {
+      syncElapsedAndPause()
+    } else if (!state.value.isPaused) {
+      patch({ isPaused: true })
+    }
+
+    patch({
+      gamePeriod: state.value.gamePeriod + 1,
+      timeGame: normalizeGameTime(periodLength),
+      intermissionActive: false,
+      intermissionTime: state.value.intermissionDuration || DEFAULT_INTERMISSION_TIME,
+      isPaused: true,
+    })
+  }
+
+  function startIntermission(duration?: string): void {
+    const configured = normalizeGameTime(
+      duration ?? (state.value.intermissionDuration || DEFAULT_INTERMISSION_TIME),
+    )
+    if (parseTimeToSeconds(configured) <= 0) return
+    patch({
+      intermissionActive: true,
+      intermissionDuration: configured,
+      intermissionTime: configured,
+      isPaused: false,
+    })
+  }
+
+  function stopIntermission(): void {
+    if (!state.value.intermissionActive) return
+    finishIntermissionTick()
+  }
+
+  function setIntermissionTime(time: string): void {
+    const normalized = normalizeGameTime(time)
+    if (state.value.intermissionActive) {
+      patch({ intermissionTime: normalized })
+      return
+    }
+    patch({
+      intermissionDuration: normalized,
+      intermissionTime: normalized,
+    })
+  }
+
   function setTeams(localTeam: string, visitTeam: string): void {
     patch({
       localTeam: localTeam.slice(0, 18),
@@ -375,17 +455,17 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
       .filter((penalty) => parseTimeToSeconds(penalty.time) > 0)
   }
 
-  function interpolatePenalties(
-    penalties: TeamPenalty[],
-    isPaused: boolean,
-    updatedAt: string,
-  ): TeamPenalty[] {
-    return penalties
-      .map((penalty) => ({
-        ...penalty,
-        time: interpolateClock(penalty.time, isPaused, updatedAt),
-      }))
-      .filter((penalty) => parseTimeToSeconds(penalty.time) > 0)
+  /** Al terminar el descanso: avanza de periodo si queda alguno; si no, solo pausa. */
+  function finishIntermissionTick(): void {
+    if (state.value.gamePeriod < MAX_PERIODS) {
+      advanceToNextPeriod()
+      return
+    }
+    patch({
+      intermissionActive: false,
+      intermissionTime: state.value.intermissionDuration || DEFAULT_INTERMISSION_TIME,
+      isPaused: true,
+    })
   }
 
   function startWriterTick(): void {
@@ -394,10 +474,40 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     tickInterval.value = window.setInterval(() => {
       if (state.value.isPaused) return
 
+      if (state.value.intermissionActive) {
+        const remaining = parseTimeToSeconds(state.value.intermissionTime)
+        if (remaining <= 0) {
+          finishIntermissionTick()
+          return
+        }
+        const nextIntermission = tickDown(state.value.intermissionTime)
+        const ended = parseTimeToSeconds(nextIntermission) <= 0
+        state.value = {
+          ...state.value,
+          intermissionTime: nextIntermission,
+          updatedAt: new Date().toISOString(),
+        }
+        persistLocal()
+        if (ended) {
+          finishIntermissionTick()
+        }
+        return
+      }
+
+      const clockSeconds = parseTimeToSeconds(state.value.timeGame)
+      if (clockSeconds <= 0) {
+        patch({ isPaused: true })
+        return
+      }
+
+      const nextTime = tickDown(state.value.timeGame)
+      const periodEnded = parseTimeToSeconds(nextTime) <= 0
+
       const next: Partial<ScoreboardState> = {
-        timeGame: tickDown(state.value.timeGame),
+        timeGame: nextTime,
         penaltiesLocal: tickPenaltyList(state.value.penaltiesLocal),
         penaltiesVisit: tickPenaltyList(state.value.penaltiesVisit),
+        isPaused: periodEnded,
         updatedAt: new Date().toISOString(),
       }
 
@@ -436,6 +546,10 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     adjustGoal,
     togglePause,
     setPeriod,
+    advanceToNextPeriod,
+    startIntermission,
+    stopIntermission,
+    setIntermissionTime,
     setTeams,
     setTeamLogos,
     setGameTime,
@@ -449,3 +563,7 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     syncElapsedAndPause,
   }
 })
+
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useScoreboardStore, import.meta.hot))
+}

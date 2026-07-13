@@ -49,10 +49,17 @@ export interface ScoreboardState {
   penaltiesLocal: TeamPenalty[]
   penaltiesVisit: TeamPenalty[]
   isPaused: boolean
+  /** Descanso entre periodos activo (cuenta regresiva en TV). */
+  intermissionActive: boolean
+  /** Tiempo restante del descanso (cuenta regresiva). */
+  intermissionTime: string
+  /** Duración configurada del descanso (por defecto 05:00 al crear el partido). */
+  intermissionDuration: string
   updatedAt: string
 }
 
 export const DEFAULT_GAME_TIME = '20:00'
+export const DEFAULT_INTERMISSION_TIME = '05:00'
 export const DEFAULT_PENALTY_TYPE_ID = 'minor'
 export const MAX_PERIODS = 3
 export const MAX_PENALTIES_PER_TEAM = 2
@@ -77,6 +84,9 @@ export function createDefaultScoreboardState(
     penaltiesLocal: [],
     penaltiesVisit: [],
     isPaused: true,
+    intermissionActive: false,
+    intermissionTime: DEFAULT_INTERMISSION_TIME,
+    intermissionDuration: DEFAULT_INTERMISSION_TIME,
     updatedAt: new Date().toISOString(),
   }
 }
@@ -148,6 +158,14 @@ export function normalizeScoreboardState(raw: unknown): ScoreboardState {
     gamePeriod: typeof source.gamePeriod === 'number' ? source.gamePeriod : base.gamePeriod,
     timeGame: (source.timeGame as string) ?? base.timeGame,
     isPaused: typeof source.isPaused === 'boolean' ? source.isPaused : base.isPaused,
+    intermissionActive:
+      typeof source.intermissionActive === 'boolean'
+        ? source.intermissionActive
+        : base.intermissionActive,
+    intermissionTime: String(source.intermissionTime ?? base.intermissionTime),
+    intermissionDuration: String(
+      source.intermissionDuration ?? base.intermissionDuration,
+    ),
     updatedAt: (source.updatedAt as string) ?? base.updatedAt,
     rosterLocal: normalizeRoster(source.rosterLocal),
     rosterVisit: normalizeRoster(source.rosterVisit),

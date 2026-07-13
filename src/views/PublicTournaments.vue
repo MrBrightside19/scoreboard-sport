@@ -6,6 +6,18 @@ import type { Tournament } from '@/types/tournament'
 const tournaments = ref<Tournament[]>([])
 const loading = ref(true)
 
+const statusLabels: Record<Tournament['status'], string> = {
+  draft: 'Borrador',
+  active: 'Activo',
+  finished: 'Finalizado',
+}
+
+function statusColor(status: Tournament['status']): string {
+  if (status === 'active') return 'green'
+  if (status === 'finished') return 'default'
+  return 'blue'
+}
+
 onMounted(async () => {
   try {
     tournaments.value = await fetchPublicTournaments()
@@ -28,7 +40,9 @@ onMounted(async () => {
         >
           <h3>{{ t.name }}</h3>
           <p v-if="t.start_date">{{ t.start_date }} — {{ t.end_date }}</p>
-          <a-tag>{{ t.status }}</a-tag>
+          <a-tag :color="statusColor(t.status)">
+            {{ statusLabels[t.status] }}
+          </a-tag>
         </router-link>
       </div>
       <a-empty v-else description="No hay torneos públicos" />
