@@ -547,6 +547,7 @@ export async function startTournamentMatch(
     tournamentMatch.visit_team,
     normalizeGameTime(tournamentMatch.game_time),
   )
+  state.matchCategory = tournamentMatch.category?.trim() || ''
 
   try {
     const [tournamentPlayers, tournamentTeams] = await Promise.all([

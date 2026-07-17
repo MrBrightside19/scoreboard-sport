@@ -281,6 +281,9 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
           <span class="nhl-bug__clock" :class="{ 'nhl-bug__clock--paused': state.isPaused }">
             {{ clock }}
           </span>
+          <span v-if="state.matchCategory" class="nhl-bug__category">
+            {{ state.matchCategory }}
+          </span>
         </div>
 
         <div class="nhl-bug__team nhl-bug__team--visit">
@@ -354,10 +357,6 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
     v-else-if="tv"
     class="scoreboard scoreboard--tv"
     :class="{ 'scoreboard--compact': compact }"
-    :style="{
-      '--local-color': state.localColor || '#00d4ff',
-      '--visit-color': state.visitColor || '#ff6b35',
-    }"
   >
     <div class="scoreboard__glow" />
 
@@ -429,10 +428,6 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
     v-else
     class="scoreboard scoreboard--live"
     :class="{ 'scoreboard--compact': compact }"
-    :style="{
-      '--local-color': state.localColor || '#00d4ff',
-      '--visit-color': state.visitColor || '#ff6b35',
-    }"
   >
     <div class="scoreboard__glow" />
 
@@ -447,14 +442,27 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
         <template v-else>Hockey en línea</template>
       </span>
       <span class="scoreboard__period-pill">{{ centerLabel }}</span>
+      <span v-if="state.matchCategory" class="scoreboard__category-pill">
+        {{ state.matchCategory }}
+      </span>
     </header>
 
     <div class="scoreboard__main scoreboard__main--live">
       <section class="scoreboard__team scoreboard__team--local scoreboard__team--live">
         <div class="scoreboard__team-top">
-          <div class="scoreboard__team-meta">
-            <span class="scoreboard__team-label">Local</span>
-            <h2 class="scoreboard__team-name">{{ state.localTeam }}</h2>
+          <div class="scoreboard__team-identity">
+            <div class="scoreboard__team-logo">
+              <img
+                v-if="state.localLogo"
+                :src="state.localLogo"
+                :alt="state.localTeam"
+                class="scoreboard__team-logo-img"
+              />
+            </div>
+            <div class="scoreboard__team-meta">
+              <span class="scoreboard__team-label">Local</span>
+              <h2 class="scoreboard__team-name">{{ state.localTeam }}</h2>
+            </div>
           </div>
           <div
             class="scoreboard__score"
@@ -513,9 +521,19 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
           >
             {{ state.goalVisit }}
           </div>
-          <div class="scoreboard__team-meta scoreboard__team-meta--visit">
-            <span class="scoreboard__team-label">Visita</span>
-            <h2 class="scoreboard__team-name">{{ state.visitTeam }}</h2>
+          <div class="scoreboard__team-identity scoreboard__team-identity--visit">
+            <div class="scoreboard__team-meta scoreboard__team-meta--visit">
+              <span class="scoreboard__team-label">Visita</span>
+              <h2 class="scoreboard__team-name">{{ state.visitTeam }}</h2>
+            </div>
+            <div class="scoreboard__team-logo">
+              <img
+                v-if="state.visitLogo"
+                :src="state.visitLogo"
+                :alt="state.visitTeam"
+                class="scoreboard__team-logo-img"
+              />
+            </div>
           </div>
         </div>
 
@@ -577,6 +595,7 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   --bug-score: 2.3rem;
   --bug-clock: 1.66rem;
   --bug-period: 0.66rem;
+  --bug-category: 0.56rem;
   --bug-timer: 0.96rem;
   --bug-goal-width: min(448px, 55vw);
   --bug-goal-max: 511px;
@@ -775,6 +794,20 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   &--paused {
     opacity: 0.7;
   }
+}
+
+.nhl-bug__category {
+  max-width: 7rem;
+  margin-top: -0.05rem;
+  font-size: var(--bug-category);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .nhl-bug__goal {
@@ -998,15 +1031,17 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
 }
 
 .scoreboard__header {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
+  gap: 1rem;
   margin-bottom: clamp(1rem, 3vw, 1.75rem);
   position: relative;
   z-index: 1;
 }
 
 .scoreboard__sport {
+  justify-self: start;
   font-size: 0.85rem;
   font-weight: 600;
   letter-spacing: 0.2em;
@@ -1023,6 +1058,7 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
 }
 
 .scoreboard__period-pill {
+  justify-self: center;
   font-family: 'Bebas Neue', sans-serif;
   font-size: clamp(1.2rem, 3vw, 1.8rem);
   letter-spacing: 0.08em;
@@ -1030,6 +1066,22 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   border-radius: 999px;
   background: var(--panel);
   border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.scoreboard__category-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  min-height: 1.55rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(232, 237, 245, 0.72);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .scoreboard__main--live {
@@ -1055,9 +1107,42 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   }
 }
 
+.scoreboard__team-identity {
+  display: flex;
+  align-items: center;
+  gap: clamp(0.55rem, 1.5vw, 0.9rem);
+  min-width: 0;
+  flex: 1;
+
+  &--visit {
+    justify-content: flex-end;
+  }
+}
+
+.scoreboard__team-logo {
+  width: clamp(2.75rem, 6vw, 4.25rem);
+  height: clamp(2.75rem, 6vw, 4.25rem);
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.scoreboard__team-logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
 .scoreboard__team-meta {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 0.2rem;
   min-width: 0;
   flex: 1;
@@ -1079,6 +1164,16 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
 .scoreboard--live .scoreboard__team-name {
   font-size: clamp(1.6rem, 4vw, 2.8rem);
   line-height: 1;
+}
+
+.scoreboard--live .scoreboard__team--local .scoreboard__team-name,
+.scoreboard--live .scoreboard__team--local .scoreboard__team-label {
+  text-align: left;
+}
+
+.scoreboard--live .scoreboard__team--visit .scoreboard__team-name,
+.scoreboard--live .scoreboard__team--visit .scoreboard__team-label {
+  text-align: right;
 }
 
 .scoreboard--live .scoreboard__score {
@@ -1301,6 +1396,7 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
     --bug-score: 2.02rem;
     --bug-clock: 1.46rem;
     --bug-period: 0.58rem;
+    --bug-category: 0.5rem;
     --bug-timer: 0.85rem;
     --bug-goal-width: min(400px, 70vw);
     --bug-goal-tag: 0.58rem;
@@ -1326,8 +1422,18 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
     flex-direction: row-reverse;
   }
 
+  .scoreboard__team-identity--visit {
+    justify-content: flex-start;
+    flex-direction: row-reverse;
+  }
+
   .scoreboard__team-meta--visit {
     align-items: flex-start;
+    text-align: left;
+  }
+
+  .scoreboard--live .scoreboard__team--visit .scoreboard__team-name,
+  .scoreboard--live .scoreboard__team--visit .scoreboard__team-label {
     text-align: left;
   }
 
@@ -1347,6 +1453,7 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
     --bug-score: 1.79rem;
     --bug-clock: 1.29rem;
     --bug-period: 0.51rem;
+    --bug-category: 0.45rem;
     --bug-timer: 0.75rem;
     --bug-goal-width: min(360px, 88vw);
     --bug-goal-tag: 0.52rem;
@@ -1376,6 +1483,7 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
     --bug-score: 1.55rem;
     --bug-clock: 1.1rem;
     --bug-period: 0.44rem;
+    --bug-category: 0.4rem;
     --bug-timer: 0.65rem;
     --bug-goal-width: min(100%, 94vw);
     --bug-goal-tag: 0.46rem;

@@ -38,6 +38,7 @@ export function isGoalPending(goal: GoalEvent): boolean {
 export interface ScoreboardState {
   localTeam: string
   visitTeam: string
+  matchCategory: string
   localLogo: string
   visitLogo: string
   localColor: string
@@ -77,6 +78,7 @@ export function createDefaultScoreboardState(
   return {
     localTeam,
     visitTeam,
+    matchCategory: '',
     localLogo: '',
     visitLogo: '',
     localColor: DEFAULT_LOCAL_COLOR,
@@ -159,6 +161,7 @@ export function normalizeScoreboardState(raw: unknown): ScoreboardState {
     ...source,
     localTeam: (source.localTeam as string) ?? base.localTeam,
     visitTeam: (source.visitTeam as string) ?? base.visitTeam,
+    matchCategory: String(source.matchCategory ?? base.matchCategory),
     localLogo: String(source.localLogo ?? base.localLogo),
     visitLogo: String(source.visitLogo ?? base.visitLogo),
     localColor: String(source.localColor ?? base.localColor) || DEFAULT_LOCAL_COLOR,
