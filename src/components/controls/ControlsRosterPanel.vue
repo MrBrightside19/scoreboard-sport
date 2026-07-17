@@ -122,13 +122,6 @@ function onNumberPaste(
                 {{ option.label }}
               </a-select-option>
             </a-select>
-            <a-button
-              danger
-              size="small"
-              @click="store.removeRosterPlayer(team.key, player.id)"
-            >
-              ×
-            </a-button>
           </div>
         </div>
 
@@ -199,7 +192,7 @@ function onNumberPaste(
 
 .roster-panel__row {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) minmax(0, 1fr) 130px auto;
+  grid-template-columns: 52px minmax(0, 1fr) minmax(0, 1fr) 130px;
   gap: 0.4rem;
   align-items: center;
 }
@@ -220,17 +213,16 @@ function onNumberPaste(
 
 @media (max-width: 720px) {
   .roster-panel__row {
-    grid-template-columns: 52px 1fr auto;
+    grid-template-columns: 52px 1fr;
     grid-template-areas:
-      "num name del"
-      "num last del"
-      "role role del";
+      "num name"
+      "num last"
+      "role role";
   }
 
   .roster-panel__row > :nth-child(1) { grid-area: num; }
   .roster-panel__row > :nth-child(2) { grid-area: name; }
   .roster-panel__row > :nth-child(3) { grid-area: last; }
   .roster-panel__row > :nth-child(4) { grid-area: role; }
-  .roster-panel__row > :nth-child(5) { grid-area: del; }
 }
 </style>
