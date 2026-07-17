@@ -235,7 +235,14 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
 
 <template>
   <!-- NHL-style broadcast bug (OBS overlay) -->
-  <div v-if="overlay" class="nhl-bug">
+  <div
+    v-if="overlay"
+    class="nhl-bug"
+    :style="{
+      '--local': state.localColor || '#3da5ff',
+      '--visit': state.visitColor || '#ff5a36',
+    }"
+  >
     <div class="nhl-bug__row">
       <div class="nhl-bug__side nhl-bug__side--local">
         <div v-if="localPenalties.length" class="nhl-bug__timers">
@@ -273,6 +280,9 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
           <span class="nhl-bug__period">{{ state.intermissionActive ? 'DES' : periodLabel }}</span>
           <span class="nhl-bug__clock" :class="{ 'nhl-bug__clock--paused': state.isPaused }">
             {{ clock }}
+          </span>
+          <span v-if="state.matchCategory" class="nhl-bug__category">
+            {{ state.matchCategory }}
           </span>
         </div>
 
@@ -432,14 +442,27 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
         <template v-else>Hockey en línea</template>
       </span>
       <span class="scoreboard__period-pill">{{ centerLabel }}</span>
+      <span v-if="state.matchCategory" class="scoreboard__category-pill">
+        {{ state.matchCategory }}
+      </span>
     </header>
 
     <div class="scoreboard__main scoreboard__main--live">
       <section class="scoreboard__team scoreboard__team--local scoreboard__team--live">
         <div class="scoreboard__team-top">
-          <div class="scoreboard__team-meta">
-            <span class="scoreboard__team-label">Local</span>
-            <h2 class="scoreboard__team-name">{{ state.localTeam }}</h2>
+          <div class="scoreboard__team-identity">
+            <div class="scoreboard__team-logo">
+              <img
+                v-if="state.localLogo"
+                :src="state.localLogo"
+                :alt="state.localTeam"
+                class="scoreboard__team-logo-img"
+              />
+            </div>
+            <div class="scoreboard__team-meta">
+              <span class="scoreboard__team-label">Local</span>
+              <h2 class="scoreboard__team-name">{{ state.localTeam }}</h2>
+            </div>
           </div>
           <div
             class="scoreboard__score"
@@ -498,9 +521,19 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
           >
             {{ state.goalVisit }}
           </div>
-          <div class="scoreboard__team-meta scoreboard__team-meta--visit">
-            <span class="scoreboard__team-label">Visita</span>
-            <h2 class="scoreboard__team-name">{{ state.visitTeam }}</h2>
+          <div class="scoreboard__team-identity scoreboard__team-identity--visit">
+            <div class="scoreboard__team-meta scoreboard__team-meta--visit">
+              <span class="scoreboard__team-label">Visita</span>
+              <h2 class="scoreboard__team-name">{{ state.visitTeam }}</h2>
+            </div>
+            <div class="scoreboard__team-logo">
+              <img
+                v-if="state.visitLogo"
+                :src="state.visitLogo"
+                :alt="state.visitTeam"
+                class="scoreboard__team-logo-img"
+              />
+            </div>
           </div>
         </div>
 
@@ -549,6 +582,30 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   --text: #ffffff;
   --muted: rgba(255, 255, 255, 0.55);
 
+  /* Tamaño de referencia: laptop a pantalla completa */
+  --bug-height: 64px;
+  --bug-width: min(648px, 79vw);
+  --bug-max-width: 738px;
+  --bug-logo: 48px;
+  --bug-gap: 0.65rem;
+  --bug-pad-x: 0.75rem;
+  --bug-center-min: 7.5rem;
+  --bug-center-pad: 1.1rem;
+  --bug-name: 1.44rem;
+  --bug-score: 2.3rem;
+  --bug-clock: 1.66rem;
+  --bug-period: 0.66rem;
+  --bug-category: 0.56rem;
+  --bug-timer: 0.96rem;
+  --bug-goal-width: min(448px, 55vw);
+  --bug-goal-max: 511px;
+  --bug-goal-tag: 0.66rem;
+  --bug-goal-team: 1.07rem;
+  --bug-goal-scorer: 1.23rem;
+  --bug-goal-assist: 0.77rem;
+  --bug-goal-minute: 1.02rem;
+  --bug-padding: 0.85rem 1rem 0;
+
   position: fixed;
   top: 0;
   left: 0;
@@ -557,7 +614,7 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 0.85rem 1rem 0;
+  padding: var(--bug-padding);
   pointer-events: none;
   background: transparent;
   font-family: 'Inter', system-ui, sans-serif;
@@ -595,7 +652,7 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
 
 .nhl-bug__timer {
   font-family: 'Bebas Neue', sans-serif;
-  font-size: 0.9rem;
+  font-size: var(--bug-timer);
   letter-spacing: 0.05em;
   color: #fff;
   background: rgba(255, 55, 70, 0.9);
@@ -611,9 +668,9 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   grid-template-columns: 1fr auto 1fr;
   align-items: stretch;
   flex: 0 0 auto;
-  width: min(648px, 79vw);
-  max-width: 738px;
-  height: 48px;
+  width: var(--bug-width);
+  max-width: var(--bug-max-width);
+  height: var(--bug-height);
   background: var(--bug-bg);
   border: 1px solid var(--bug-border);
   border-radius: 4px;
@@ -624,9 +681,9 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
 .nhl-bug__team {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
+  gap: var(--bug-gap);
   min-width: 0;
-  padding: 0 0.75rem;
+  padding: 0 var(--bug-pad-x);
 }
 
 .nhl-bug__team--local {
@@ -645,18 +702,18 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
 
   &--local {
     background: var(--local);
-    margin-left: -0.75rem;
+    margin-left: calc(var(--bug-pad-x) * -1);
   }
 
   &--visit {
     background: var(--visit);
-    margin-right: -0.75rem;
+    margin-right: calc(var(--bug-pad-x) * -1);
   }
 }
 
 .nhl-bug__logo {
-  width: 36px;
-  height: 36px;
+  width: var(--bug-logo);
+  height: var(--bug-logo);
   flex-shrink: 0;
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.08);
@@ -678,7 +735,7 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   flex: 1;
   min-width: 0;
   font-family: 'Bebas Neue', sans-serif;
-  font-size: 1.35rem;
+  font-size: var(--bug-name);
   letter-spacing: 0.06em;
   line-height: 1;
   color: var(--text);
@@ -693,7 +750,7 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
 
 .nhl-bug__score {
   font-family: 'Bebas Neue', sans-serif;
-  font-size: 2.15rem;
+  font-size: var(--bug-score);
   line-height: 1;
   color: var(--text);
   min-width: 1.4rem;
@@ -711,15 +768,15 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   align-items: center;
   justify-content: center;
   gap: 0.05rem;
-  padding: 0 1.1rem;
+  padding: 0 var(--bug-center-pad);
   background: rgba(0, 0, 0, 0.35);
   border-left: 1px solid var(--bug-border);
   border-right: 1px solid var(--bug-border);
-  min-width: 7.5rem;
+  min-width: var(--bug-center-min);
 }
 
 .nhl-bug__period {
-  font-size: 0.62rem;
+  font-size: var(--bug-period);
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -728,7 +785,7 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
 
 .nhl-bug__clock {
   font-family: 'Bebas Neue', sans-serif;
-  font-size: 1.55rem;
+  font-size: var(--bug-clock);
   letter-spacing: 0.06em;
   line-height: 1;
   color: var(--text);
@@ -739,12 +796,26 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   }
 }
 
+.nhl-bug__category {
+  max-width: 7rem;
+  margin-top: -0.05rem;
+  font-size: var(--bug-category);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .nhl-bug__goal {
   display: flex;
   align-items: center;
   gap: 0.55rem;
-  width: min(448px, 55vw);
-  max-width: 511px;
+  width: var(--bug-goal-width);
+  max-width: var(--bug-goal-max);
   margin-top: 0.35rem;
   padding: 0.4rem 0.65rem;
   background: rgba(12, 16, 24, 0.94);
@@ -764,7 +835,7 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
 
 .nhl-bug__goal-tag {
   flex-shrink: 0;
-  font-size: 0.62rem;
+  font-size: var(--bug-goal-tag);
   font-weight: 800;
   letter-spacing: 0.16em;
   color: #0a0e17;
@@ -781,14 +852,14 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
 .nhl-bug__goal-team {
   flex-shrink: 0;
   font-family: 'Bebas Neue', sans-serif;
-  font-size: 1rem;
+  font-size: var(--bug-goal-team);
   letter-spacing: 0.04em;
   color: var(--muted);
 }
 
 .nhl-bug__goal-scorer {
   font-family: 'Bebas Neue', sans-serif;
-  font-size: 1.15rem;
+  font-size: var(--bug-goal-scorer);
   letter-spacing: 0.04em;
   color: var(--text);
   white-space: nowrap;
@@ -797,7 +868,7 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
 }
 
 .nhl-bug__goal-assist {
-  font-size: 0.72rem;
+  font-size: var(--bug-goal-assist);
   font-weight: 600;
   color: var(--muted);
   white-space: nowrap;
@@ -809,7 +880,7 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   margin-left: auto;
   flex-shrink: 0;
   font-family: 'Bebas Neue', sans-serif;
-  font-size: 0.95rem;
+  font-size: var(--bug-goal-minute);
   letter-spacing: 0.04em;
   color: var(--muted);
 }
@@ -960,15 +1031,17 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
 }
 
 .scoreboard__header {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
+  gap: 1rem;
   margin-bottom: clamp(1rem, 3vw, 1.75rem);
   position: relative;
   z-index: 1;
 }
 
 .scoreboard__sport {
+  justify-self: start;
   font-size: 0.85rem;
   font-weight: 600;
   letter-spacing: 0.2em;
@@ -985,6 +1058,7 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
 }
 
 .scoreboard__period-pill {
+  justify-self: center;
   font-family: 'Bebas Neue', sans-serif;
   font-size: clamp(1.2rem, 3vw, 1.8rem);
   letter-spacing: 0.08em;
@@ -992,6 +1066,22 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   border-radius: 999px;
   background: var(--panel);
   border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.scoreboard__category-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  min-height: 1.55rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(232, 237, 245, 0.72);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .scoreboard__main--live {
@@ -1017,9 +1107,42 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   }
 }
 
+.scoreboard__team-identity {
+  display: flex;
+  align-items: center;
+  gap: clamp(0.55rem, 1.5vw, 0.9rem);
+  min-width: 0;
+  flex: 1;
+
+  &--visit {
+    justify-content: flex-end;
+  }
+}
+
+.scoreboard__team-logo {
+  width: clamp(2.75rem, 6vw, 4.25rem);
+  height: clamp(2.75rem, 6vw, 4.25rem);
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.scoreboard__team-logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
 .scoreboard__team-meta {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 0.2rem;
   min-width: 0;
   flex: 1;
@@ -1041,6 +1164,16 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
 .scoreboard--live .scoreboard__team-name {
   font-size: clamp(1.6rem, 4vw, 2.8rem);
   line-height: 1;
+}
+
+.scoreboard--live .scoreboard__team--local .scoreboard__team-name,
+.scoreboard--live .scoreboard__team--local .scoreboard__team-label {
+  text-align: left;
+}
+
+.scoreboard--live .scoreboard__team--visit .scoreboard__team-name,
+.scoreboard--live .scoreboard__team--visit .scoreboard__team-label {
+  text-align: right;
 }
 
 .scoreboard--live .scoreboard__score {
@@ -1250,6 +1383,31 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   50% { transform: scale(1.02); }
 }
 
+@media (max-width: 1024px) {
+  .nhl-bug {
+    --bug-height: 56px;
+    --bug-width: min(580px, 84vw);
+    --bug-logo: 42px;
+    --bug-gap: 0.55rem;
+    --bug-pad-x: 0.6rem;
+    --bug-center-min: 6.5rem;
+    --bug-center-pad: 0.9rem;
+    --bug-name: 1.27rem;
+    --bug-score: 2.02rem;
+    --bug-clock: 1.46rem;
+    --bug-period: 0.58rem;
+    --bug-category: 0.5rem;
+    --bug-timer: 0.85rem;
+    --bug-goal-width: min(400px, 70vw);
+    --bug-goal-tag: 0.58rem;
+    --bug-goal-team: 0.94rem;
+    --bug-goal-scorer: 1.08rem;
+    --bug-goal-assist: 0.68rem;
+    --bug-goal-minute: 0.9rem;
+    --bug-padding: 0.7rem 0.75rem 0;
+  }
+}
+
 @media (max-width: 768px) {
   .scoreboard__main {
     grid-template-columns: 1fr;
@@ -1264,8 +1422,18 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
     flex-direction: row-reverse;
   }
 
+  .scoreboard__team-identity--visit {
+    justify-content: flex-start;
+    flex-direction: row-reverse;
+  }
+
   .scoreboard__team-meta--visit {
     align-items: flex-start;
+    text-align: left;
+  }
+
+  .scoreboard--live .scoreboard__team--visit .scoreboard__team-name,
+  .scoreboard--live .scoreboard__team--visit .scoreboard__team-label {
     text-align: left;
   }
 
@@ -1273,13 +1441,69 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
     grid-template-columns: 1fr;
   }
 
-  .nhl-bug__bar {
-    height: 46px;
-    width: min(504px, 81vw);
+  .nhl-bug {
+    --bug-height: 50px;
+    --bug-width: min(520px, 90vw);
+    --bug-logo: 36px;
+    --bug-gap: 0.4rem;
+    --bug-pad-x: 0.5rem;
+    --bug-center-min: 5.5rem;
+    --bug-center-pad: 0.7rem;
+    --bug-name: 1.12rem;
+    --bug-score: 1.79rem;
+    --bug-clock: 1.29rem;
+    --bug-period: 0.51rem;
+    --bug-category: 0.45rem;
+    --bug-timer: 0.75rem;
+    --bug-goal-width: min(360px, 88vw);
+    --bug-goal-tag: 0.52rem;
+    --bug-goal-team: 0.85rem;
+    --bug-goal-scorer: 0.98rem;
+    --bug-goal-assist: 0.62rem;
+    --bug-goal-minute: 0.82rem;
+    --bug-padding: 0.55rem 0.5rem 0;
   }
 
-  .nhl-bug__name {
-    font-size: 1.1rem;
+  .nhl-bug__goal {
+    gap: 0.35rem;
+    padding: 0.3rem 0.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .nhl-bug {
+    --bug-height: 44px;
+    --bug-width: min(100%, 96vw);
+    --bug-logo: 30px;
+    --bug-gap: 0.3rem;
+    --bug-pad-x: 0.4rem;
+    --bug-center-min: 4.6rem;
+    --bug-center-pad: 0.45rem;
+    --bug-name: 0.95rem;
+    --bug-score: 1.55rem;
+    --bug-clock: 1.1rem;
+    --bug-period: 0.44rem;
+    --bug-category: 0.4rem;
+    --bug-timer: 0.65rem;
+    --bug-goal-width: min(100%, 94vw);
+    --bug-goal-tag: 0.46rem;
+    --bug-goal-team: 0.75rem;
+    --bug-goal-scorer: 0.88rem;
+    --bug-goal-assist: 0.56rem;
+    --bug-goal-minute: 0.72rem;
+    --bug-padding: 0.4rem 0.35rem 0;
+  }
+
+  .nhl-bug__row {
+    gap: 0.25rem;
+  }
+
+  .nhl-bug__side {
+    display: none;
+  }
+
+  .nhl-bug__goal-assist {
+    display: none;
   }
 }
 </style>
