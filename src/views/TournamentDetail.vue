@@ -50,6 +50,7 @@ const copiedCourt = ref<string | null>(null)
 const assistantEmail = ref('')
 const assigningAssistant = ref(false)
 const removingAssistantId = ref<string | null>(null)
+const activeTab = ref('partidos')
 
 let pollTimer: number | null = null
 
@@ -332,14 +333,6 @@ onUnmounted(() => {
           <h1>{{ tournament.name }}</h1>
         </div>
         <div class="detail__actions">
-          <a-button @click="downloadTemplate">Descargar plantilla</a-button>
-          <a-upload
-            :show-upload-list="false"
-            accept=".xlsx,.xls,.csv"
-            :before-upload="(f: File) => { onCsvUpload(f); return false }"
-          >
-            <a-button :loading="importing">Importar calendario</a-button>
-          </a-upload>
           <a-button
             v-if="tournament.status !== 'finished'"
             danger
@@ -349,160 +342,186 @@ onUnmounted(() => {
           </a-button>
         </div>
       </header>
-      <p v-if="tournament" class="detail__template-hint">
-        La plantilla Excel tiene dos hojas: <strong>Calendario</strong> (partidos) y
-        <strong>Jugadores</strong> (equipo, categoría, número, nombre, apellido y posición,
-        donde la posición es el tipo: jugador, arquero, capitán o Asistente Capitán).
-        Al importar se cargan ambas. Al iniciar un partido aparecen en Plantillas según equipo y categoría.
-      </p>
 
-      <section v-if="tournament && isOwner" class="detail__section">
-        <h2>Asistentes del torneo</h2>
-        <p class="detail__assistant-hint">
-          Puedes asignar hasta {{ MAX_TOURNAMENT_ASSISTANTS }} personas como asistentes
-          ({{ assistants.length }}/{{ MAX_TOURNAMENT_ASSISTANTS }}).
-          Podrán operar el calendario y la mesa de control desde sus propias cuentas.
-        </p>
-
-        <div v-if="assistants.length" class="detail__assistant-list">
-          <div
-            v-for="item in assistants"
-            :key="item.user_id"
-            class="detail__assistant-current"
-          >
-            <div>
-              <strong>{{ item.email }}</strong>
-              <span class="detail__assistant-role">Asistente</span>
+      <a-tabs v-if="tournament" v-model:active-key="activeTab" class="detail__tabs">
+        <a-tab-pane key="partidos" tab="Partidos">
+          <section class="detail__section">
+            <div class="detail__section-header">
+              <h2>Calendario</h2>
+              <div class="detail__section-actions">
+                <span v-if="refreshing" class="detail__refreshing">Actualizando…</span>
+                <a-button size="small" :loading="refreshing" @click="refresh">
+                  Actualizar
+                </a-button>
+              </div>
             </div>
-            <a-popconfirm
-              title="¿Quitar a esta persona como asistente?"
-              ok-text="Sí, quitar"
-              cancel-text="Cancelar"
-              @confirm="removeAssistant(item.user_id)"
-            >
-              <a-button
-                danger
+            <div class="detail__table-wrap">
+              <a-table
+                :data-source="matches.map((m) => ({ ...m, key: m.id }))"
+                :pagination="false"
                 size="small"
-                :loading="removingAssistantId === item.user_id"
+                :scroll="{ x: 880 }"
+                table-layout="fixed"
+                :row-class-name="(record: TournamentMatch) =>
+                  record.status === 'live' ? 'detail__row--live' : ''"
               >
-                Quitar
-              </a-button>
-            </a-popconfirm>
-          </div>
-        </div>
+                <a-table-column title="Local" data-index="local_team" :ellipsis="true" :width="140" />
+                <a-table-column title="Visita" data-index="visit_team" :ellipsis="true" :width="140" />
+                <a-table-column title="Categoría" :width="100" :ellipsis="true">
+                  <template #default="{ record }">
+                    {{ record.category || '—' }}
+                  </template>
+                </a-table-column>
+                <a-table-column title="Cancha" data-index="court" :width="80" :ellipsis="true" />
+                <a-table-column title="Tiempo" :width="72">
+                  <template #default="{ record }">
+                    {{ normalizeGameTime(record.game_time) }}
+                  </template>
+                </a-table-column>
+                <a-table-column title="Estado" :width="110">
+                  <template #default="{ record }">
+                    <a-tag :color="statusColor(record.status)">
+                      {{ statusLabel(record.status) }}
+                    </a-tag>
+                  </template>
+                </a-table-column>
+                <a-table-column title="Resultado" :width="90">
+                  <template #default="{ record }">
+                    <span v-if="record.status === 'finished'">
+                      {{ record.goal_local }} - {{ record.goal_visit }}
+                    </span>
+                    <span v-else>—</span>
+                  </template>
+                </a-table-column>
+                <a-table-column title="Acciones" :width="120" fixed="right">
+                  <template #default="{ record }">
+                    <div class="detail__match-actions">
+                      <a-button
+                        v-if="record.status === 'scheduled'"
+                        type="primary"
+                        size="small"
+                        @click="startMatch(record)"
+                      >
+                        Iniciar
+                      </a-button>
+                      <a-button
+                        v-if="record.status === 'live' && record.match_id"
+                        type="primary"
+                        size="small"
+                        @click="openControls(record)"
+                      >
+                        Controles
+                      </a-button>
+                    </div>
+                  </template>
+                </a-table-column>
+              </a-table>
+            </div>
+          </section>
+        </a-tab-pane>
 
-        <div v-if="canAddAssistant" class="detail__assistant-form">
-          <a-input
-            v-model:value="assistantEmail"
-            type="email"
-            placeholder="correo@ejemplo.com"
-            :disabled="assigningAssistant"
-          />
-          <a-button
-            type="primary"
-            class="detail__assistant-submit"
-            :loading="assigningAssistant"
-            :disabled="!assistantEmail.trim()"
-            @click="submitAssistant"
-          >
-            Agregar asistente
-          </a-button>
-        </div>
-      </section>
+        <a-tab-pane key="posiciones" tab="Tabla de Posiciones">
+          <section class="detail__section">
+            <h2>Tabla de posiciones</h2>
+            <TournamentStandings :standings="standings" />
+          </section>
+        </a-tab-pane>
 
-      <section class="detail__section">
-        <h2>Tabla de posiciones</h2>
-        <TournamentStandings :standings="standings" />
-      </section>
-
-      <section v-if="tournament && streamCourts.length" class="detail__section">
-        <h2>Overlay OBS por cancha</h2>
-        <p class="detail__stream-hint">
-          Enlaces fijos para transmisión continua. No necesitas cambiarlos entre partidos.
-        </p>
-        <div class="detail__stream-list">
-          <div v-for="court in streamCourts" :key="court" class="detail__stream-item">
-            <span>Cancha {{ court }}</span>
-            <a-button size="small" @click="copyOverlayForCourt(court)">
-              {{ copiedCourt === court ? '¡Copiado!' : 'Copiar OBS' }}
-            </a-button>
-          </div>
-        </div>
-      </section>
-
-      <section class="detail__section">
-        <div class="detail__section-header">
-          <h2>Calendario</h2>
-          <div class="detail__section-actions">
-            <span v-if="refreshing" class="detail__refreshing">Actualizando…</span>
-            <a-button size="small" :loading="refreshing" @click="refresh">
-              Actualizar
-            </a-button>
-          </div>
-        </div>
-        <div class="detail__table-wrap">
-          <a-table
-            :data-source="matches.map((m) => ({ ...m, key: m.id }))"
-            :pagination="false"
-            size="small"
-            :scroll="{ x: 880 }"
-            table-layout="fixed"
-            :row-class-name="(record: TournamentMatch) =>
-              record.status === 'live' ? 'detail__row--live' : ''"
-          >
-            <a-table-column title="Local" data-index="local_team" :ellipsis="true" :width="140" />
-            <a-table-column title="Visita" data-index="visit_team" :ellipsis="true" :width="140" />
-            <a-table-column title="Categoría" :width="100" :ellipsis="true">
-              <template #default="{ record }">
-                {{ record.category || '—' }}
-              </template>
-            </a-table-column>
-            <a-table-column title="Cancha" data-index="court" :width="80" :ellipsis="true" />
-            <a-table-column title="Tiempo" :width="72">
-              <template #default="{ record }">
-                {{ normalizeGameTime(record.game_time) }}
-              </template>
-            </a-table-column>
-            <a-table-column title="Estado" :width="110">
-              <template #default="{ record }">
-                <a-tag :color="statusColor(record.status)">
-                  {{ statusLabel(record.status) }}
-                </a-tag>
-              </template>
-            </a-table-column>
-            <a-table-column title="Resultado" :width="90">
-              <template #default="{ record }">
-                <span v-if="record.status === 'finished'">
-                  {{ record.goal_local }} - {{ record.goal_visit }}
-                </span>
-                <span v-else>—</span>
-              </template>
-            </a-table-column>
-            <a-table-column title="Acciones" :width="120" fixed="right">
-              <template #default="{ record }">
-                <div class="detail__match-actions">
-                  <a-button
-                    v-if="record.status === 'scheduled'"
-                    type="primary"
-                    size="small"
-                    @click="startMatch(record)"
-                  >
-                    Iniciar
+        <a-tab-pane key="configuracion" tab="Configuración">
+          <section class="detail__section">
+            <div class="detail__section-header">
+              <h2>Plantilla e importación</h2>
+              <div class="detail__section-actions">
+                <a-button size="small" @click="downloadTemplate">Descargar plantilla</a-button>
+                <a-upload
+                  :show-upload-list="false"
+                  accept=".xlsx,.xls,.csv"
+                  :before-upload="(f: File) => { onCsvUpload(f); return false }"
+                >
+                  <a-button size="small" type="primary" :loading="importing">
+                    Importar Excel
                   </a-button>
-                  <a-button
-                    v-if="record.status === 'live' && record.match_id"
-                    type="primary"
-                    size="small"
-                    @click="openControls(record)"
-                  >
-                    Controles
-                  </a-button>
+                </a-upload>
+              </div>
+            </div>
+            <p class="detail__template-hint">
+              La plantilla Excel tiene dos hojas: <strong>Calendario</strong> (partidos) y
+              <strong>Jugadores</strong> (equipo, categoría, número, nombre, apellido y posición,
+              donde la posición es el tipo: jugador, arquero, capitán o Asistente Capitán).
+              Al importar se cargan ambas. Al iniciar un partido aparecen en Plantillas según equipo y categoría.
+            </p>
+          </section>
+
+          <section v-if="isOwner" class="detail__section">
+            <h2>Asistentes del torneo</h2>
+            <p class="detail__assistant-hint">
+              Puedes asignar hasta {{ MAX_TOURNAMENT_ASSISTANTS }} personas como asistentes
+              ({{ assistants.length }}/{{ MAX_TOURNAMENT_ASSISTANTS }}).
+              Podrán operar el calendario y la mesa de control desde sus propias cuentas.
+            </p>
+
+            <div v-if="assistants.length" class="detail__assistant-list">
+              <div
+                v-for="item in assistants"
+                :key="item.user_id"
+                class="detail__assistant-current"
+              >
+                <div>
+                  <strong>{{ item.email }}</strong>
+                  <span class="detail__assistant-role">Asistente</span>
                 </div>
-              </template>
-            </a-table-column>
-          </a-table>
-        </div>
-      </section>
+                <a-popconfirm
+                  title="¿Quitar a esta persona como asistente?"
+                  ok-text="Sí, quitar"
+                  cancel-text="Cancelar"
+                  @confirm="removeAssistant(item.user_id)"
+                >
+                  <a-button
+                    danger
+                    size="small"
+                    :loading="removingAssistantId === item.user_id"
+                  >
+                    Quitar
+                  </a-button>
+                </a-popconfirm>
+              </div>
+            </div>
+
+            <div v-if="canAddAssistant" class="detail__assistant-form">
+              <a-input
+                v-model:value="assistantEmail"
+                type="email"
+                placeholder="correo@ejemplo.com"
+                :disabled="assigningAssistant"
+              />
+              <a-button
+                type="primary"
+                class="detail__assistant-submit"
+                :loading="assigningAssistant"
+                :disabled="!assistantEmail.trim()"
+                @click="submitAssistant"
+              >
+                Agregar asistente
+              </a-button>
+            </div>
+          </section>
+
+          <section v-if="streamCourts.length" class="detail__section">
+            <h2>Overlay OBS por cancha</h2>
+            <p class="detail__stream-hint">
+              Enlaces fijos para transmisión continua. No necesitas cambiarlos entre partidos.
+            </p>
+            <div class="detail__stream-list">
+              <div v-for="court in streamCourts" :key="court" class="detail__stream-item">
+                <span>Cancha {{ court }}</span>
+                <a-button size="small" @click="copyOverlayForCourt(court)">
+                  {{ copiedCourt === court ? '¡Copiado!' : 'Copiar OBS' }}
+                </a-button>
+              </div>
+            </div>
+          </section>
+        </a-tab-pane>
+      </a-tabs>
     </a-spin>
   </div>
 </template>
@@ -547,8 +566,37 @@ onUnmounted(() => {
   }
 }
 
+.detail__tabs {
+  margin-top: 0.5rem;
+
+  :deep(.ant-tabs-nav) {
+    margin-bottom: 1.25rem;
+
+    &::before {
+      border-color: rgba(255, 255, 255, 0.12);
+    }
+  }
+
+  :deep(.ant-tabs-tab) {
+    color: rgba(232, 237, 245, 0.65);
+
+    &:hover {
+      color: #e8edf5;
+    }
+  }
+
+  :deep(.ant-tabs-tab-active .ant-tabs-tab-btn) {
+    color: #00d4ff;
+    text-shadow: none;
+  }
+
+  :deep(.ant-tabs-ink-bar) {
+    background: #00d4ff;
+  }
+}
+
 .detail__template-hint {
-  margin: 0 0 2rem;
+  margin: 0 0 1rem;
   font-size: 0.85rem;
   opacity: 0.65;
   line-height: 1.4;
