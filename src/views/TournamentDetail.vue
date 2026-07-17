@@ -587,15 +587,6 @@ onUnmounted(() => {
           <router-link to="/tournaments">← Torneos</router-link>
           <h1>{{ tournament.name }}</h1>
         </div>
-        <div class="detail__actions">
-          <a-button
-            v-if="tournament.status !== 'finished'"
-            danger
-            @click="finishTournament"
-          >
-            Finalizar torneo
-          </a-button>
-        </div>
       </header>
 
       <a-tabs v-if="tournament" v-model:active-key="activeTab" class="detail__tabs">
@@ -885,6 +876,25 @@ onUnmounted(() => {
               </div>
 
               <div class="config__danger-list">
+                <div
+                  v-if="tournament.status !== 'finished'"
+                  class="config__danger-row"
+                >
+                  <div>
+                    <h3>Finalizar torneo</h3>
+                    <p>
+                      Cierra el torneo. Los partidos sin jugar quedan 0-0 y no se podrán iniciar ni abrir controles.
+                    </p>
+                  </div>
+                  <a-button
+                    danger
+                    :disabled="clearing || deleting"
+                    @click="finishTournament"
+                  >
+                    Finalizar torneo
+                  </a-button>
+                </div>
+
                 <div class="config__danger-row">
                   <div>
                     <h3>Limpiar datos</h3>
