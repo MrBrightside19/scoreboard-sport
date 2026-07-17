@@ -8,11 +8,13 @@ import {
   clearTournamentCalendar,
   createTournamentMatch,
   deleteTournament,
+  deleteTournamentMatch,
   fetchTournament,
   fetchTournamentMatches,
   finishTournament as finishTournamentService,
   importTournamentCsv,
   startTournamentMatch,
+  updateTournamentMatch,
 } from '@/services/tournamentService'
 import {
   buildTournamentTemplateWorkbook,
@@ -59,6 +61,8 @@ const activeTab = ref('partidos')
 const showMatchModal = ref(false)
 const creatingMatch = ref(false)
 const matchFormError = ref<string | null>(null)
+const editingMatchId = ref<string | null>(null)
+const deletingMatchId = ref<string | null>(null)
 
 const matchForm = reactive({
   local_team: '',
@@ -75,6 +79,14 @@ const matchFormRules: Record<string, Rule[]> = {
   court: [{ required: true, message: 'Ingresa la cancha' }],
   game_time: [{ required: true, message: 'Ingresa el tiempo de juego' }],
 }
+
+const matchModalTitle = computed(() =>
+  editingMatchId.value ? 'Editar partido' : 'Agregar partido',
+)
+
+const matchSubmitLabel = computed(() =>
+  editingMatchId.value ? 'Guardar cambios' : 'Guardar partido',
+)
 
 let pollTimer: number | null = null
 
@@ -145,13 +157,22 @@ async function load(options: { silent?: boolean } = {}): Promise<void> {
 }
 
 async function refresh(): Promise<void> {
+  if (!matches.value.length) return
   await load({ silent: true })
 }
 
 function onVisibilityChange(): void {
-  if (document.visibilityState === 'visible') {
+  if (document.visibilityState === 'visible' && matches.value.length > 0) {
     void refresh()
   }
+}
+
+function toDatetimeLocal(iso: string | null): string {
+  if (!iso) return ''
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
 function statusLabel(status: TournamentMatch['status']): string {
@@ -273,6 +294,7 @@ async function onCsvUpload(file: File): Promise<void> {
 }
 
 function resetMatchForm(): void {
+  editingMatchId.value = null
   matchForm.local_team = ''
   matchForm.visit_team = ''
   matchForm.category = ''
@@ -291,6 +313,26 @@ function openMatchModal(): void {
   showMatchModal.value = true
 }
 
+function openEditMatchModal(tm: TournamentMatch): void {
+  if (!canEditMatches.value) {
+    message.warning('El torneo está finalizado. No se pueden editar partidos.')
+    return
+  }
+  if (tm.status === 'live') {
+    message.warning('No se puede editar un partido en vivo.')
+    return
+  }
+  editingMatchId.value = tm.id
+  matchForm.local_team = tm.local_team
+  matchForm.visit_team = tm.visit_team
+  matchForm.category = tm.category ?? ''
+  matchForm.court = tm.court
+  matchForm.game_time = normalizeGameTime(tm.game_time)
+  matchForm.scheduled_at = toDatetimeLocal(tm.scheduled_at)
+  matchFormError.value = null
+  showMatchModal.value = true
+}
+
 function goToImport(): void {
   activeTab.value = 'configuracion'
 }
@@ -298,30 +340,74 @@ function goToImport(): void {
 async function submitMatch(): Promise<void> {
   if (!tournament.value) return
   if (!canEditMatches.value) {
-    matchFormError.value = 'El torneo está finalizado. No se pueden agregar partidos.'
+    matchFormError.value = 'El torneo está finalizado. No se pueden modificar partidos.'
     return
   }
 
   creatingMatch.value = true
   matchFormError.value = null
   try {
-    await createTournamentMatch(tournament.value.id, {
+    const payload = {
       local_team: matchForm.local_team,
       visit_team: matchForm.visit_team,
       court: matchForm.court,
       game_time: matchForm.game_time,
       category: matchForm.category,
       scheduled_at: matchForm.scheduled_at || null,
-    })
+    }
+
+    if (editingMatchId.value) {
+      await updateTournamentMatch(editingMatchId.value, payload)
+      message.success('Partido actualizado.')
+    } else {
+      await createTournamentMatch(tournament.value.id, payload)
+      message.success('Partido agregado al calendario.')
+    }
+
     showMatchModal.value = false
-    message.success('Partido agregado al calendario.')
+    resetMatchForm()
     await load({ silent: true })
   } catch (err) {
     matchFormError.value =
-      err instanceof Error ? err.message : 'No se pudo crear el partido.'
+      err instanceof Error ? err.message : 'No se pudo guardar el partido.'
   } finally {
     creatingMatch.value = false
   }
+}
+
+function confirmDeleteMatch(tm: TournamentMatch): void {
+  if (!canEditMatches.value) {
+    message.warning('El torneo está finalizado. No se pueden eliminar partidos.')
+    return
+  }
+  if (tm.status === 'live') {
+    message.warning('No se puede eliminar un partido en vivo. Finalízalo primero.')
+    return
+  }
+
+  Modal.confirm({
+    title: '¿Eliminar este partido?',
+    content: `Se eliminará ${tm.local_team} vs ${tm.visit_team} del calendario.`,
+    okText: 'Eliminar',
+    okType: 'danger',
+    cancelText: 'Cancelar',
+    async onOk() {
+      deletingMatchId.value = tm.id
+      try {
+        await deleteTournamentMatch(tm)
+        message.success('Partido eliminado.')
+        await load({ silent: true })
+      } catch (err) {
+        Modal.error({
+          title: 'No se pudo eliminar el partido',
+          content: err instanceof Error ? err.message : 'Error desconocido',
+        })
+        throw err
+      } finally {
+        deletingMatchId.value = null
+      }
+    },
+  })
 }
 
 async function clearTournamentData(): Promise<void> {
@@ -519,7 +605,12 @@ onUnmounted(() => {
               <h2>Calendario</h2>
               <div class="detail__section-actions">
                 <span v-if="refreshing" class="detail__refreshing">Actualizando…</span>
-                <a-button size="small" :loading="refreshing" @click="refresh">
+                <a-button
+                  v-if="matches.length"
+                  size="small"
+                  :loading="refreshing"
+                  @click="refresh"
+                >
                   Actualizar
                 </a-button>
                 <a-button
@@ -571,7 +662,7 @@ onUnmounted(() => {
                     <span v-else>—</span>
                   </template>
                 </a-table-column>
-                <a-table-column title="Acciones" :width="120" fixed="right">
+                <a-table-column title="Acciones" :width="150" fixed="right">
                   <template #default="{ record }">
                     <div class="detail__match-actions">
                       <a-button
@@ -594,6 +685,37 @@ onUnmounted(() => {
                       >
                         Controles
                       </a-button>
+                      <a-dropdown
+                        v-if="canEditMatches && record.status !== 'live'"
+                        :trigger="['click']"
+                        placement="bottomRight"
+                      >
+                        <a-button
+                          size="small"
+                          class="detail__more-btn"
+                          :loading="deletingMatchId === record.id"
+                          aria-label="Más acciones"
+                        >
+                          ⋯
+                        </a-button>
+                        <template #overlay>
+                          <a-menu>
+                            <a-menu-item
+                              key="edit"
+                              @click="openEditMatchModal(record)"
+                            >
+                              Editar
+                            </a-menu-item>
+                            <a-menu-item
+                              key="delete"
+                              danger
+                              @click="confirmDeleteMatch(record)"
+                            >
+                              Eliminar
+                            </a-menu-item>
+                          </a-menu>
+                        </template>
+                      </a-dropdown>
                     </div>
                   </template>
                 </a-table-column>
@@ -806,7 +928,7 @@ onUnmounted(() => {
 
     <a-modal
       v-model:open="showMatchModal"
-      title="Agregar partido"
+      :title="matchModalTitle"
       :footer="null"
       destroy-on-close
       @cancel="resetMatchForm"
@@ -877,11 +999,14 @@ onUnmounted(() => {
         />
 
         <div class="match-form__footer">
-          <a-button :disabled="creatingMatch" @click="showMatchModal = false">
+          <a-button
+            :disabled="creatingMatch"
+            @click="showMatchModal = false; resetMatchForm()"
+          >
             Cancelar
           </a-button>
           <a-button type="primary" html-type="submit" :loading="creatingMatch">
-            Guardar partido
+            {{ matchSubmitLabel }}
           </a-button>
         </div>
       </a-form>
@@ -1001,6 +1126,14 @@ onUnmounted(() => {
   flex-wrap: wrap;
   gap: 0.35rem;
   align-items: center;
+}
+
+.detail__more-btn {
+  min-width: 2rem;
+  padding-inline: 0.35rem;
+  font-size: 1.1rem;
+  line-height: 1;
+  letter-spacing: 0.05em;
 }
 
 .detail__empty {

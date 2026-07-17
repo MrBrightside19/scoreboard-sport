@@ -303,6 +303,60 @@ export async function createTournamentMatch(
   return rows[0]
 }
 
+export type TournamentMatchInput = {
+  local_team: string
+  visit_team: string
+  court: string
+  game_time?: string
+  category?: string | null
+  scheduled_at?: string | null
+}
+
+export async function updateTournamentMatch(
+  matchId: string,
+  input: TournamentMatchInput,
+): Promise<TournamentMatch> {
+  const rows = await supabaseRest<TournamentMatch[]>(
+    `tournament_matches?id=eq.${matchId}`,
+    {
+      method: 'PATCH',
+      body: {
+        local_team: input.local_team.trim(),
+        visit_team: input.visit_team.trim(),
+        game_time: normalizeGameTime(input.game_time || '20:00'),
+        court: input.court.trim(),
+        category: input.category?.trim() || null,
+        scheduled_at: parseScheduledAt(input.scheduled_at ?? undefined),
+      },
+      prefer: 'return=representation',
+    },
+  )
+
+  if (!rows[0]) {
+    throw new Error('No se pudo actualizar el partido.')
+  }
+
+  return rows[0]
+}
+
+export async function deleteTournamentMatch(
+  tournamentMatch: TournamentMatch,
+): Promise<void> {
+  if (tournamentMatch.status === 'live') {
+    throw new Error('No se puede eliminar un partido en vivo. Finalízalo primero.')
+  }
+
+  await supabaseRest(`tournament_matches?id=eq.${tournamentMatch.id}`, {
+    method: 'DELETE',
+  })
+
+  if (tournamentMatch.match_id) {
+    await supabaseRest(`matches?id=eq.${tournamentMatch.match_id}`, {
+      method: 'DELETE',
+    })
+  }
+}
+
 /** Cierra partidos en vivo de la misma cancha (p. ej. si se salió sin finalizar). */
 export async function finishLiveMatchesOnCourt(
   tournamentId: string,
