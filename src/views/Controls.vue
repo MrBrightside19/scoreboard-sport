@@ -16,7 +16,7 @@ import { isSupabaseConfigured } from '@/services/supabaseClient'
 import { readMatchIdFromStorage, writeCourtActiveMatch, clearMatchIdFromStorage } from '@/utils/localSync'
 import { normalizeGameTime, parseTimeToSeconds } from '@/utils/clock'
 import { playCountdownBeep } from '@/utils/countdownBeep'
-import { buildAppUrl, tournamentBoardPath, tournamentLivePath, tournamentOverlayPath } from '@/utils/appUrl'
+import { buildAppUrl, tournamentBoardPath } from '@/utils/appUrl'
 import { getLiveClockUpdateMs } from '@/config/poll'
 import { MAX_PERIODS, isGoalPending, DEFAULT_INTERMISSION_TIME } from '@/types/hockeyScoreboard'
 import type { TeamPenalty } from '@/types/hockeyScoreboard'
@@ -498,18 +498,12 @@ async function publish(): Promise<void> {
   }
 }
 
-type LinkType = 'live' | 'overlay' | 'live-torneo' | 'overlay-torneo' | 'board-torneo'
+type LinkType = 'live' | 'overlay' | 'board-torneo'
 
 function copyLink(type: LinkType): void {
   let path = ''
 
-  if (type === 'overlay-torneo' && tournamentContext.value) {
-    const { tournamentId, court } = tournamentContext.value
-    path = tournamentOverlayPath(tournamentId, court)
-  } else if (type === 'live-torneo' && tournamentContext.value) {
-    const { tournamentId, court } = tournamentContext.value
-    path = tournamentLivePath(tournamentId, court)
-  } else if (type === 'board-torneo' && tournamentContext.value) {
+  if (type === 'board-torneo' && tournamentContext.value) {
     const { tournamentId, court } = tournamentContext.value
     path = tournamentBoardPath(tournamentId, court)
   } else if (type === 'live') {
@@ -643,12 +637,6 @@ onUnmounted(() => {
         <template v-if="tournamentContext">
           <a-button @click="copyLink('board-torneo')">
             {{ copied === 'board-torneo' ? '¡Copiado!' : 'Copiar TV remoto' }}
-          </a-button>
-          <a-button @click="copyLink('overlay-torneo')">
-            {{ copied === 'overlay-torneo' ? '¡Copiado!' : 'Copiar OBS torneo' }}
-          </a-button>
-          <a-button @click="copyLink('live-torneo')">
-            {{ copied === 'live-torneo' ? '¡Copiado!' : 'Copiar Live torneo' }}
           </a-button>
         </template>
         <template v-else>
@@ -908,9 +896,10 @@ onUnmounted(() => {
                 Cancha {{ tournamentContext.court }}
               </p>
               <p class="controls__tournament-hint controls__tournament-hint--info">
-                Los enlaces <strong>TV remoto</strong>, <strong>OBS torneo</strong> y <strong>Live torneo</strong>
-                son fijos para esta cancha. El marcador TV se actualiza al instante si está en el mismo navegador;
+                El enlace <strong>TV remoto</strong> es fijo para esta cancha.
+                El marcador TV se actualiza al instante si está en el mismo navegador;
                 al pasar de partido cambia solo sin cerrar la pestaña.
+                Los enlaces OBS y Live están en Configuración del torneo.
               </p>
               <a-alert
                 v-if="advanceError"

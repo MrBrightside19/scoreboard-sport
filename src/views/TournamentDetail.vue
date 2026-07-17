@@ -22,7 +22,7 @@ import {
   parseTournamentImportFile,
 } from '@/utils/tournamentImport'
 import { normalizeGameTime } from '@/utils/clock'
-import { buildAppUrl, tournamentOverlayPath } from '@/utils/appUrl'
+import { buildAppUrl, tournamentLivePath, tournamentOverlayPath } from '@/utils/appUrl'
 import { calculateStandings } from '@/utils/standings'
 import { writeMatchIdToStorage } from '@/utils/localSync'
 import {
@@ -55,7 +55,7 @@ const refreshing = ref(false)
 const importing = ref(false)
 const clearing = ref(false)
 const deleting = ref(false)
-const copiedCourt = ref<string | null>(null)
+const copiedLinkKey = ref<string | null>(null)
 const assistantEmail = ref('')
 const assigningAssistant = ref(false)
 const removingAssistantId = ref<string | null>(null)
@@ -513,12 +513,21 @@ async function finishTournament(): Promise<void> {
   })
 }
 
-function copyOverlayForCourt(court: string): void {
+function copyCourtLink(
+  court: string,
+  type: 'obs' | 'live',
+): void {
   if (!tournament.value) return
-  const url = buildAppUrl(tournamentOverlayPath(tournament.value.id, court))
-  void navigator.clipboard.writeText(url)
-  copiedCourt.value = court
-  setTimeout(() => { copiedCourt.value = null }, 2000)
+  const path =
+    type === 'obs'
+      ? tournamentOverlayPath(tournament.value.id, court)
+      : tournamentLivePath(tournament.value.id, court)
+  void navigator.clipboard.writeText(buildAppUrl(path))
+  const key = `${court}-${type}`
+  copiedLinkKey.value = key
+  setTimeout(() => {
+    if (copiedLinkKey.value === key) copiedLinkKey.value = null
+  }, 2000)
 }
 
 async function submitAssistant(): Promise<void> {
@@ -852,30 +861,49 @@ onUnmounted(() => {
               </div>
             </section>
 
-            <section class="config__panel" aria-labelledby="config-obs">
+            <section class="config__panel" aria-labelledby="config-enlaces">
               <div class="config__panel-head">
                 <div>
-                  <h2 id="config-obs">Overlay OBS por cancha</h2>
+                  <h2 id="config-enlaces">Enlaces por cancha</h2>
                   <p class="config__desc">
-                    Enlaces fijos para OBS. No cambian entre partidos de la misma cancha.
+                    Enlaces fijos de OBS y Live. No cambian entre partidos de la misma cancha.
                   </p>
                 </div>
               </div>
 
-              <div v-if="streamCourts.length" class="config__list config__list--grid">
+              <div v-if="streamCourts.length" class="config__list">
                 <div
                   v-for="court in streamCourts"
                   :key="court"
-                  class="config__row"
+                  class="config__row config__row--links"
                 >
                   <span class="config__row-main">Cancha {{ court }}</span>
-                  <a-button size="small" @click="copyOverlayForCourt(court)">
-                    {{ copiedCourt === court ? '¡Copiado!' : 'Copiar URL' }}
-                  </a-button>
+                  <div class="config__row-actions">
+                    <a-button
+                      size="small"
+                      @click="copyCourtLink(court, 'obs')"
+                    >
+                      {{
+                        copiedLinkKey === `${court}-obs`
+                          ? '¡Copiado!'
+                          : 'Copiar OBS'
+                      }}
+                    </a-button>
+                    <a-button
+                      size="small"
+                      @click="copyCourtLink(court, 'live')"
+                    >
+                      {{
+                        copiedLinkKey === `${court}-live`
+                          ? '¡Copiado!'
+                          : 'Copiar Live'
+                      }}
+                    </a-button>
+                  </div>
                 </div>
               </div>
               <p v-else class="config__empty">
-                Importa el calendario para generar los enlaces por cancha.
+                Importa el calendario o agrega partidos para generar los enlaces por cancha.
               </p>
             </section>
 
@@ -1296,6 +1324,17 @@ onUnmounted(() => {
   gap: 0.4rem;
   min-width: 0;
   font-size: 0.92rem;
+}
+
+.config__row--links {
+  flex-wrap: wrap;
+}
+
+.config__row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  justify-content: flex-end;
 }
 
 .config__badge {
