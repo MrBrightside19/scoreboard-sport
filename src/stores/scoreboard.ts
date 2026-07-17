@@ -391,6 +391,10 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     patch({ localLogo, visitLogo })
   }
 
+  function setTeamColors(localColor: string, visitColor: string): void {
+    patch({ localColor, visitColor })
+  }
+
   function setGameTime(time: string): void {
     patch({ timeGame: normalizeGameTime(time) })
   }
@@ -553,6 +557,7 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     setIntermissionTime,
     setTeams,
     setTeamLogos,
+    setTeamColors,
     setGameTime,
     addPenalty,
     removePenalty,

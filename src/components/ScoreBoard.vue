@@ -235,7 +235,14 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
 
 <template>
   <!-- NHL-style broadcast bug (OBS overlay) -->
-  <div v-if="overlay" class="nhl-bug">
+  <div
+    v-if="overlay"
+    class="nhl-bug"
+    :style="{
+      '--local': state.localColor || '#3da5ff',
+      '--visit': state.visitColor || '#ff5a36',
+    }"
+  >
     <div class="nhl-bug__row">
       <div class="nhl-bug__side nhl-bug__side--local">
         <div v-if="localPenalties.length" class="nhl-bug__timers">
@@ -347,6 +354,10 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
     v-else-if="tv"
     class="scoreboard scoreboard--tv"
     :class="{ 'scoreboard--compact': compact }"
+    :style="{
+      '--local-color': state.localColor || '#00d4ff',
+      '--visit-color': state.visitColor || '#ff6b35',
+    }"
   >
     <div class="scoreboard__glow" />
 
@@ -418,6 +429,10 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
     v-else
     class="scoreboard scoreboard--live"
     :class="{ 'scoreboard--compact': compact }"
+    :style="{
+      '--local-color': state.localColor || '#00d4ff',
+      '--visit-color': state.visitColor || '#ff6b35',
+    }"
   >
     <div class="scoreboard__glow" />
 

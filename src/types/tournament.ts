@@ -68,6 +68,29 @@ export interface TournamentRosterPlayer {
   created_at: string
 }
 
+export interface TournamentTeam {
+  id: string
+  tournament_id: string
+  team: string
+  color: string
+  logo_url: string
+  created_at: string
+}
+
+export const DEFAULT_TEAM_COLOR_LOCAL = '#3da5ff'
+export const DEFAULT_TEAM_COLOR_VISIT = '#ff5a36'
+
+export const TEAM_COLOR_PALETTE = [
+  '#3da5ff',
+  '#ff5a36',
+  '#52c41a',
+  '#faad14',
+  '#722ed1',
+  '#eb2f96',
+  '#13c2c2',
+  '#a0d911',
+] as const
+
 export interface TournamentImportPayload {
   matches: CsvMatchRow[]
   players: CsvPlayerRow[]

@@ -40,6 +40,8 @@ export interface ScoreboardState {
   visitTeam: string
   localLogo: string
   visitLogo: string
+  localColor: string
+  visitColor: string
   goalLocal: number
   goalVisit: number
   gamePeriod: number
@@ -64,6 +66,8 @@ export const DEFAULT_INTERMISSION_TIME = '05:00'
 export const DEFAULT_PENALTY_TYPE_ID = 'minor'
 export const MAX_PERIODS = 3
 export const MAX_PENALTIES_PER_TEAM = 2
+export const DEFAULT_LOCAL_COLOR = '#3da5ff'
+export const DEFAULT_VISIT_COLOR = '#ff5a36'
 
 export function createDefaultScoreboardState(
   localTeam = 'Local',
@@ -75,6 +79,8 @@ export function createDefaultScoreboardState(
     visitTeam,
     localLogo: '',
     visitLogo: '',
+    localColor: DEFAULT_LOCAL_COLOR,
+    visitColor: DEFAULT_VISIT_COLOR,
     goalLocal: 0,
     goalVisit: 0,
     gamePeriod: 1,
@@ -155,6 +161,8 @@ export function normalizeScoreboardState(raw: unknown): ScoreboardState {
     visitTeam: (source.visitTeam as string) ?? base.visitTeam,
     localLogo: String(source.localLogo ?? base.localLogo),
     visitLogo: String(source.visitLogo ?? base.visitLogo),
+    localColor: String(source.localColor ?? base.localColor) || DEFAULT_LOCAL_COLOR,
+    visitColor: String(source.visitColor ?? base.visitColor) || DEFAULT_VISIT_COLOR,
     goalLocal: typeof source.goalLocal === 'number' ? source.goalLocal : base.goalLocal,
     goalVisit: typeof source.goalVisit === 'number' ? source.goalVisit : base.goalVisit,
     gamePeriod: typeof source.gamePeriod === 'number' ? source.gamePeriod : base.gamePeriod,

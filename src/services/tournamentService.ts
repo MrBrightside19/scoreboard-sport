@@ -5,6 +5,12 @@ import type {
   TournamentCourtStream,
   TournamentMatch,
   TournamentRosterPlayer,
+  TournamentTeam,
+} from '@/types/tournament'
+import {
+  DEFAULT_TEAM_COLOR_LOCAL,
+  DEFAULT_TEAM_COLOR_VISIT,
+  TEAM_COLOR_PALETTE,
 } from '@/types/tournament'
 import type { RosterPlayer, ScoreboardState } from '@/types/hockeyScoreboard'
 import { createDefaultScoreboardState } from '@/types/hockeyScoreboard'
@@ -193,6 +199,10 @@ export async function clearTournamentCalendar(tournamentId: string): Promise<voi
     method: 'DELETE',
   })
 
+  await supabaseRest(`tournament_teams?tournament_id=eq.${tournamentId}`, {
+    method: 'DELETE',
+  })
+
   if (matchIds.length > 0) {
     await supabaseRest(`matches?id=in.(${matchIds.join(',')})`, {
       method: 'DELETE',
@@ -220,6 +230,125 @@ export async function fetchTournamentRosters(
   return supabaseRest<TournamentRosterPlayer[]>(
     `tournament_rosters?tournament_id=eq.${tournamentId}&select=*&order=team.asc,number.asc`,
   )
+}
+
+export async function fetchTournamentTeams(
+  tournamentId: string,
+): Promise<TournamentTeam[]> {
+  return supabaseRest<TournamentTeam[]>(
+    `tournament_teams?tournament_id=eq.${tournamentId}&select=*&order=team.asc`,
+  )
+}
+
+export function findTournamentTeam(
+  teams: TournamentTeam[],
+  teamName: string,
+): TournamentTeam | undefined {
+  const key = normalizeLabel(teamName)
+  return teams.find((item) => normalizeLabel(item.team) === key)
+}
+
+/** Crea filas de equipos a partir del calendario y plantillas, sin pisar color/logo existentes. */
+export async function syncTournamentTeams(
+  tournamentId: string,
+): Promise<TournamentTeam[]> {
+  const [matches, rosters, existing] = await Promise.all([
+    fetchTournamentMatches(tournamentId),
+    fetchTournamentRosters(tournamentId),
+    fetchTournamentTeams(tournamentId),
+  ])
+
+  const names = new Map<string, string>()
+  for (const match of matches) {
+    const local = match.local_team.trim()
+    const visit = match.visit_team.trim()
+    if (local) names.set(normalizeLabel(local), local)
+    if (visit) names.set(normalizeLabel(visit), visit)
+  }
+  for (const player of rosters) {
+    const team = player.team.trim()
+    if (team) names.set(normalizeLabel(team), team)
+  }
+
+  const existingByKey = new Map(
+    existing.map((team) => [normalizeLabel(team.team), team] as const),
+  )
+
+  const missing = [...names.entries()].filter(([key]) => !existingByKey.has(key))
+  if (missing.length > 0) {
+    const payload = missing.map(([, team], index) => ({
+      tournament_id: tournamentId,
+      team,
+      color: TEAM_COLOR_PALETTE[(existing.length + index) % TEAM_COLOR_PALETTE.length],
+      logo_url: '',
+    }))
+    await supabaseRest('tournament_teams', {
+      method: 'POST',
+      body: payload,
+    })
+  }
+
+  return fetchTournamentTeams(tournamentId)
+}
+
+export async function updateTournamentTeam(
+  teamId: string,
+  input: { color?: string; logo_url?: string; team?: string },
+): Promise<TournamentTeam> {
+  const body: Record<string, string> = {}
+  if (input.color !== undefined) body.color = input.color.trim() || DEFAULT_TEAM_COLOR_LOCAL
+  if (input.logo_url !== undefined) body.logo_url = input.logo_url.trim()
+  if (input.team !== undefined) body.team = input.team.trim()
+
+  const rows = await supabaseRest<TournamentTeam[]>(
+    `tournament_teams?id=eq.${teamId}`,
+    {
+      method: 'PATCH',
+      body,
+      prefer: 'return=representation',
+    },
+  )
+
+  if (!rows[0]) {
+    throw new Error('No se pudo actualizar el equipo.')
+  }
+
+  return rows[0]
+}
+
+export type TournamentRosterInput = {
+  number?: string
+  name?: string
+  last_name?: string
+  category?: string | null
+  position?: string | null
+}
+
+export async function updateTournamentRosterPlayer(
+  playerId: string,
+  input: TournamentRosterInput,
+): Promise<TournamentRosterPlayer> {
+  const body: Record<string, string | null> = {}
+  if (input.number !== undefined) body.number = input.number.trim()
+  if (input.name !== undefined) body.name = input.name.trim()
+  if (input.last_name !== undefined) body.last_name = input.last_name.trim()
+  if (input.category !== undefined) body.category = input.category?.trim() || null
+  if (input.position !== undefined) body.position = input.position?.trim() || null
+
+  const rows = await supabaseRest<TournamentRosterPlayer[]>(
+    `tournament_rosters?id=eq.${playerId}`,
+    {
+      method: 'PATCH',
+      body,
+      prefer: 'return=representation',
+    },
+  )
+
+  if (!rows[0]) {
+    throw new Error('No se pudo actualizar el jugador.')
+  }
+
+  return rows[0]
 }
 
 export async function importTournamentCsv(
@@ -420,9 +549,10 @@ export async function startTournamentMatch(
   )
 
   try {
-    const tournamentPlayers = await fetchTournamentRosters(
-      tournamentMatch.tournament_id,
-    )
+    const [tournamentPlayers, tournamentTeams] = await Promise.all([
+      fetchTournamentRosters(tournamentMatch.tournament_id),
+      fetchTournamentTeams(tournamentMatch.tournament_id),
+    ])
     state.rosterLocal = rosterPlayersForMatch(
       tournamentPlayers,
       tournamentMatch.local_team,
@@ -433,8 +563,15 @@ export async function startTournamentMatch(
       tournamentMatch.visit_team,
       tournamentMatch.category,
     )
+
+    const localMeta = findTournamentTeam(tournamentTeams, tournamentMatch.local_team)
+    const visitMeta = findTournamentTeam(tournamentTeams, tournamentMatch.visit_team)
+    state.localLogo = localMeta?.logo_url ?? ''
+    state.visitLogo = visitMeta?.logo_url ?? ''
+    state.localColor = localMeta?.color || DEFAULT_TEAM_COLOR_LOCAL
+    state.visitColor = visitMeta?.color || DEFAULT_TEAM_COLOR_VISIT
   } catch {
-    // Si falla la carga de plantillas, el partido inicia sin roster importado.
+    // Si falla la carga de plantillas/equipos, el partido inicia sin ellos.
   }
 
   await createMatch(matchId, state, organizerId)

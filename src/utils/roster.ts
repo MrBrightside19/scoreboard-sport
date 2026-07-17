@@ -15,6 +15,11 @@ export function roleLabel(role: PlayerRole): string {
   return 'Jugador'
 }
 
+/** Texto de posición para guardar en plantilla del torneo (import/overlay). */
+export function roleToPositionText(role: PlayerRole): string {
+  return roleLabel(role)
+}
+
 /** Convierte el texto de "posición / tipo de jugador" del import en un rol. */
 export function parseRoleFromText(value: string | null | undefined): PlayerRole {
   const normalized = (value ?? '')

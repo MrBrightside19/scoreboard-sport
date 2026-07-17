@@ -14,6 +14,7 @@ import {
   finishTournament as finishTournamentService,
   importTournamentCsv,
   startTournamentMatch,
+  syncTournamentTeams,
   updateTournamentMatch,
 } from '@/services/tournamentService'
 import {
@@ -40,6 +41,7 @@ import type {
 } from '@/types/tournament'
 import { MAX_TOURNAMENT_ASSISTANTS } from '@/types/tournament'
 import TournamentStandings from '@/components/TournamentStandings.vue'
+import TournamentTeamsPanel from '@/components/TournamentTeamsPanel.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -239,6 +241,7 @@ async function importCalendarRows(
       await clearTournamentCalendar(tournament.value.id)
     }
     await importTournamentCsv(tournament.value.id, matchRows, players)
+    await syncTournamentTeams(tournament.value.id)
     await load()
 
     const count = matchRows.length
@@ -358,9 +361,11 @@ async function submitMatch(): Promise<void> {
 
     if (editingMatchId.value) {
       await updateTournamentMatch(editingMatchId.value, payload)
+      await syncTournamentTeams(tournament.value.id)
       message.success('Partido actualizado.')
     } else {
       await createTournamentMatch(tournament.value.id, payload)
+      await syncTournamentTeams(tournament.value.id)
       message.success('Partido agregado al calendario.')
     }
 
@@ -731,6 +736,13 @@ onUnmounted(() => {
             <h2>Tabla de posiciones</h2>
             <TournamentStandings :standings="standings" />
           </section>
+        </a-tab-pane>
+
+        <a-tab-pane key="equipos" tab="Equipos">
+          <TournamentTeamsPanel
+            :tournament-id="tournament.id"
+            :can-edit="canEditMatches"
+          />
         </a-tab-pane>
 
         <a-tab-pane key="configuracion" tab="Configuración">

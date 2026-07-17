@@ -698,6 +698,13 @@ onUnmounted(() => {
                     placeholder="URL logo local"
                     @update:value="(v: string) => store.setTeamLogos(v, store.state.visitLogo)"
                   />
+                  <a-input
+                    :value="store.state.localColor"
+                    type="color"
+                    size="small"
+                    class="controls__color"
+                    @update:value="(v: string) => store.setTeamColors(v, store.state.visitColor)"
+                  />
                   <div class="controls__score-controls">
                     <a-button size="large" @click="store.removeLastGoal('local')">−</a-button>
                     <span class="controls__score">{{ store.state.goalLocal }}</span>
@@ -721,6 +728,13 @@ onUnmounted(() => {
                     size="small"
                     placeholder="URL logo visita"
                     @update:value="(v: string) => store.setTeamLogos(store.state.localLogo, v)"
+                  />
+                  <a-input
+                    :value="store.state.visitColor"
+                    type="color"
+                    size="small"
+                    class="controls__color"
+                    @update:value="(v: string) => store.setTeamColors(store.state.localColor, v)"
                   />
                   <div class="controls__score-controls">
                     <a-button size="large" @click="store.removeLastGoal('visit')">−</a-button>
@@ -1091,6 +1105,14 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+}
+
+.controls__color {
+  width: 100%;
+  max-width: 4.5rem;
+  height: 2rem;
+  padding: 0.15rem;
+  cursor: pointer;
 }
 
 .controls__side-label {
