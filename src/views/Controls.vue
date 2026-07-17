@@ -623,7 +623,7 @@ onUnmounted(() => {
           }"
           target="_blank"
         >
-          <a-button type="primary">Abrir Marcador TV</a-button>
+          <a-button type="primary">Abrir TV local</a-button>
         </router-link>
         <router-link
           v-else
@@ -638,11 +638,11 @@ onUnmounted(() => {
           }"
           target="_blank"
         >
-          <a-button>Abrir Marcador TV</a-button>
+          <a-button>Abrir TV local</a-button>
         </router-link>
         <template v-if="tournamentContext">
           <a-button @click="copyLink('board-torneo')">
-            {{ copied === 'board-torneo' ? '¡Copiado!' : 'Copiar TV torneo' }}
+            {{ copied === 'board-torneo' ? '¡Copiado!' : 'Copiar TV remoto' }}
           </a-button>
           <a-button @click="copyLink('overlay-torneo')">
             {{ copied === 'overlay-torneo' ? '¡Copiado!' : 'Copiar OBS torneo' }}
@@ -908,7 +908,7 @@ onUnmounted(() => {
                 Cancha {{ tournamentContext.court }}
               </p>
               <p class="controls__tournament-hint controls__tournament-hint--info">
-                Los enlaces <strong>TV torneo</strong>, <strong>OBS torneo</strong> y <strong>Live torneo</strong>
+                Los enlaces <strong>TV remoto</strong>, <strong>OBS torneo</strong> y <strong>Live torneo</strong>
                 son fijos para esta cancha. El marcador TV se actualiza al instante si está en el mismo navegador;
                 al pasar de partido cambia solo sin cerrar la pestaña.
               </p>
