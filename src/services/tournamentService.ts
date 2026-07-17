@@ -120,6 +120,53 @@ export async function updateTournamentStatus(
   })
 }
 
+/** Cierra partidos en vivo/sin jugar y marca el torneo como finalizado. */
+export async function finishTournament(tournamentId: string): Promise<void> {
+  const matches = await fetchTournamentMatches(tournamentId)
+
+  for (const tm of matches.filter((m) => m.status === 'live')) {
+    if (tm.match_id) {
+      const record = await fetchMatchState(tm.match_id)
+      const fallback = createDefaultScoreboardState(
+        tm.local_team,
+        tm.visit_team,
+        normalizeGameTime(tm.game_time),
+      )
+      const state: ScoreboardState = record?.state
+        ? {
+            ...record.state,
+            goalLocal: record.goal_local ?? record.state.goalLocal,
+            goalVisit: record.goal_visit ?? record.state.goalVisit,
+          }
+        : fallback
+      await finishTournamentMatch(tm, state)
+    } else {
+      await supabaseRest(`tournament_matches?id=eq.${tm.id}`, {
+        method: 'PATCH',
+        body: {
+          status: 'finished',
+          goal_local: 0,
+          goal_visit: 0,
+        },
+      })
+    }
+  }
+
+  await supabaseRest(
+    `tournament_matches?tournament_id=eq.${tournamentId}&status=eq.scheduled`,
+    {
+      method: 'PATCH',
+      body: {
+        status: 'finished',
+        goal_local: 0,
+        goal_visit: 0,
+      },
+    },
+  )
+
+  await updateTournamentStatus(tournamentId, 'finished')
+}
+
 export async function fetchTournamentMatches(
   tournamentId: string,
 ): Promise<TournamentMatch[]> {
@@ -157,6 +204,14 @@ export async function clearTournamentCalendar(tournamentId: string): Promise<voi
   })
 
   await updateTournamentStatus(tournamentId, 'draft')
+}
+
+/** Elimina el torneo y todos sus datos asociados. Solo el organizador (RLS). */
+export async function deleteTournament(tournamentId: string): Promise<void> {
+  await clearTournamentCalendar(tournamentId)
+  await supabaseRest(`tournaments?id=eq.${tournamentId}`, {
+    method: 'DELETE',
+  })
 }
 
 export async function fetchTournamentRosters(
@@ -251,6 +306,14 @@ export async function startTournamentMatch(
   tournamentMatch: TournamentMatch,
   organizerId: string,
 ): Promise<string> {
+  const tournament = await fetchTournament(tournamentMatch.tournament_id)
+  if (!tournament) {
+    throw new Error('Torneo no encontrado.')
+  }
+  if (tournament.status === 'finished') {
+    throw new Error('El torneo ya está finalizado. No se pueden iniciar partidos.')
+  }
+
   await finishLiveMatchesOnCourt(
     tournamentMatch.tournament_id,
     tournamentMatch.court,

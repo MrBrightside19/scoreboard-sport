@@ -5,11 +5,12 @@ import { Modal, message } from 'ant-design-vue'
 import { useAuthStore } from '@/stores/auth'
 import {
   clearTournamentCalendar,
+  deleteTournament,
   fetchTournament,
   fetchTournamentMatches,
+  finishTournament as finishTournamentService,
   importTournamentCsv,
   startTournamentMatch,
-  updateTournamentStatus,
 } from '@/services/tournamentService'
 import {
   buildTournamentTemplateWorkbook,
@@ -46,6 +47,8 @@ const matches = ref<TournamentMatch[]>([])
 const loading = ref(true)
 const refreshing = ref(false)
 const importing = ref(false)
+const clearing = ref(false)
+const deleting = ref(false)
 const copiedCourt = ref<string | null>(null)
 const assistantEmail = ref('')
 const assigningAssistant = ref(false)
@@ -143,6 +146,10 @@ function statusColor(status: TournamentMatch['status']): string {
 
 function openControls(tm: TournamentMatch): void {
   if (!tm.match_id) return
+  if (tournament.value?.status === 'finished') {
+    message.warning('El torneo está finalizado. No se pueden abrir los controles.')
+    return
+  }
   writeMatchIdToStorage(tm.match_id)
   window.open(
     router.resolve({
@@ -240,17 +247,102 @@ async function onCsvUpload(file: File): Promise<void> {
   await importCalendarRows(payload.matches, payload.players)
 }
 
+async function clearTournamentData(): Promise<void> {
+  if (!tournament.value) return
+
+  Modal.confirm({
+    title: '¿Eliminar la información del torneo?',
+    content:
+      'Se eliminarán todos los partidos, plantillas de jugadores, resultados y enlaces de cancha. El torneo volverá a estado borrador. Esta acción no se puede deshacer.',
+    okText: 'Eliminar información',
+    okType: 'danger',
+    cancelText: 'Cancelar',
+    async onOk() {
+      if (!tournament.value) return
+      clearing.value = true
+      try {
+        await clearTournamentCalendar(tournament.value.id)
+        message.success('Información del torneo eliminada.')
+        await load()
+      } catch (err) {
+        Modal.error({
+          title: 'No se pudo eliminar',
+          content: err instanceof Error ? err.message : 'Error desconocido',
+        })
+        throw err
+      } finally {
+        clearing.value = false
+      }
+    },
+  })
+}
+
+async function removeTournamentCompletely(): Promise<void> {
+  if (!tournament.value || !isOwner.value) return
+
+  const name = tournament.value.name
+  Modal.confirm({
+    title: '¿Eliminar el torneo por completo?',
+    content:
+      `Se eliminará permanentemente «${name}» junto con partidos, plantillas, asistentes y resultados. Esta acción no se puede deshacer.`,
+    okText: 'Eliminar torneo',
+    okType: 'danger',
+    cancelText: 'Cancelar',
+    async onOk() {
+      if (!tournament.value) return
+      deleting.value = true
+      try {
+        await deleteTournament(tournament.value.id)
+        message.success('Torneo eliminado.')
+        await router.replace({ name: 'tournaments' })
+      } catch (err) {
+        Modal.error({
+          title: 'No se pudo eliminar el torneo',
+          content: err instanceof Error ? err.message : 'Error desconocido',
+        })
+        throw err
+      } finally {
+        deleting.value = false
+      }
+    },
+  })
+}
+
 async function startMatch(tm: TournamentMatch): Promise<void> {
   if (!auth.profile) return
-  const matchId = await startTournamentMatch(tm, auth.profile.id)
-  openControls({ ...tm, match_id: matchId })
-  await load()
+  if (tournament.value?.status === 'finished') {
+    message.warning('El torneo está finalizado. No se pueden iniciar partidos.')
+    return
+  }
+  try {
+    const matchId = await startTournamentMatch(tm, auth.profile.id)
+    openControls({ ...tm, match_id: matchId })
+    await load()
+  } catch (err) {
+    Modal.error({
+      title: 'No se pudo iniciar el partido',
+      content: err instanceof Error ? err.message : 'Error desconocido',
+    })
+  }
 }
 
 async function finishTournament(): Promise<void> {
   if (!tournament.value) return
-  await updateTournamentStatus(tournament.value.id, 'finished')
-  await load()
+
+  Modal.confirm({
+    title: '¿Finalizar torneo?',
+    content:
+      'Los partidos sin jugar quedarán 0-0 y no se podrán abrir controles ni iniciar partidos.',
+    okText: 'Finalizar',
+    okType: 'danger',
+    cancelText: 'Cancelar',
+    async onOk() {
+      if (!tournament.value) return
+      await finishTournamentService(tournament.value.id)
+      message.success('Torneo finalizado.')
+      await load()
+    },
+  })
 }
 
 function copyOverlayForCourt(court: string): void {
@@ -397,7 +489,7 @@ onUnmounted(() => {
                   <template #default="{ record }">
                     <div class="detail__match-actions">
                       <a-button
-                        v-if="record.status === 'scheduled'"
+                        v-if="record.status === 'scheduled' && tournament.status !== 'finished'"
                         type="primary"
                         size="small"
                         @click="startMatch(record)"
@@ -405,7 +497,11 @@ onUnmounted(() => {
                         Iniciar
                       </a-button>
                       <a-button
-                        v-if="record.status === 'live' && record.match_id"
+                        v-if="
+                          record.status === 'live'
+                            && record.match_id
+                            && tournament.status !== 'finished'
+                        "
                         type="primary"
                         size="small"
                         @click="openControls(record)"
@@ -520,6 +616,38 @@ onUnmounted(() => {
               </div>
             </div>
           </section>
+
+          <section class="detail__section detail__section--danger">
+            <h2>Zona de peligro</h2>
+            <div class="detail__danger-block">
+              <div>
+                <h3>Eliminar información</h3>
+                <p class="detail__template-hint">
+                  Borra el calendario, plantillas de jugadores, resultados y streams de cancha.
+                  El torneo en sí se mantiene y pasa a borrador.
+                </p>
+                <a-button danger :loading="clearing" :disabled="deleting" @click="clearTournamentData">
+                  Eliminar información del torneo
+                </a-button>
+              </div>
+              <div v-if="isOwner">
+                <h3>Eliminar torneo</h3>
+                <p class="detail__template-hint">
+                  Elimina el torneo por completo, incluyendo asistentes y toda su información.
+                  No se puede deshacer.
+                </p>
+                <a-button
+                  danger
+                  type="primary"
+                  :loading="deleting"
+                  :disabled="clearing"
+                  @click="removeTournamentCompletely"
+                >
+                  Eliminar torneo completamente
+                </a-button>
+              </div>
+            </div>
+          </section>
         </a-tab-pane>
       </a-tabs>
     </a-spin>
@@ -616,6 +744,33 @@ onUnmounted(() => {
     margin: 0;
     font-size: 1.1rem;
   }
+}
+
+.detail__section--danger {
+  padding-top: 1.5rem;
+  border-top: 1px solid rgba(255, 77, 79, 0.35);
+
+  h2 {
+    color: #ff7875;
+    margin-bottom: 1rem;
+  }
+
+  h3 {
+    margin: 0 0 0.35rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+
+  .detail__template-hint {
+    margin-top: 0;
+    margin-bottom: 0.75rem;
+  }
+}
+
+.detail__danger-block {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
 }
 
 .detail__section-header {

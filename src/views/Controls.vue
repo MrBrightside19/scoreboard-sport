@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/auth'
 import { fetchMatchState, finishMatch, publishMatchState } from '@/services/matchSync'
 import {
   advanceToNextTournamentMatch,
+  fetchTournament,
   fetchTournamentMatchByMatchId,
   finishTournamentMatch,
   getNextScheduledMatch,
@@ -333,15 +334,29 @@ function onBeforeUnload(event: BeforeUnloadEvent): void {
 
 let leaveModalOpen = false
 
-async function loadTournamentContext(id: string): Promise<void> {
+async function loadTournamentContext(id: string): Promise<boolean> {
   tournamentContext.value = null
   hasNextMatch.value = false
 
-  if (!isSupabaseConfigured) return
+  if (!isSupabaseConfigured) return true
 
   try {
     const record = await fetchMatchState(id)
-    if (!record?.tournament_id || !record.court) return
+    if (!record?.tournament_id || !record.court) return true
+
+    const tournament = await fetchTournament(record.tournament_id)
+    if (tournament?.status === 'finished') {
+      Modal.warning({
+        title: 'Torneo finalizado',
+        content: 'No se pueden abrir los controles de un torneo finalizado.',
+      })
+      skipLeaveGuard.value = true
+      await router.replace({
+        name: 'tournament-detail',
+        params: { id: record.tournament_id },
+      })
+      return false
+    }
 
     tournamentContext.value = {
       tournamentId: record.tournament_id,
@@ -350,8 +365,10 @@ async function loadTournamentContext(id: string): Promise<void> {
     writeCourtActiveMatch(record.tournament_id, record.court, id)
     const next = await getNextScheduledMatch(record.tournament_id, record.court)
     hasNextMatch.value = Boolean(next)
+    return true
   } catch {
     tournamentContext.value = null
+    return true
   }
 }
 
@@ -359,7 +376,8 @@ async function initMatch(id: string): Promise<void> {
   hydrated.value = false
   advanceError.value = null
   await store.hydrateMatch(id, matchFallback.value)
-  await loadTournamentContext(id)
+  const allowed = await loadTournamentContext(id)
+  if (!allowed) return
   hydrated.value = true
   if (!store.isWriter) {
     store.startWriterTick()
