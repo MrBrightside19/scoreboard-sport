@@ -11,7 +11,10 @@ import {
   startTournamentMatch,
   updateTournamentStatus,
 } from '@/services/tournamentService'
-import { parseCsv, buildCsvTemplate } from '@/utils/csv'
+import {
+  buildTournamentTemplateWorkbook,
+  parseTournamentImportFile,
+} from '@/utils/tournamentImport'
 import { normalizeGameTime } from '@/utils/clock'
 import { buildAppUrl, tournamentOverlayPath } from '@/utils/appUrl'
 import { calculateStandings } from '@/utils/standings'
@@ -23,7 +26,13 @@ import {
   removeTournamentAssistant,
 } from '@/services/tournamentAssistantService'
 import { getTournamentTableRefreshMs } from '@/config/poll'
-import type { Tournament, TournamentAssistant, TournamentMatch } from '@/types/tournament'
+import type {
+  CsvMatchRow,
+  CsvPlayerRow,
+  Tournament,
+  TournamentAssistant,
+  TournamentMatch,
+} from '@/types/tournament'
 import { MAX_TOURNAMENT_ASSISTANTS } from '@/types/tournament'
 import TournamentStandings from '@/components/TournamentStandings.vue'
 
@@ -151,16 +160,22 @@ function openControls(tm: TournamentMatch): void {
 }
 
 function downloadTemplate(): void {
-  const blob = new Blob([buildCsvTemplate()], { type: 'text/csv' })
+  const buffer = buildTournamentTemplateWorkbook()
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = 'calendario-plantilla.csv'
+  a.download = 'plantilla-torneo.xlsx'
   a.click()
   URL.revokeObjectURL(url)
 }
 
-async function importCalendarRows(rows: ReturnType<typeof parseCsv>): Promise<void> {
+async function importCalendarRows(
+  matchRows: CsvMatchRow[],
+  players: CsvPlayerRow[] = [],
+): Promise<void> {
   if (!tournament.value) return
 
   const replaced = matches.value.length > 0
@@ -169,20 +184,25 @@ async function importCalendarRows(rows: ReturnType<typeof parseCsv>): Promise<vo
     if (replaced) {
       await clearTournamentCalendar(tournament.value.id)
     }
-    await importTournamentCsv(tournament.value.id, rows)
+    await importTournamentCsv(tournament.value.id, matchRows, players)
     await load()
 
-    const count = rows.length
+    const count = matchRows.length
     const partidos = count === 1 ? 'partido' : 'partidos'
+    const playerCount = players.length
+    const jugadores =
+      playerCount > 0
+        ? ` · ${playerCount} ${playerCount === 1 ? 'jugador' : 'jugadores'}`
+        : ''
     message.success(
       replaced
-        ? `Calendario reemplazado correctamente: ${count} ${partidos} importados.`
-        : `Calendario importado correctamente: ${count} ${partidos} cargados.`,
+        ? `Calendario reemplazado: ${count} ${partidos} importados${jugadores}.`
+        : `Calendario importado: ${count} ${partidos} cargados${jugadores}.`,
     )
   } catch (err) {
     Modal.error({
       title: 'Error al importar calendario',
-      content: err instanceof Error ? err.message : 'No se pudo importar el CSV.',
+      content: err instanceof Error ? err.message : 'No se pudo importar el archivo.',
     })
   } finally {
     importing.value = false
@@ -192,13 +212,12 @@ async function importCalendarRows(rows: ReturnType<typeof parseCsv>): Promise<vo
 async function onCsvUpload(file: File): Promise<void> {
   if (!tournament.value) return
 
-  let rows: ReturnType<typeof parseCsv>
+  let payload: Awaited<ReturnType<typeof parseTournamentImportFile>>
   try {
-    const text = await file.text()
-    rows = parseCsv(text)
+    payload = await parseTournamentImportFile(file)
   } catch (err) {
     Modal.error({
-      title: 'CSV inválido',
+      title: 'Archivo inválido',
       content: err instanceof Error ? err.message : 'No se pudo leer el archivo.',
     })
     return
@@ -208,16 +227,16 @@ async function onCsvUpload(file: File): Promise<void> {
     Modal.confirm({
       title: '¿Reemplazar el calendario?',
       content:
-        'Ya tienes un calendario importado. Si continúas, se eliminarán todos los partidos, resultados y datos recopilados del torneo, y se cargará el nuevo calendario. Esta acción no se puede deshacer.',
+        'Ya tienes un calendario importado. Si continúas, se eliminarán todos los partidos, plantillas de jugadores, resultados y datos del torneo, y se cargará el nuevo archivo. Esta acción no se puede deshacer.',
       okText: 'Reemplazar calendario',
       cancelText: 'Cancelar',
       okType: 'danger',
-      onOk: () => importCalendarRows(rows),
+      onOk: () => importCalendarRows(payload.matches, payload.players),
     })
     return
   }
 
-  await importCalendarRows(rows)
+  await importCalendarRows(payload.matches, payload.players)
 }
 
 async function startMatch(tm: TournamentMatch): Promise<void> {
@@ -313,10 +332,10 @@ onUnmounted(() => {
           <h1>{{ tournament.name }}</h1>
         </div>
         <div class="detail__actions">
-          <a-button @click="downloadTemplate">Descargar plantilla CSV</a-button>
+          <a-button @click="downloadTemplate">Descargar plantilla</a-button>
           <a-upload
             :show-upload-list="false"
-            accept=".csv"
+            accept=".xlsx,.xls,.csv"
             :before-upload="(f: File) => { onCsvUpload(f); return false }"
           >
             <a-button :loading="importing">Importar calendario</a-button>
@@ -330,6 +349,12 @@ onUnmounted(() => {
           </a-button>
         </div>
       </header>
+      <p v-if="tournament" class="detail__template-hint">
+        La plantilla Excel tiene dos hojas: <strong>Calendario</strong> (partidos) y
+        <strong>Jugadores</strong> (equipo, categoría, número, nombre, apellido y posición,
+        donde la posición es el tipo: jugador, arquero, capitán o Asistente Capitán).
+        Al importar se cargan ambas. Al iniciar un partido aparecen en Plantillas según equipo y categoría.
+      </p>
 
       <section v-if="tournament && isOwner" class="detail__section">
         <h2>Asistentes del torneo</h2>
@@ -512,7 +537,7 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: flex-start;
   gap: 1rem;
-  margin-bottom: 2rem;
+  margin-bottom: 0.75rem;
   flex-wrap: wrap;
 
   h1 {
@@ -520,6 +545,14 @@ onUnmounted(() => {
     font-family: 'Bebas Neue', sans-serif;
     font-size: 2.2rem;
   }
+}
+
+.detail__template-hint {
+  margin: 0 0 2rem;
+  font-size: 0.85rem;
+  opacity: 0.65;
+  line-height: 1.4;
+  max-width: 42rem;
 }
 
 .detail__actions {

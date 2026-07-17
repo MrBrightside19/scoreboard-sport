@@ -3,8 +3,10 @@ import { normalizeGameTime } from '@/utils/clock'
 
 const REQUIRED_COLUMNS = ['local', 'visita', 'tiempo_juego', 'cancha'] as const
 
+/** Importación CSV solo de calendario (sin jugadores). */
 export function parseCsv(text: string): CsvMatchRow[] {
   const lines = text
+    .replace(/^\uFEFF/, '')
     .trim()
     .split(/\r?\n/)
     .filter((line) => line.trim().length > 0)
@@ -13,7 +15,7 @@ export function parseCsv(text: string): CsvMatchRow[] {
     throw new Error('El CSV debe incluir encabezado y al menos una fila.')
   }
 
-  const headers = lines[0].split(',').map((h) => h.trim().toLowerCase())
+  const headers = lines[0]!.split(',').map((h) => h.trim().toLowerCase())
   for (const column of REQUIRED_COLUMNS) {
     if (!headers.includes(column)) {
       throw new Error(`Falta la columna obligatoria: ${column}`)

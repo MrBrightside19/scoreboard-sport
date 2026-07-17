@@ -46,6 +46,33 @@ export interface CsvMatchRow {
   fecha_programada?: string
 }
 
+/** Jugador de plantilla importada (por equipo y categoría del torneo). */
+export interface CsvPlayerRow {
+  equipo: string
+  categoria?: string
+  numero: string
+  nombre: string
+  apellido: string
+  posicion?: string
+}
+
+export interface TournamentRosterPlayer {
+  id: string
+  tournament_id: string
+  team: string
+  category: string | null
+  number: string
+  name: string
+  last_name: string
+  position: string | null
+  created_at: string
+}
+
+export interface TournamentImportPayload {
+  matches: CsvMatchRow[]
+  players: CsvPlayerRow[]
+}
+
 export interface StandingRow {
   team: string
   played: number

@@ -69,6 +69,14 @@ No subas el archivo `.env` al repositorio; ya está en `.gitignore`.
 
 En la carpeta `supabase/` hay scripts SQL para crear y actualizar el esquema. Ejecútalos en el SQL Editor de Supabase en el orden que indique tu entorno (empezando por el esquema base y luego los scripts de torneos / extensiones según necesites).
 
+Para plantillas de jugadores del calendario, ejecuta también `supabase/tournament-rosters.sql`.
+
+La **plantilla del torneo** (Excel `.xlsx`) incluye dos hojas:
+- **Calendario**: partidos (`local`, `visita`, `categoria`, `tiempo_juego`, `cancha`, `fecha_programada`)
+- **Jugadores**: plantilla por equipo (`equipo`, `categoria`, `numero`, `nombre`, `apellido`, `posicion`). `posicion` es el tipo de jugador: `Jugador`, `Arquero`, `Capitán` o `Asistente Capitán`.
+
+Al importar el Excel se cargan partidos y jugadores. Al iniciar un partido, los controles cargan los jugadores del equipo filtrados por la categoría. Sigue siendo posible agregar o editar jugadores manualmente en la pestaña Plantillas. También se acepta un `.csv` solo de calendario.
+
 ---
 
 ## Desarrollo local

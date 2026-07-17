@@ -1,17 +1,58 @@
 import type {
   CsvMatchRow,
+  CsvPlayerRow,
   Tournament,
   TournamentCourtStream,
   TournamentMatch,
+  TournamentRosterPlayer,
 } from '@/types/tournament'
-import type { ScoreboardState } from '@/types/hockeyScoreboard'
+import type { RosterPlayer, ScoreboardState } from '@/types/hockeyScoreboard'
 import { createDefaultScoreboardState } from '@/types/hockeyScoreboard'
 import { generateMatchId } from '@/utils/matchId'
+import { generateId } from '@/utils/id'
 import { normalizeGameTime } from '@/utils/clock'
+import { parseRoleFromText } from '@/utils/roster'
+import { parseScheduledAt } from '@/utils/tournamentImport'
 import { supabaseRest } from './supabaseRest'
 import { createMatch, fetchMatchState, finishMatch } from './matchSync'
 import { upsertCourtStream } from './tournamentCourtStream'
 import { fetchAssistantTournamentIds } from './tournamentAssistantService'
+
+function normalizeLabel(value: string | null | undefined): string {
+  return (value ?? '').trim().toLowerCase()
+}
+
+function playerMatchesCategory(
+  playerCategory: string | null,
+  matchCategory: string | null,
+): boolean {
+  const playerCat = normalizeLabel(playerCategory)
+  const matchCat = normalizeLabel(matchCategory)
+  if (!matchCat) return true
+  if (!playerCat) return true
+  return playerCat === matchCat
+}
+
+export function rosterPlayersForMatch(
+  players: TournamentRosterPlayer[],
+  teamName: string,
+  matchCategory: string | null,
+): RosterPlayer[] {
+  const team = normalizeLabel(teamName)
+  return players
+    .filter(
+      (player) =>
+        normalizeLabel(player.team) === team &&
+        playerMatchesCategory(player.category, matchCategory),
+    )
+    .map((player) => ({
+      id: generateId(),
+      number: player.number,
+      name: player.name,
+      lastName: player.last_name ?? '',
+      role: parseRoleFromText(player.position),
+    }))
+}
 
 export async function fetchTournaments(organizerId?: string): Promise<Tournament[]> {
   const filter = organizerId
@@ -101,6 +142,10 @@ export async function clearTournamentCalendar(tournamentId: string): Promise<voi
     method: 'DELETE',
   })
 
+  await supabaseRest(`tournament_rosters?tournament_id=eq.${tournamentId}`, {
+    method: 'DELETE',
+  })
+
   if (matchIds.length > 0) {
     await supabaseRest(`matches?id=in.(${matchIds.join(',')})`, {
       method: 'DELETE',
@@ -114,9 +159,18 @@ export async function clearTournamentCalendar(tournamentId: string): Promise<voi
   await updateTournamentStatus(tournamentId, 'draft')
 }
 
+export async function fetchTournamentRosters(
+  tournamentId: string,
+): Promise<TournamentRosterPlayer[]> {
+  return supabaseRest<TournamentRosterPlayer[]>(
+    `tournament_rosters?tournament_id=eq.${tournamentId}&select=*&order=team.asc,number.asc`,
+  )
+}
+
 export async function importTournamentCsv(
   tournamentId: string,
   rows: CsvMatchRow[],
+  players: CsvPlayerRow[] = [],
 ): Promise<void> {
   const payload = rows.map((row, index) => ({
     tournament_id: tournamentId,
@@ -125,9 +179,10 @@ export async function importTournamentCsv(
     game_time: normalizeGameTime(row.tiempo_juego),
     court: row.cancha,
     category: row.categoria?.trim() || null,
-    scheduled_at: row.fecha_programada
-      ? new Date(row.fecha_programada.replace(' ', 'T')).toISOString()
-      : null,
+    scheduled_at: parseScheduledAt(
+      row.fecha_programada,
+      `Calendario fila ${index + 2}`,
+    ),
     status: 'scheduled' as const,
     sort_order: index,
   }))
@@ -136,6 +191,23 @@ export async function importTournamentCsv(
     method: 'POST',
     body: payload,
   })
+
+  if (players.length > 0) {
+    const rosterPayload = players.map((player) => ({
+      tournament_id: tournamentId,
+      team: player.equipo.trim(),
+      category: player.categoria?.trim() || null,
+      number: player.numero.trim(),
+      name: player.nombre.trim(),
+      last_name: player.apellido.trim(),
+      position: player.posicion?.trim() || null,
+    }))
+
+    await supabaseRest('tournament_rosters', {
+      method: 'POST',
+      body: rosterPayload,
+    })
+  }
 }
 
 /** Cierra partidos en vivo de la misma cancha (p. ej. si se salió sin finalizar). */
@@ -191,6 +263,24 @@ export async function startTournamentMatch(
     tournamentMatch.visit_team,
     normalizeGameTime(tournamentMatch.game_time),
   )
+
+  try {
+    const tournamentPlayers = await fetchTournamentRosters(
+      tournamentMatch.tournament_id,
+    )
+    state.rosterLocal = rosterPlayersForMatch(
+      tournamentPlayers,
+      tournamentMatch.local_team,
+      tournamentMatch.category,
+    )
+    state.rosterVisit = rosterPlayersForMatch(
+      tournamentPlayers,
+      tournamentMatch.visit_team,
+      tournamentMatch.category,
+    )
+  } catch {
+    // Si falla la carga de plantillas, el partido inicia sin roster importado.
+  }
 
   await createMatch(matchId, state, organizerId)
   await supabaseRest(`matches?id=eq.${matchId}`, {

@@ -7,6 +7,7 @@ export interface RosterPlayer {
   id: string
   number: string
   name: string
+  lastName: string
   role: PlayerRole
 }
 
@@ -99,6 +100,7 @@ function normalizeRoster(raw: unknown): RosterPlayer[] {
       id: String(player.id ?? generateId()),
       number: String(player.number ?? ''),
       name: String(player.name ?? ''),
+      lastName: String(player.lastName ?? ''),
       role: (player.role as PlayerRole) ?? 'player',
     }
   })
