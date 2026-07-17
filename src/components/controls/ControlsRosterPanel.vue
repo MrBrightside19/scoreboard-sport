@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useScoreboardStore } from '@/stores/scoreboard'
-import { roleLabel } from '@/utils/roster'
+import { playerLabel, roleLabel } from '@/utils/roster'
 import type { PlayerRole } from '@/types/hockeyScoreboard'
 
 const store = useScoreboardStore()
@@ -10,7 +10,7 @@ const roleOptions: { value: PlayerRole; label: string }[] = [
   { value: 'player', label: 'Jugador' },
   { value: 'goalkeeper', label: 'Arquero' },
   { value: 'captain', label: 'Capitán' },
-  { value: 'assistant_captain', label: 'Asist. capitán' },
+  { value: 'assistant_captain', label: 'Asistente Capitán' },
 ]
 
 const teams = computed(() => [
@@ -70,7 +70,9 @@ function onNumberPaste(
 <template>
   <div class="roster-panel">
     <p class="roster-panel__hint">
-      Registra jugadores con número y nombre. Roles: arquero, capitán (1) y asistentes de capitán (hasta 2).
+      Jugadores del partido (número, nombre y apellido). El tipo de jugador se elige en el selector
+      (jugador, arquero, capitán o Asistente Capitán). Si el torneo importó plantillas, ya aparecen
+      filtradas por equipo y categoría; puedes agregar o editar desde aquí.
     </p>
 
     <div class="roster-panel__grid">
@@ -102,6 +104,11 @@ function onNumberPaste(
               placeholder="Nombre"
               @update:value="(v: string) => store.updateRosterPlayer(team.key, player.id, { name: v })"
             />
+            <a-input
+              :value="player.lastName"
+              placeholder="Apellido"
+              @update:value="(v: string) => store.updateRosterPlayer(team.key, player.id, { lastName: v })"
+            />
             <a-select
               :value="player.role"
               class="roster-panel__role"
@@ -115,13 +122,6 @@ function onNumberPaste(
                 {{ option.label }}
               </a-select-option>
             </a-select>
-            <a-button
-              danger
-              size="small"
-              @click="store.removeRosterPlayer(team.key, player.id)"
-            >
-              ×
-            </a-button>
           </div>
         </div>
 
@@ -137,9 +137,12 @@ function onNumberPaste(
 
         <div class="roster-panel__summary">
           <span v-if="rosterFor(team.key).some((p) => p.role === 'captain')">
-            {{ roleLabel('captain') }}: {{
-              rosterFor(team.key).find((p) => p.role === 'captain')?.name
-                || `#${rosterFor(team.key).find((p) => p.role === 'captain')?.number}`
+            {{ roleLabel('captain') }}:
+            {{
+              (() => {
+                const captain = rosterFor(team.key).find((p) => p.role === 'captain')
+                return captain ? playerLabel(captain) : '—'
+              })()
             }}
           </span>
           <span>
@@ -162,7 +165,7 @@ function onNumberPaste(
 
 .roster-panel__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 1rem;
 }
 
@@ -189,7 +192,7 @@ function onNumberPaste(
 
 .roster-panel__row {
   display: grid;
-  grid-template-columns: 56px 1fr 130px auto;
+  grid-template-columns: 52px minmax(0, 1fr) minmax(0, 1fr) 130px;
   gap: 0.4rem;
   align-items: center;
 }
@@ -206,5 +209,20 @@ function onNumberPaste(
   gap: 0.2rem;
   font-size: 0.78rem;
   opacity: 0.6;
+}
+
+@media (max-width: 720px) {
+  .roster-panel__row {
+    grid-template-columns: 52px 1fr;
+    grid-template-areas:
+      "num name"
+      "num last"
+      "role role";
+  }
+
+  .roster-panel__row > :nth-child(1) { grid-area: num; }
+  .roster-panel__row > :nth-child(2) { grid-area: name; }
+  .roster-panel__row > :nth-child(3) { grid-area: last; }
+  .roster-panel__row > :nth-child(4) { grid-area: role; }
 }
 </style>

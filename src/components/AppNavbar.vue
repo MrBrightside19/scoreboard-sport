@@ -21,10 +21,6 @@ const mobileOpen = ref(false)
 const creating = ref(false)
 const activeFreeMatchId = ref<string | null>(null)
 
-const activeMatchId = computed(
-  () => (route.query.matchId as string) || readMatchIdFromStorage() || '',
-)
-
 const createButtonLabel = computed(() => {
   if (creating.value) {
     return activeFreeMatchId.value ? 'Abriendo…' : 'Creando…'
@@ -47,17 +43,6 @@ const navLinks = computed(() => {
       label: 'Mis torneos',
       to: { name: 'tournaments' },
     })
-
-    if (activeMatchId.value) {
-      links.push({
-        name: 'controls',
-        label: 'Mesa de control',
-        to: {
-          name: 'controls',
-          query: { matchId: activeMatchId.value },
-        },
-      })
-    }
   }
 
   return links

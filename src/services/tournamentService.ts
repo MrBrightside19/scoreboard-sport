@@ -1,17 +1,64 @@
 import type {
   CsvMatchRow,
+  CsvPlayerRow,
   Tournament,
   TournamentCourtStream,
   TournamentMatch,
+  TournamentRosterPlayer,
+  TournamentTeam,
 } from '@/types/tournament'
-import type { ScoreboardState } from '@/types/hockeyScoreboard'
+import {
+  DEFAULT_TEAM_COLOR_LOCAL,
+  DEFAULT_TEAM_COLOR_VISIT,
+  TEAM_COLOR_PALETTE,
+} from '@/types/tournament'
+import type { RosterPlayer, ScoreboardState } from '@/types/hockeyScoreboard'
 import { createDefaultScoreboardState } from '@/types/hockeyScoreboard'
 import { generateMatchId } from '@/utils/matchId'
+import { generateId } from '@/utils/id'
 import { normalizeGameTime } from '@/utils/clock'
+import { parseRoleFromText } from '@/utils/roster'
+import { parseScheduledAt } from '@/utils/tournamentImport'
 import { supabaseRest } from './supabaseRest'
 import { createMatch, fetchMatchState, finishMatch } from './matchSync'
 import { upsertCourtStream } from './tournamentCourtStream'
 import { fetchAssistantTournamentIds } from './tournamentAssistantService'
+
+function normalizeLabel(value: string | null | undefined): string {
+  return (value ?? '').trim().toLowerCase()
+}
+
+function playerMatchesCategory(
+  playerCategory: string | null,
+  matchCategory: string | null,
+): boolean {
+  const playerCat = normalizeLabel(playerCategory)
+  const matchCat = normalizeLabel(matchCategory)
+  if (!matchCat) return true
+  if (!playerCat) return true
+  return playerCat === matchCat
+}
+
+export function rosterPlayersForMatch(
+  players: TournamentRosterPlayer[],
+  teamName: string,
+  matchCategory: string | null,
+): RosterPlayer[] {
+  const team = normalizeLabel(teamName)
+  return players
+    .filter(
+      (player) =>
+        normalizeLabel(player.team) === team &&
+        playerMatchesCategory(player.category, matchCategory),
+    )
+    .map((player) => ({
+      id: generateId(),
+      number: player.number,
+      name: player.name,
+      lastName: player.last_name ?? '',
+      role: parseRoleFromText(player.position),
+    }))
+}
 
 export async function fetchTournaments(organizerId?: string): Promise<Tournament[]> {
   const filter = organizerId
@@ -79,6 +126,53 @@ export async function updateTournamentStatus(
   })
 }
 
+/** Cierra partidos en vivo/sin jugar y marca el torneo como finalizado. */
+export async function finishTournament(tournamentId: string): Promise<void> {
+  const matches = await fetchTournamentMatches(tournamentId)
+
+  for (const tm of matches.filter((m) => m.status === 'live')) {
+    if (tm.match_id) {
+      const record = await fetchMatchState(tm.match_id)
+      const fallback = createDefaultScoreboardState(
+        tm.local_team,
+        tm.visit_team,
+        normalizeGameTime(tm.game_time),
+      )
+      const state: ScoreboardState = record?.state
+        ? {
+            ...record.state,
+            goalLocal: record.goal_local ?? record.state.goalLocal,
+            goalVisit: record.goal_visit ?? record.state.goalVisit,
+          }
+        : fallback
+      await finishTournamentMatch(tm, state)
+    } else {
+      await supabaseRest(`tournament_matches?id=eq.${tm.id}`, {
+        method: 'PATCH',
+        body: {
+          status: 'finished',
+          goal_local: 0,
+          goal_visit: 0,
+        },
+      })
+    }
+  }
+
+  await supabaseRest(
+    `tournament_matches?tournament_id=eq.${tournamentId}&status=eq.scheduled`,
+    {
+      method: 'PATCH',
+      body: {
+        status: 'finished',
+        goal_local: 0,
+        goal_visit: 0,
+      },
+    },
+  )
+
+  await updateTournamentStatus(tournamentId, 'finished')
+}
+
 export async function fetchTournamentMatches(
   tournamentId: string,
 ): Promise<TournamentMatch[]> {
@@ -101,6 +195,14 @@ export async function clearTournamentCalendar(tournamentId: string): Promise<voi
     method: 'DELETE',
   })
 
+  await supabaseRest(`tournament_rosters?tournament_id=eq.${tournamentId}`, {
+    method: 'DELETE',
+  })
+
+  await supabaseRest(`tournament_teams?tournament_id=eq.${tournamentId}`, {
+    method: 'DELETE',
+  })
+
   if (matchIds.length > 0) {
     await supabaseRest(`matches?id=in.(${matchIds.join(',')})`, {
       method: 'DELETE',
@@ -114,9 +216,145 @@ export async function clearTournamentCalendar(tournamentId: string): Promise<voi
   await updateTournamentStatus(tournamentId, 'draft')
 }
 
+/** Elimina el torneo y todos sus datos asociados. Solo el organizador (RLS). */
+export async function deleteTournament(tournamentId: string): Promise<void> {
+  await clearTournamentCalendar(tournamentId)
+  await supabaseRest(`tournaments?id=eq.${tournamentId}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function fetchTournamentRosters(
+  tournamentId: string,
+): Promise<TournamentRosterPlayer[]> {
+  return supabaseRest<TournamentRosterPlayer[]>(
+    `tournament_rosters?tournament_id=eq.${tournamentId}&select=*&order=team.asc,number.asc`,
+  )
+}
+
+export async function fetchTournamentTeams(
+  tournamentId: string,
+): Promise<TournamentTeam[]> {
+  return supabaseRest<TournamentTeam[]>(
+    `tournament_teams?tournament_id=eq.${tournamentId}&select=*&order=team.asc`,
+  )
+}
+
+export function findTournamentTeam(
+  teams: TournamentTeam[],
+  teamName: string,
+): TournamentTeam | undefined {
+  const key = normalizeLabel(teamName)
+  return teams.find((item) => normalizeLabel(item.team) === key)
+}
+
+/** Crea filas de equipos a partir del calendario y plantillas, sin pisar color/logo existentes. */
+export async function syncTournamentTeams(
+  tournamentId: string,
+): Promise<TournamentTeam[]> {
+  const [matches, rosters, existing] = await Promise.all([
+    fetchTournamentMatches(tournamentId),
+    fetchTournamentRosters(tournamentId),
+    fetchTournamentTeams(tournamentId),
+  ])
+
+  const names = new Map<string, string>()
+  for (const match of matches) {
+    const local = match.local_team.trim()
+    const visit = match.visit_team.trim()
+    if (local) names.set(normalizeLabel(local), local)
+    if (visit) names.set(normalizeLabel(visit), visit)
+  }
+  for (const player of rosters) {
+    const team = player.team.trim()
+    if (team) names.set(normalizeLabel(team), team)
+  }
+
+  const existingByKey = new Map(
+    existing.map((team) => [normalizeLabel(team.team), team] as const),
+  )
+
+  const missing = [...names.entries()].filter(([key]) => !existingByKey.has(key))
+  if (missing.length > 0) {
+    const payload = missing.map(([, team], index) => ({
+      tournament_id: tournamentId,
+      team,
+      color: TEAM_COLOR_PALETTE[(existing.length + index) % TEAM_COLOR_PALETTE.length],
+      logo_url: '',
+    }))
+    await supabaseRest('tournament_teams', {
+      method: 'POST',
+      body: payload,
+    })
+  }
+
+  return fetchTournamentTeams(tournamentId)
+}
+
+export async function updateTournamentTeam(
+  teamId: string,
+  input: { color?: string; logo_url?: string; team?: string },
+): Promise<TournamentTeam> {
+  const body: Record<string, string> = {}
+  if (input.color !== undefined) body.color = input.color.trim() || DEFAULT_TEAM_COLOR_LOCAL
+  if (input.logo_url !== undefined) body.logo_url = input.logo_url.trim()
+  if (input.team !== undefined) body.team = input.team.trim()
+
+  const rows = await supabaseRest<TournamentTeam[]>(
+    `tournament_teams?id=eq.${teamId}`,
+    {
+      method: 'PATCH',
+      body,
+      prefer: 'return=representation',
+    },
+  )
+
+  if (!rows[0]) {
+    throw new Error('No se pudo actualizar el equipo.')
+  }
+
+  return rows[0]
+}
+
+export type TournamentRosterInput = {
+  number?: string
+  name?: string
+  last_name?: string
+  category?: string | null
+  position?: string | null
+}
+
+export async function updateTournamentRosterPlayer(
+  playerId: string,
+  input: TournamentRosterInput,
+): Promise<TournamentRosterPlayer> {
+  const body: Record<string, string | null> = {}
+  if (input.number !== undefined) body.number = input.number.trim()
+  if (input.name !== undefined) body.name = input.name.trim()
+  if (input.last_name !== undefined) body.last_name = input.last_name.trim()
+  if (input.category !== undefined) body.category = input.category?.trim() || null
+  if (input.position !== undefined) body.position = input.position?.trim() || null
+
+  const rows = await supabaseRest<TournamentRosterPlayer[]>(
+    `tournament_rosters?id=eq.${playerId}`,
+    {
+      method: 'PATCH',
+      body,
+      prefer: 'return=representation',
+    },
+  )
+
+  if (!rows[0]) {
+    throw new Error('No se pudo actualizar el jugador.')
+  }
+
+  return rows[0]
+}
+
 export async function importTournamentCsv(
   tournamentId: string,
   rows: CsvMatchRow[],
+  players: CsvPlayerRow[] = [],
 ): Promise<void> {
   const payload = rows.map((row, index) => ({
     tournament_id: tournamentId,
@@ -125,9 +363,10 @@ export async function importTournamentCsv(
     game_time: normalizeGameTime(row.tiempo_juego),
     court: row.cancha,
     category: row.categoria?.trim() || null,
-    scheduled_at: row.fecha_programada
-      ? new Date(row.fecha_programada.replace(' ', 'T')).toISOString()
-      : null,
+    scheduled_at: parseScheduledAt(
+      row.fecha_programada,
+      `Calendario fila ${index + 2}`,
+    ),
     status: 'scheduled' as const,
     sort_order: index,
   }))
@@ -136,6 +375,115 @@ export async function importTournamentCsv(
     method: 'POST',
     body: payload,
   })
+
+  if (players.length > 0) {
+    const rosterPayload = players.map((player) => ({
+      tournament_id: tournamentId,
+      team: player.equipo.trim(),
+      category: player.categoria?.trim() || null,
+      number: player.numero.trim(),
+      name: player.nombre.trim(),
+      last_name: player.apellido.trim(),
+      position: player.posicion?.trim() || null,
+    }))
+
+    await supabaseRest('tournament_rosters', {
+      method: 'POST',
+      body: rosterPayload,
+    })
+  }
+}
+
+export async function createTournamentMatch(
+  tournamentId: string,
+  input: {
+    local_team: string
+    visit_team: string
+    court: string
+    game_time?: string
+    category?: string | null
+    scheduled_at?: string | null
+  },
+): Promise<TournamentMatch> {
+  const existing = await fetchTournamentMatches(tournamentId)
+  const nextOrder =
+    existing.reduce((max, match) => Math.max(max, match.sort_order), -1) + 1
+
+  const rows = await supabaseRest<TournamentMatch[]>('tournament_matches', {
+    method: 'POST',
+    body: {
+      tournament_id: tournamentId,
+      local_team: input.local_team.trim(),
+      visit_team: input.visit_team.trim(),
+      game_time: normalizeGameTime(input.game_time || '20:00'),
+      court: input.court.trim(),
+      category: input.category?.trim() || null,
+      scheduled_at: parseScheduledAt(input.scheduled_at ?? undefined),
+      status: 'scheduled' as const,
+      sort_order: nextOrder,
+    },
+    prefer: 'return=representation',
+  })
+
+  if (!rows[0]) {
+    throw new Error('No se pudo crear el partido.')
+  }
+
+  return rows[0]
+}
+
+export type TournamentMatchInput = {
+  local_team: string
+  visit_team: string
+  court: string
+  game_time?: string
+  category?: string | null
+  scheduled_at?: string | null
+}
+
+export async function updateTournamentMatch(
+  matchId: string,
+  input: TournamentMatchInput,
+): Promise<TournamentMatch> {
+  const rows = await supabaseRest<TournamentMatch[]>(
+    `tournament_matches?id=eq.${matchId}`,
+    {
+      method: 'PATCH',
+      body: {
+        local_team: input.local_team.trim(),
+        visit_team: input.visit_team.trim(),
+        game_time: normalizeGameTime(input.game_time || '20:00'),
+        court: input.court.trim(),
+        category: input.category?.trim() || null,
+        scheduled_at: parseScheduledAt(input.scheduled_at ?? undefined),
+      },
+      prefer: 'return=representation',
+    },
+  )
+
+  if (!rows[0]) {
+    throw new Error('No se pudo actualizar el partido.')
+  }
+
+  return rows[0]
+}
+
+export async function deleteTournamentMatch(
+  tournamentMatch: TournamentMatch,
+): Promise<void> {
+  if (tournamentMatch.status === 'live') {
+    throw new Error('No se puede eliminar un partido en vivo. Finalízalo primero.')
+  }
+
+  await supabaseRest(`tournament_matches?id=eq.${tournamentMatch.id}`, {
+    method: 'DELETE',
+  })
+
+  if (tournamentMatch.match_id) {
+    await supabaseRest(`matches?id=eq.${tournamentMatch.match_id}`, {
+      method: 'DELETE',
+    })
+  }
 }
 
 /** Cierra partidos en vivo de la misma cancha (p. ej. si se salió sin finalizar). */
@@ -179,6 +527,14 @@ export async function startTournamentMatch(
   tournamentMatch: TournamentMatch,
   organizerId: string,
 ): Promise<string> {
+  const tournament = await fetchTournament(tournamentMatch.tournament_id)
+  if (!tournament) {
+    throw new Error('Torneo no encontrado.')
+  }
+  if (tournament.status === 'finished') {
+    throw new Error('El torneo ya está finalizado. No se pueden iniciar partidos.')
+  }
+
   await finishLiveMatchesOnCourt(
     tournamentMatch.tournament_id,
     tournamentMatch.court,
@@ -191,6 +547,33 @@ export async function startTournamentMatch(
     tournamentMatch.visit_team,
     normalizeGameTime(tournamentMatch.game_time),
   )
+  state.matchCategory = tournamentMatch.category?.trim() || ''
+
+  try {
+    const [tournamentPlayers, tournamentTeams] = await Promise.all([
+      fetchTournamentRosters(tournamentMatch.tournament_id),
+      fetchTournamentTeams(tournamentMatch.tournament_id),
+    ])
+    state.rosterLocal = rosterPlayersForMatch(
+      tournamentPlayers,
+      tournamentMatch.local_team,
+      tournamentMatch.category,
+    )
+    state.rosterVisit = rosterPlayersForMatch(
+      tournamentPlayers,
+      tournamentMatch.visit_team,
+      tournamentMatch.category,
+    )
+
+    const localMeta = findTournamentTeam(tournamentTeams, tournamentMatch.local_team)
+    const visitMeta = findTournamentTeam(tournamentTeams, tournamentMatch.visit_team)
+    state.localLogo = localMeta?.logo_url ?? ''
+    state.visitLogo = visitMeta?.logo_url ?? ''
+    state.localColor = localMeta?.color || DEFAULT_TEAM_COLOR_LOCAL
+    state.visitColor = visitMeta?.color || DEFAULT_TEAM_COLOR_VISIT
+  } catch {
+    // Si falla la carga de plantillas/equipos, el partido inicia sin ellos.
+  }
 
   await createMatch(matchId, state, organizerId)
   await supabaseRest(`matches?id=eq.${matchId}`, {
