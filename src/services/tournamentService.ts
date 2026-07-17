@@ -265,6 +265,44 @@ export async function importTournamentCsv(
   }
 }
 
+export async function createTournamentMatch(
+  tournamentId: string,
+  input: {
+    local_team: string
+    visit_team: string
+    court: string
+    game_time?: string
+    category?: string | null
+    scheduled_at?: string | null
+  },
+): Promise<TournamentMatch> {
+  const existing = await fetchTournamentMatches(tournamentId)
+  const nextOrder =
+    existing.reduce((max, match) => Math.max(max, match.sort_order), -1) + 1
+
+  const rows = await supabaseRest<TournamentMatch[]>('tournament_matches', {
+    method: 'POST',
+    body: {
+      tournament_id: tournamentId,
+      local_team: input.local_team.trim(),
+      visit_team: input.visit_team.trim(),
+      game_time: normalizeGameTime(input.game_time || '20:00'),
+      court: input.court.trim(),
+      category: input.category?.trim() || null,
+      scheduled_at: parseScheduledAt(input.scheduled_at ?? undefined),
+      status: 'scheduled' as const,
+      sort_order: nextOrder,
+    },
+    prefer: 'return=representation',
+  })
+
+  if (!rows[0]) {
+    throw new Error('No se pudo crear el partido.')
+  }
+
+  return rows[0]
+}
+
 /** Cierra partidos en vivo de la misma cancha (p. ej. si se salió sin finalizar). */
 export async function finishLiveMatchesOnCourt(
   tournamentId: string,

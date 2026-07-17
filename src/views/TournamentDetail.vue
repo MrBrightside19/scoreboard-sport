@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Modal, message } from 'ant-design-vue'
+import type { Rule } from 'ant-design-vue/es/form'
 import { useAuthStore } from '@/stores/auth'
 import {
   clearTournamentCalendar,
+  createTournamentMatch,
   deleteTournament,
   fetchTournament,
   fetchTournamentMatches,
@@ -54,11 +56,34 @@ const assistantEmail = ref('')
 const assigningAssistant = ref(false)
 const removingAssistantId = ref<string | null>(null)
 const activeTab = ref('partidos')
+const showMatchModal = ref(false)
+const creatingMatch = ref(false)
+const matchFormError = ref<string | null>(null)
+
+const matchForm = reactive({
+  local_team: '',
+  visit_team: '',
+  category: '',
+  court: '',
+  game_time: '20:00',
+  scheduled_at: '',
+})
+
+const matchFormRules: Record<string, Rule[]> = {
+  local_team: [{ required: true, message: 'Ingresa el equipo local' }],
+  visit_team: [{ required: true, message: 'Ingresa el equipo visita' }],
+  court: [{ required: true, message: 'Ingresa la cancha' }],
+  game_time: [{ required: true, message: 'Ingresa el tiempo de juego' }],
+}
 
 let pollTimer: number | null = null
 
 const isOwner = computed(
   () => tournament.value?.organizer_id === auth.profile?.id,
+)
+
+const canEditMatches = computed(
+  () => tournament.value?.status !== 'finished',
 )
 
 const canAddAssistant = computed(
@@ -245,6 +270,58 @@ async function onCsvUpload(file: File): Promise<void> {
   }
 
   await importCalendarRows(payload.matches, payload.players)
+}
+
+function resetMatchForm(): void {
+  matchForm.local_team = ''
+  matchForm.visit_team = ''
+  matchForm.category = ''
+  matchForm.court = ''
+  matchForm.game_time = '20:00'
+  matchForm.scheduled_at = ''
+  matchFormError.value = null
+}
+
+function openMatchModal(): void {
+  if (!canEditMatches.value) {
+    message.warning('El torneo está finalizado. No se pueden agregar partidos.')
+    return
+  }
+  resetMatchForm()
+  showMatchModal.value = true
+}
+
+function goToImport(): void {
+  activeTab.value = 'configuracion'
+}
+
+async function submitMatch(): Promise<void> {
+  if (!tournament.value) return
+  if (!canEditMatches.value) {
+    matchFormError.value = 'El torneo está finalizado. No se pueden agregar partidos.'
+    return
+  }
+
+  creatingMatch.value = true
+  matchFormError.value = null
+  try {
+    await createTournamentMatch(tournament.value.id, {
+      local_team: matchForm.local_team,
+      visit_team: matchForm.visit_team,
+      court: matchForm.court,
+      game_time: matchForm.game_time,
+      category: matchForm.category,
+      scheduled_at: matchForm.scheduled_at || null,
+    })
+    showMatchModal.value = false
+    message.success('Partido agregado al calendario.')
+    await load({ silent: true })
+  } catch (err) {
+    matchFormError.value =
+      err instanceof Error ? err.message : 'No se pudo crear el partido.'
+  } finally {
+    creatingMatch.value = false
+  }
 }
 
 async function clearTournamentData(): Promise<void> {
@@ -445,9 +522,18 @@ onUnmounted(() => {
                 <a-button size="small" :loading="refreshing" @click="refresh">
                   Actualizar
                 </a-button>
+                <a-button
+                  v-if="canEditMatches"
+                  type="primary"
+                  size="small"
+                  @click="openMatchModal"
+                >
+                  Agregar partido
+                </a-button>
               </div>
             </div>
-            <div class="detail__table-wrap">
+
+            <div v-if="matches.length" class="detail__table-wrap">
               <a-table
                 :data-source="matches.map((m) => ({ ...m, key: m.id }))"
                 :pagination="false"
@@ -512,6 +598,17 @@ onUnmounted(() => {
                   </template>
                 </a-table-column>
               </a-table>
+            </div>
+
+            <div v-else class="detail__empty">
+              <a-empty description="Aún no hay partidos en este torneo">
+                <div v-if="canEditMatches" class="detail__empty-actions">
+                  <a-button type="primary" @click="openMatchModal">
+                    Crear primer partido
+                  </a-button>
+                  <a-button @click="goToImport">Importar Excel</a-button>
+                </div>
+              </a-empty>
             </div>
           </section>
         </a-tab-pane>
@@ -706,6 +803,89 @@ onUnmounted(() => {
         </a-tab-pane>
       </a-tabs>
     </a-spin>
+
+    <a-modal
+      v-model:open="showMatchModal"
+      title="Agregar partido"
+      :footer="null"
+      destroy-on-close
+      @cancel="resetMatchForm"
+    >
+      <a-form
+        layout="vertical"
+        :model="matchForm"
+        :rules="matchFormRules"
+        @finish="submitMatch"
+      >
+        <div class="match-form__grid">
+          <a-form-item label="Equipo local" name="local_team">
+            <a-input
+              v-model:value="matchForm.local_team"
+              placeholder="Ej. Halcones"
+              :disabled="creatingMatch"
+            />
+          </a-form-item>
+          <a-form-item label="Equipo visita" name="visit_team">
+            <a-input
+              v-model:value="matchForm.visit_team"
+              placeholder="Ej. Tigres"
+              :disabled="creatingMatch"
+            />
+          </a-form-item>
+        </div>
+
+        <div class="match-form__grid">
+          <a-form-item label="Categoría">
+            <a-input
+              v-model:value="matchForm.category"
+              placeholder="Opcional"
+              :disabled="creatingMatch"
+            />
+          </a-form-item>
+          <a-form-item label="Cancha" name="court">
+            <a-input
+              v-model:value="matchForm.court"
+              placeholder="Ej. 1"
+              :disabled="creatingMatch"
+            />
+          </a-form-item>
+        </div>
+
+        <div class="match-form__grid">
+          <a-form-item label="Tiempo de juego" name="game_time">
+            <a-input
+              v-model:value="matchForm.game_time"
+              placeholder="20:00"
+              :disabled="creatingMatch"
+            />
+          </a-form-item>
+          <a-form-item label="Fecha programada">
+            <a-input
+              v-model:value="matchForm.scheduled_at"
+              type="datetime-local"
+              :disabled="creatingMatch"
+            />
+          </a-form-item>
+        </div>
+
+        <a-alert
+          v-if="matchFormError"
+          type="error"
+          :message="matchFormError"
+          show-icon
+          style="margin-bottom: 1rem"
+        />
+
+        <div class="match-form__footer">
+          <a-button :disabled="creatingMatch" @click="showMatchModal = false">
+            Cancelar
+          </a-button>
+          <a-button type="primary" html-type="submit" :loading="creatingMatch">
+            Guardar partido
+          </a-button>
+        </div>
+      </a-form>
+    </a-modal>
   </div>
 </template>
 
@@ -821,6 +1001,36 @@ onUnmounted(() => {
   flex-wrap: wrap;
   gap: 0.35rem;
   align-items: center;
+}
+
+.detail__empty {
+  padding: 2rem 1rem 1.5rem;
+  text-align: center;
+}
+
+.detail__empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.match-form__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 0.75rem;
+
+  @media (max-width: 520px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.match-form__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
 }
 
 /* —— Configuración —— */
