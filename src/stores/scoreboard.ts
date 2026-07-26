@@ -4,6 +4,8 @@ import type {
   GoalEvent,
   RosterPlayer,
   ScoreboardState,
+  ShotEvent,
+  ShotResult,
   TeamPenalty,
 } from '@/types/hockeyScoreboard'
 import {
@@ -302,6 +304,62 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     })
   }
 
+  function defaultGoalkeeperId(team: 'local' | 'visit'): string {
+    const roster = team === 'local' ? state.value.rosterLocal : state.value.rosterVisit
+    return roster.find((player) => player.role === 'goalkeeper')?.id ?? ''
+  }
+
+  function markShot(
+    team: 'local' | 'visit',
+    result: ShotResult,
+    goalkeeperPlayerId?: string,
+  ): string {
+    const gameMinute = interpolateClock(
+      state.value.timeGame,
+      state.value.isPaused,
+      state.value.updatedAt,
+    )
+
+    const shot: ShotEvent = {
+      id: generateId(),
+      team,
+      result,
+      goalkeeperPlayerId:
+        result === 'save'
+          ? (goalkeeperPlayerId || defaultGoalkeeperId(team))
+          : '',
+      gameMinute,
+      period: state.value.gamePeriod,
+      createdAt: new Date().toISOString(),
+    }
+
+    patch({
+      shots: [...state.value.shots, shot],
+      timeGame: gameMinute,
+    })
+
+    return shot.id
+  }
+
+  function removeLastShot(team: 'local' | 'visit', result: ShotResult): void {
+    const teamShots = state.value.shots.filter(
+      (shot) => shot.team === team && shot.result === result,
+    )
+    if (teamShots.length === 0) return
+
+    const lastShot = teamShots[teamShots.length - 1]
+    patch({
+      shots: state.value.shots.filter((shot) => shot.id !== lastShot.id),
+    })
+  }
+
+  function removeShot(shotId: string): void {
+    if (!state.value.shots.some((shot) => shot.id === shotId)) return
+    patch({
+      shots: state.value.shots.filter((shot) => shot.id !== shotId),
+    })
+  }
+
   function adjustGoal(team: 'local' | 'visit', delta: number): void {
     if (delta > 0) return
     if (delta < 0) {
@@ -548,6 +606,9 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     markGoal,
     completeGoal,
     removeLastGoal,
+    markShot,
+    removeLastShot,
+    removeShot,
     adjustGoal,
     togglePause,
     setPeriod,

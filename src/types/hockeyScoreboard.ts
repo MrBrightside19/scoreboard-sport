@@ -35,6 +35,21 @@ export function isGoalPending(goal: GoalEvent): boolean {
   return goal.status === 'pending' || !goal.scorerPlayerId
 }
 
+/** miss = tiro al arco sin contacto del arquero; save = atajada. */
+export type ShotResult = 'miss' | 'save'
+
+export interface ShotEvent {
+  id: string
+  /** miss = equipo que tira; save = equipo del arquero. */
+  team: 'local' | 'visit'
+  result: ShotResult
+  /** Arquero acreditado en una atajada; vacío si el roster no lo define. */
+  goalkeeperPlayerId: string
+  gameMinute: string
+  period: number
+  createdAt: string
+}
+
 export interface ScoreboardState {
   localTeam: string
   visitTeam: string
@@ -50,6 +65,7 @@ export interface ScoreboardState {
   rosterLocal: RosterPlayer[]
   rosterVisit: RosterPlayer[]
   goals: GoalEvent[]
+  shots: ShotEvent[]
   penaltiesLocal: TeamPenalty[]
   penaltiesVisit: TeamPenalty[]
   isPaused: boolean
@@ -90,6 +106,7 @@ export function createDefaultScoreboardState(
     rosterLocal: [],
     rosterVisit: [],
     goals: [],
+    shots: [],
     penaltiesLocal: [],
     penaltiesVisit: [],
     isPaused: true,
@@ -147,6 +164,22 @@ function normalizeGoals(raw: unknown): GoalEvent[] {
   })
 }
 
+function normalizeShots(raw: unknown): ShotEvent[] {
+  if (!Array.isArray(raw)) return []
+  return raw.map((item) => {
+    const shot = item as Partial<ShotEvent>
+    return {
+      id: String(shot.id ?? generateId()),
+      team: shot.team === 'visit' ? 'visit' : 'local',
+      result: shot.result === 'save' ? 'save' : 'miss',
+      goalkeeperPlayerId: String(shot.goalkeeperPlayerId ?? ''),
+      gameMinute: String(shot.gameMinute ?? ''),
+      period: typeof shot.period === 'number' ? shot.period : 1,
+      createdAt: String(shot.createdAt ?? new Date().toISOString()),
+    }
+  })
+}
+
 /** Migra estados antiguos al formato actual. */
 export function normalizeScoreboardState(raw: unknown): ScoreboardState {
   const source = (raw ?? {}) as Partial<ScoreboardState> & Record<string, unknown>
@@ -183,6 +216,7 @@ export function normalizeScoreboardState(raw: unknown): ScoreboardState {
     rosterLocal: normalizeRoster(source.rosterLocal),
     rosterVisit: normalizeRoster(source.rosterVisit),
     goals: normalizeGoals(source.goals),
+    shots: normalizeShots(source.shots),
     penaltiesLocal: [],
     penaltiesVisit: [],
   }
