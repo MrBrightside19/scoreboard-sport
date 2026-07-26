@@ -11,6 +11,11 @@ import {
   MIN_COUNTDOWN_BEEP_SECONDS,
   MAX_COUNTDOWN_BEEP_SECONDS,
 } from '@/utils/userPreferences'
+import type {
+  OverlayScoreboardStyle,
+  TvScoreboardStyle,
+} from '@/config/scoreboardStyles'
+import ScoreboardStylePicker from '@/components/ScoreboardStylePicker.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -149,6 +154,22 @@ function setTheme(theme: AppTheme): void {
   prefs.theme = theme
   setUserPreferences({ theme })
   message.success(theme === 'light' ? 'Tema claro activado' : 'Tema oscuro activado')
+}
+
+function onTvStyleChange(style: TvScoreboardStyle | OverlayScoreboardStyle): void {
+  const next = style as TvScoreboardStyle
+  if (prefs.tvScoreboardStyle === next) return
+  prefs.tvScoreboardStyle = next
+  setUserPreferences({ tvScoreboardStyle: next })
+  message.success('Estilo de marcador TV actualizado')
+}
+
+function onOverlayStyleChange(style: TvScoreboardStyle | OverlayScoreboardStyle): void {
+  const next = style as OverlayScoreboardStyle
+  if (prefs.overlayScoreboardStyle === next) return
+  prefs.overlayScoreboardStyle = next
+  setUserPreferences({ overlayScoreboardStyle: next })
+  message.success('Estilo de overlay actualizado')
 }
 
 async function handleLogout(): Promise<void> {
@@ -345,6 +366,34 @@ async function handleLogout(): Promise<void> {
                 </a-button>
               </div>
             </div>
+
+            <div class="profile__pref-row profile__pref-row--stack">
+              <div>
+                <h3>Marcador TV</h3>
+                <p>
+                  Diseño de la pantalla grande de cancha. Más estilos se añadirán después.
+                </p>
+              </div>
+              <ScoreboardStylePicker
+                mode="tv"
+                :model-value="prefs.tvScoreboardStyle"
+                @update:model-value="onTvStyleChange"
+              />
+            </div>
+
+            <div class="profile__pref-row profile__pref-row--stack">
+              <div>
+                <h3>Overlay OBS</h3>
+                <p>
+                  Diseño del marcador transparente para transmisión. Más estilos se añadirán después.
+                </p>
+              </div>
+              <ScoreboardStylePicker
+                mode="overlay"
+                :model-value="prefs.overlayScoreboardStyle"
+                @update:model-value="onOverlayStyleChange"
+              />
+            </div>
           </div>
         </section>
 
@@ -368,7 +417,7 @@ async function handleLogout(): Promise<void> {
 
 <style scoped lang="scss">
 .profile {
-  max-width: min(720px, 100%);
+  max-width: min(780px, 100%);
   width: 100%;
   margin: 0 auto;
   padding: 2rem 1.5rem 3rem;

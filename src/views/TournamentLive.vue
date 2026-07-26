@@ -7,12 +7,14 @@ import { fetchCourtStream } from '@/services/tournamentCourtStream'
 import { getLiveClockUpdateMs } from '@/config/poll'
 import { createDefaultScoreboardState } from '@/types/hockeyScoreboard'
 import { loadLiveEventMeta } from '@/utils/liveEventMeta'
+import { useScoreboardDisplayPrefs } from '@/composables/useScoreboardDisplayPrefs'
 
 const route = useRoute()
 const tournamentId = computed(() => route.params.tournamentId as string)
 const court = computed(() => route.params.court as string)
 const isOverlay = computed(() => route.name === 'tournament-overlay')
 const activeMatchId = ref<string | null>(null)
+const { overlayStyle } = useScoreboardDisplayPrefs()
 
 const { remoteState, displayTime, displayIntermissionTime, displayPenaltiesLocal, displayPenaltiesVisit, refresh } =
   useRemoteHockeyBoardCore(() => activeMatchId.value)
@@ -62,6 +64,7 @@ onUnmounted(() => {
     <ScoreBoard
       v-if="activeMatchId"
       :overlay="isOverlay"
+      :overlay-style="overlayStyle"
       :state="displayState"
       :display-time="displayTime"
       :display-intermission-time="displayIntermissionTime"

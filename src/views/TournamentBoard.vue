@@ -12,9 +12,11 @@ import {
   readCourtActiveMatch,
   readMatchIdFromStorage,
 } from '@/utils/localSync'
+import { useScoreboardDisplayPrefs } from '@/composables/useScoreboardDisplayPrefs'
 
 const route = useRoute()
 const store = useScoreboardStore()
+const { tvStyle } = useScoreboardDisplayPrefs()
 
 const tournamentId = computed(() => route.params.tournamentId as string)
 const court = computed(() => route.params.court as string)
@@ -130,7 +132,12 @@ onUnmounted(() => {
 
 <template>
   <div class="board-root">
-    <ScoreBoard v-if="activeMatchId && ready" tv :state="store.state" />
+    <ScoreBoard
+      v-if="activeMatchId && ready"
+      tv
+      :tv-style="tvStyle"
+      :state="store.state"
+    />
     <div v-else-if="activeMatchId" class="board-empty">Cargando marcador…</div>
     <div v-else class="board-empty">
       Esperando partido en cancha {{ court }}…

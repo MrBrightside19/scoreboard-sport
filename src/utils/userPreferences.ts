@@ -1,3 +1,12 @@
+import {
+  normalizeOverlayScoreboardStyle,
+  normalizeTvScoreboardStyle,
+  type OverlayScoreboardStyle,
+  type TvScoreboardStyle,
+  DEFAULT_OVERLAY_SCOREBOARD_STYLE,
+  DEFAULT_TV_SCOREBOARD_STYLE,
+} from '@/config/scoreboardStyles'
+
 const PREFS_KEY = 'scoreboard:userPreferences'
 
 export type AppTheme = 'dark' | 'light'
@@ -9,6 +18,10 @@ export interface UserPreferences {
   countdownBeepSeconds: number
   /** Tema de la interfaz (páginas de app; TV/overlay siguen oscuros). */
   theme: AppTheme
+  /** Estilo del marcador TV / cancha. */
+  tvScoreboardStyle: TvScoreboardStyle
+  /** Estilo del overlay OBS. */
+  overlayScoreboardStyle: OverlayScoreboardStyle
 }
 
 export const DEFAULT_COUNTDOWN_BEEP_SECONDS = 10
@@ -19,6 +32,8 @@ const DEFAULTS: UserPreferences = {
   countdownBeepEnabled: true,
   countdownBeepSeconds: DEFAULT_COUNTDOWN_BEEP_SECONDS,
   theme: 'dark',
+  tvScoreboardStyle: DEFAULT_TV_SCOREBOARD_STYLE,
+  overlayScoreboardStyle: DEFAULT_OVERLAY_SCOREBOARD_STYLE,
 }
 
 function clampCountdownSeconds(value: unknown): number {
@@ -55,6 +70,12 @@ export function getUserPreferences(): UserPreferences {
       stored.countdownBeepSeconds ?? DEFAULTS.countdownBeepSeconds,
     ),
     theme: normalizeTheme(stored.theme ?? DEFAULTS.theme),
+    tvScoreboardStyle: normalizeTvScoreboardStyle(
+      stored.tvScoreboardStyle ?? DEFAULTS.tvScoreboardStyle,
+    ),
+    overlayScoreboardStyle: normalizeOverlayScoreboardStyle(
+      stored.overlayScoreboardStyle ?? DEFAULTS.overlayScoreboardStyle,
+    ),
   }
 }
 
@@ -69,6 +90,12 @@ export function setUserPreferences(partial: Partial<UserPreferences>): UserPrefe
       partial.countdownBeepSeconds ?? current.countdownBeepSeconds,
     ),
     theme: normalizeTheme(partial.theme ?? current.theme),
+    tvScoreboardStyle: normalizeTvScoreboardStyle(
+      partial.tvScoreboardStyle ?? current.tvScoreboardStyle,
+    ),
+    overlayScoreboardStyle: normalizeOverlayScoreboardStyle(
+      partial.overlayScoreboardStyle ?? current.overlayScoreboardStyle,
+    ),
   }
   localStorage.setItem(PREFS_KEY, JSON.stringify(next))
   window.dispatchEvent(new Event('scoreboard:prefs-change'))
@@ -89,6 +116,14 @@ export function getCountdownBeepSeconds(): number {
 
 export function getAppTheme(): AppTheme {
   return getUserPreferences().theme
+}
+
+export function getTvScoreboardStyle(): TvScoreboardStyle {
+  return getUserPreferences().tvScoreboardStyle
+}
+
+export function getOverlayScoreboardStyle(): OverlayScoreboardStyle {
+  return getUserPreferences().overlayScoreboardStyle
 }
 
 export function applyAppTheme(theme: AppTheme = getAppTheme()): void {
