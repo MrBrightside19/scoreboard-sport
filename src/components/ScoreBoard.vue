@@ -67,6 +67,17 @@ const visitGoals = computed(() =>
   props.state.goals.filter((goal) => goal.team === 'visit'),
 )
 
+function shotTotals(team: 'local' | 'visit'): { misses: number; saves: number } {
+  const shots = props.state.shots ?? []
+  return {
+    misses: shots.filter((shot) => shot.team === team && shot.result === 'miss').length,
+    saves: shots.filter((shot) => shot.team === team && shot.result === 'save').length,
+  }
+}
+
+const localShotTotals = computed(() => shotTotals('local'))
+const visitShotTotals = computed(() => shotTotals('visit'))
+
 const TEAM_NAME_MAX = 18
 
 function truncateTeamName(name: string): string {
@@ -489,6 +500,13 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
           </div>
 
           <div class="scoreboard__detail-block">
+            <span class="scoreboard__detail-title">Tiros</span>
+            <p class="scoreboard__shot-line">
+              Tiros {{ localShotTotals.misses }} · Atajadas {{ localShotTotals.saves }}
+            </p>
+          </div>
+
+          <div class="scoreboard__detail-block">
             <span class="scoreboard__detail-title">Penalidades</span>
             <div v-if="localPenalties.length" class="scoreboard__penalties scoreboard__penalties--live">
               <div
@@ -551,6 +569,13 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
               </div>
             </div>
             <span v-else class="scoreboard__detail-empty">Sin goles</span>
+          </div>
+
+          <div class="scoreboard__detail-block">
+            <span class="scoreboard__detail-title">Tiros</span>
+            <p class="scoreboard__shot-line">
+              Tiros {{ visitShotTotals.misses }} · Atajadas {{ visitShotTotals.saves }}
+            </p>
           </div>
 
           <div class="scoreboard__detail-block">
@@ -1226,6 +1251,13 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
 .scoreboard__detail-empty {
   font-size: 0.78rem;
   opacity: 0.4;
+}
+
+.scoreboard__shot-line {
+  margin: 0;
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
 }
 
 .scoreboard__goals {

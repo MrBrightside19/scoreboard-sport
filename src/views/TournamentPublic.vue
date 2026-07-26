@@ -1,19 +1,31 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { message } from 'ant-design-vue'
 import {
   fetchTournament,
   fetchTournamentMatches,
 } from '@/services/tournamentService'
+import { fetchMatchState } from '@/services/matchSync'
 import { calculateStandings } from '@/utils/standings'
 import type { Tournament, TournamentMatch } from '@/types/tournament'
-import TournamentStandings from '@/components/TournamentStandings.vue'
+import MatchReportDrawer from '@/components/MatchReportDrawer.vue'
+import TournamentStatsPanel from '@/components/TournamentStatsPanel.vue'
+import {
+  buildMatchReport,
+  buildMatchReportFromFinishedScores,
+  matchReportMetaFromTournamentMatch,
+  type MatchReport,
+} from '@/utils/matchReport'
 
 const route = useRoute()
 const tournament = ref<Tournament | null>(null)
 const matches = ref<TournamentMatch[]>([])
 const loading = ref(true)
 const standings = ref(calculateStandings([]))
+const reportOpen = ref(false)
+const reportLoading = ref(false)
+const activeReport = ref<MatchReport | null>(null)
 
 const tournamentStatusLabels: Record<Tournament['status'], string> = {
   draft: 'Borrador',
@@ -34,6 +46,42 @@ function matchStatusColor(status: TournamentMatch['status']): string {
   if (status === 'live') return 'green'
   if (status === 'finished') return 'default'
   return 'blue'
+}
+
+async function openMatchReport(tm: TournamentMatch): Promise<void> {
+  reportOpen.value = true
+  reportLoading.value = true
+  activeReport.value = null
+  try {
+    const meta = matchReportMetaFromTournamentMatch(tm)
+    if (!tm.match_id) {
+      activeReport.value = buildMatchReportFromFinishedScores(
+        meta,
+        tm.goal_local ?? 0,
+        tm.goal_visit ?? 0,
+      )
+      return
+    }
+    const record = await fetchMatchState(tm.match_id)
+    if (!record?.state) {
+      activeReport.value = buildMatchReportFromFinishedScores(
+        meta,
+        tm.goal_local ?? record?.goal_local ?? 0,
+        tm.goal_visit ?? record?.goal_visit ?? 0,
+      )
+      return
+    }
+    activeReport.value = buildMatchReport(meta, {
+      ...record.state,
+      goalLocal: record.goal_local ?? record.state.goalLocal,
+      goalVisit: record.goal_visit ?? record.state.goalVisit,
+    })
+  } catch (err) {
+    message.error(err instanceof Error ? err.message : 'No se pudo cargar el informe')
+    reportOpen.value = false
+  } finally {
+    reportLoading.value = false
+  }
 }
 
 onMounted(async () => {
@@ -70,8 +118,7 @@ onMounted(async () => {
       </header>
 
       <section class="tournament-public__section">
-        <h2>Tabla de posiciones</h2>
-        <TournamentStandings :standings="standings" />
+        <TournamentStatsPanel :standings="standings" :matches="matches" />
       </section>
 
       <section class="tournament-public__section">
@@ -81,7 +128,7 @@ onMounted(async () => {
             :data-source="matches.map((m) => ({ ...m, key: m.id }))"
             :pagination="false"
             size="small"
-            :scroll="{ x: 720 }"
+            :scroll="{ x: 800 }"
             table-layout="fixed"
           >
             <a-table-column title="Local" data-index="local_team" :ellipsis="true" :width="140" />
@@ -107,10 +154,40 @@ onMounted(async () => {
                 <span v-else>—</span>
               </template>
             </a-table-column>
+            <a-table-column title="" :width="56" fixed="right">
+              <template #default="{ record }">
+                <a-button
+                  v-if="
+                    record.match_id
+                      && (record.status === 'finished' || record.status === 'live')
+                  "
+                  size="small"
+                  class="tournament-public__info-btn"
+                  aria-label="Ver informe"
+                  title="Ver informe"
+                  @click="openMatchReport(record)"
+                >
+                  <span class="tournament-public__btn-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M12 11v6" />
+                      <path d="M12 8h.01" />
+                    </svg>
+                  </span>
+                </a-button>
+              </template>
+            </a-table-column>
           </a-table>
         </div>
       </section>
     </a-spin>
+
+    <MatchReportDrawer
+      v-model:open="reportOpen"
+      :report="activeReport"
+      :loading="reportLoading"
+      :can-download="false"
+    />
   </div>
 </template>
 
@@ -149,5 +226,20 @@ onMounted(async () => {
     margin: 0 0 1rem;
     font-size: 1.1rem;
   }
+}
+
+.tournament-public__btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.tournament-public__info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  padding-inline: 0.4rem;
 }
 </style>

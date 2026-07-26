@@ -64,6 +64,69 @@ const pendingGoalsCount = computed(
   () => store.state.goals.filter((goal) => isGoalPending(goal)).length,
 )
 
+function shotCount(team: 'local' | 'visit', result: 'miss' | 'save'): number {
+  return store.state.shots.filter(
+    (shot) => shot.team === team && shot.result === result,
+  ).length
+}
+
+const goalkeeperSelection = ref<{ local: string; visit: string }>({
+  local: '',
+  visit: '',
+})
+
+function goalkeepersFor(team: 'local' | 'visit') {
+  const roster = team === 'local' ? store.state.rosterLocal : store.state.rosterVisit
+  return roster.filter((player) => player.role === 'goalkeeper')
+}
+
+function currentGoalkeeperId(team: 'local' | 'visit'): string {
+  const keepers = goalkeepersFor(team)
+  const selected = goalkeeperSelection.value[team]
+  if (selected && keepers.some((player) => player.id === selected)) return selected
+  return keepers[0]?.id ?? ''
+}
+
+function setGoalkeeper(team: 'local' | 'visit', playerId: string): void {
+  goalkeeperSelection.value = { ...goalkeeperSelection.value, [team]: playerId }
+}
+
+function markSave(team: 'local' | 'visit'): void {
+  store.markShot(team, 'save', currentGoalkeeperId(team))
+}
+
+function goalkeeperName(team: 'local' | 'visit'): string {
+  const keeper = goalkeepersFor(team).find(
+    (player) => player.id === currentGoalkeeperId(team),
+  )
+  return keeper ? playerLabel(keeper) : ''
+}
+
+const shotLogByTeam = computed(() => [
+  {
+    key: 'local' as const,
+    label: 'Local',
+    shots: [...store.state.shots]
+      .filter((shot) => shot.team === 'local')
+      .reverse()
+      .map((shot) => ({
+        ...shot,
+        resultLabel: shot.result === 'save' ? 'Atajada' : 'Tiro',
+      })),
+  },
+  {
+    key: 'visit' as const,
+    label: 'Visita',
+    shots: [...store.state.shots]
+      .filter((shot) => shot.team === 'visit')
+      .reverse()
+      .map((shot) => ({
+        ...shot,
+        resultLabel: shot.result === 'save' ? 'Atajada' : 'Tiro',
+      })),
+  },
+])
+
 const canAdvancePeriod = computed(
   () =>
     store.state.intermissionActive ||
@@ -534,6 +597,7 @@ watch(
     gamePeriod: store.state.gamePeriod,
     isPaused: store.state.isPaused,
     goals: store.state.goals,
+    shots: store.state.shots,
     rosterLocal: store.state.rosterLocal,
     rosterVisit: store.state.rosterVisit,
     penaltiesLocal: penaltySignature(store.state.penaltiesLocal),
@@ -698,6 +762,72 @@ onUnmounted(() => {
                     <span class="controls__score">{{ store.state.goalLocal }}</span>
                     <a-button type="primary" size="large" @click="markGoal('local')">+</a-button>
                   </div>
+                  <div class="controls__shot-rows">
+                    <div class="controls__shot-row">
+                      <span class="controls__shot-label">Tiro</span>
+                      <div class="controls__shot-controls">
+                        <a-button
+                          size="small"
+                          :disabled="shotCount('local', 'miss') === 0"
+                          @click="store.removeLastShot('local', 'miss')"
+                        >
+                          −
+                        </a-button>
+                        <span class="controls__shot-count">{{ shotCount('local', 'miss') }}</span>
+                        <a-button
+                          size="small"
+                          type="primary"
+                          @click="store.markShot('local', 'miss')"
+                        >
+                          +
+                        </a-button>
+                      </div>
+                    </div>
+                    <div class="controls__shot-row">
+                      <span class="controls__shot-label">Atajada (arquero)</span>
+                      <div class="controls__shot-controls">
+                        <a-button
+                          size="small"
+                          :disabled="shotCount('local', 'save') === 0"
+                          @click="store.removeLastShot('local', 'save')"
+                        >
+                          −
+                        </a-button>
+                        <span class="controls__shot-count">{{ shotCount('local', 'save') }}</span>
+                        <a-button
+                          size="small"
+                          type="primary"
+                          @click="markSave('local')"
+                        >
+                          +
+                        </a-button>
+                      </div>
+                    </div>
+                    <div class="controls__goalkeeper">
+                      <a-select
+                        v-if="goalkeepersFor('local').length > 1"
+                        size="small"
+                        class="controls__goalkeeper-select"
+                        :value="currentGoalkeeperId('local')"
+                        @update:value="(v: string) => setGoalkeeper('local', v)"
+                      >
+                        <a-select-option
+                          v-for="keeper in goalkeepersFor('local')"
+                          :key="keeper.id"
+                          :value="keeper.id"
+                        >
+                          {{ playerLabel(keeper) }}
+                        </a-select-option>
+                      </a-select>
+                      <span v-else class="controls__goalkeeper-hint">
+                        {{
+                          goalkeeperName('local')
+                            ? `Atajadas para ${goalkeeperName('local')}`
+                            : 'Sin arquero en la plantilla'
+                        }}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
                 <div class="controls__divider" aria-hidden="true">VS</div>
@@ -729,12 +859,124 @@ onUnmounted(() => {
                     <span class="controls__score">{{ store.state.goalVisit }}</span>
                     <a-button type="primary" size="large" @click="markGoal('visit')">+</a-button>
                   </div>
+                  <div class="controls__shot-rows">
+                    <div class="controls__shot-row">
+                      <span class="controls__shot-label">Tiro</span>
+                      <div class="controls__shot-controls">
+                        <a-button
+                          size="small"
+                          :disabled="shotCount('visit', 'miss') === 0"
+                          @click="store.removeLastShot('visit', 'miss')"
+                        >
+                          −
+                        </a-button>
+                        <span class="controls__shot-count">{{ shotCount('visit', 'miss') }}</span>
+                        <a-button
+                          size="small"
+                          type="primary"
+                          @click="store.markShot('visit', 'miss')"
+                        >
+                          +
+                        </a-button>
+                      </div>
+                    </div>
+                    <div class="controls__shot-row">
+                      <span class="controls__shot-label">Atajada (arquero)</span>
+                      <div class="controls__shot-controls">
+                        <a-button
+                          size="small"
+                          :disabled="shotCount('visit', 'save') === 0"
+                          @click="store.removeLastShot('visit', 'save')"
+                        >
+                          −
+                        </a-button>
+                        <span class="controls__shot-count">{{ shotCount('visit', 'save') }}</span>
+                        <a-button
+                          size="small"
+                          type="primary"
+                          @click="markSave('visit')"
+                        >
+                          +
+                        </a-button>
+                      </div>
+                    </div>
+                    <div class="controls__goalkeeper">
+                      <a-select
+                        v-if="goalkeepersFor('visit').length > 1"
+                        size="small"
+                        class="controls__goalkeeper-select"
+                        :value="currentGoalkeeperId('visit')"
+                        @update:value="(v: string) => setGoalkeeper('visit', v)"
+                      >
+                        <a-select-option
+                          v-for="keeper in goalkeepersFor('visit')"
+                          :key="keeper.id"
+                          :value="keeper.id"
+                        >
+                          {{ playerLabel(keeper) }}
+                        </a-select-option>
+                      </a-select>
+                      <span v-else class="controls__goalkeeper-hint">
+                        {{
+                          goalkeeperName('visit')
+                            ? `Atajadas para ${goalkeeperName('visit')}`
+                            : 'Sin arquero en la plantilla'
+                        }}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
               <p class="controls__score-hint">
                 El botón <strong>+</strong> marca el gol y captura el minuto del reloj. Completa autor y asistencia en <strong>Goles</strong>.
+                <strong>Tiro</strong> = al arco sin contacto del arquero.
+                <strong>Atajada</strong> = el arquero de ese equipo detuvo el tiro.
                 Si el rival tiene una penalidad activa, se te preguntará si corresponde liberar al jugador.
               </p>
+              <div
+                v-if="store.state.shots.length"
+                class="controls__shot-log-grid"
+              >
+                <article
+                  v-for="team in shotLogByTeam"
+                  :key="team.key"
+                  class="controls__shot-log-card"
+                  :class="`controls__shot-log-card--${team.key}`"
+                >
+                  <header class="controls__shot-log-head">
+                    <h4>{{ team.label }}</h4>
+                    <span>
+                      {{ shotCount(team.key, 'miss') }} tiros ·
+                      {{ shotCount(team.key, 'save') }} atajadas
+                    </span>
+                  </header>
+                  <ul v-if="team.shots.length" class="controls__shot-log">
+                    <li v-for="shot in team.shots" :key="shot.id">
+                      <span class="controls__shot-log-text">
+                        {{ shot.resultLabel }} · P{{ shot.period }} {{ shot.gameMinute }}
+                      </span>
+                      <a-popconfirm
+                        :title="`¿Eliminar este registro de ${shot.resultLabel.toLowerCase()}? No se puede deshacer.`"
+                        ok-text="Eliminar"
+                        cancel-text="Cancelar"
+                        :ok-button-props="{ danger: true }"
+                        placement="topRight"
+                        @confirm="store.removeShot(shot.id)"
+                      >
+                        <button
+                          type="button"
+                          class="controls__shot-log-remove"
+                          :aria-label="`Eliminar ${shot.resultLabel} de P${shot.period} ${shot.gameMinute}`"
+                          title="Eliminar registro"
+                        >
+                          ×
+                        </button>
+                      </a-popconfirm>
+                    </li>
+                  </ul>
+                  <p v-else class="controls__shot-log-empty">Sin registros</p>
+                </article>
+              </div>
             </a-card>
 
             <a-card title="Reloj y periodo" class="controls__card controls__card--wide controls__card--clock">
@@ -1094,6 +1336,18 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  padding: 0.85rem 0.9rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.controls__side--local {
+  border-top: 2px solid rgba(0, 212, 255, 0.5);
+}
+
+.controls__side--visit {
+  border-top: 2px solid rgba(255, 107, 53, 0.5);
 }
 
 .controls__color {
@@ -1149,6 +1403,169 @@ onUnmounted(() => {
   text-align: center;
   font-size: 0.78rem;
   opacity: 0.55;
+}
+
+.controls__shot-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.65rem;
+  width: 100%;
+}
+
+.controls__shot-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.controls__shot-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.65;
+  min-width: 4.5rem;
+}
+
+.controls__goalkeeper {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.controls__goalkeeper-select {
+  min-width: 60%;
+  max-width: 100%;
+}
+
+.controls__goalkeeper-hint {
+  font-size: 0.72rem;
+  opacity: 0.5;
+  text-align: right;
+}
+
+.controls__shot-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.controls__shot-count {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.35rem;
+  min-width: 1.5ch;
+  text-align: center;
+  line-height: 1;
+}
+
+.controls__shot-log-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.controls__shot-log-card {
+  padding: 0.7rem 0.8rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  min-width: 0;
+
+  &--local {
+    border-top: 2px solid rgba(0, 212, 255, 0.45);
+  }
+
+  &--visit {
+    border-top: 2px solid rgba(255, 107, 53, 0.45);
+  }
+}
+
+.controls__shot-log-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-bottom: 0.5rem;
+
+  h4 {
+    margin: 0;
+    font-size: 0.88rem;
+    font-weight: 650;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  span {
+    font-size: 0.72rem;
+    opacity: 0.55;
+  }
+}
+
+.controls__shot-log {
+  margin: 0;
+  padding: 0 0.35rem 0 0;
+  list-style: none;
+  font-size: 0.78rem;
+  opacity: 0.8;
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  max-height: 9rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+
+  li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+  }
+}
+
+.controls__shot-log-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.controls__shot-log-remove {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-size: 0.95rem;
+  line-height: 1;
+  opacity: 0.45;
+  cursor: pointer;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+
+  &:hover,
+  &:focus-visible {
+    opacity: 1;
+    background: rgba(255, 77, 79, 0.16);
+    color: #ff7875;
+  }
+}
+
+.controls__shot-log-empty {
+  margin: 0;
+  font-size: 0.78rem;
+  opacity: 0.45;
 }
 
 .controls__tabs {
