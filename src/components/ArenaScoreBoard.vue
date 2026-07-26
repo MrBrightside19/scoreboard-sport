@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { ScoreboardState, TeamPenalty } from '@/types/hockeyScoreboard'
 import { MAX_PENALTIES_PER_TEAM, MAX_PERIODS } from '@/types/hockeyScoreboard'
 import { findPlayerById, findPlayerByNumber } from '@/utils/roster'
@@ -15,8 +15,6 @@ const props = defineProps<{
 }>()
 
 const TEAM_NAME_MAX = 16
-/** Bajo este largo el nombre siempre entra a tamaño completo. */
-const TEAM_NAME_MIN_FIT = 10
 
 const clock = computed(() => {
   if (props.state.intermissionActive) {
@@ -98,11 +96,56 @@ function displayTeamName(name: string): string {
   return `${formatted.slice(0, TEAM_NAME_MAX)}…`
 }
 
-/** Reduce la tipografía en nombres largos para que nunca se recorten. */
-function teamNameStyle(name: string): Record<string, string> {
-  const length = Math.max(displayTeamName(name).length, TEAM_NAME_MIN_FIT)
-  return { '--arena-name-len': String(length) }
+const localNameEl = ref<HTMLElement | null>(null)
+const visitNameEl = ref<HTMLElement | null>(null)
+let nameResizeObserver: ResizeObserver | null = null
+
+/**
+ * Mide el ancho intrínseco del nombre (no el recortado por overflow)
+ * y reduce la tipografía solo lo justo para que quepa.
+ */
+function fitTeamNames() {
+  for (const el of [localNameEl.value, visitNameEl.value]) {
+    const parent = el?.parentElement
+    if (!el || !parent) continue
+
+    el.style.fontSize = ''
+
+    const available = parent.clientWidth
+    // scrollWidth refleja el texto completo; getBoundingClientRect se queda
+    // en el ancho del padre cuando hay overflow:hidden + flex.
+    const needed = Math.max(el.scrollWidth, el.offsetWidth)
+    if (needed > available && available > 0) {
+      const base = parseFloat(getComputedStyle(el).fontSize)
+      el.style.fontSize = `${(base * available * 0.98) / needed}px`
+    }
+  }
 }
+
+function scheduleFitTeamNames() {
+  nextTick(() => {
+    requestAnimationFrame(fitTeamNames)
+  })
+}
+
+watch(
+  () => [props.state.localTeam, props.state.visitTeam],
+  scheduleFitTeamNames,
+)
+
+onMounted(() => {
+  scheduleFitTeamNames()
+  void document.fonts?.ready.then(scheduleFitTeamNames)
+  nameResizeObserver = new ResizeObserver(scheduleFitTeamNames)
+  for (const el of [localNameEl.value, visitNameEl.value]) {
+    if (el?.parentElement) nameResizeObserver.observe(el.parentElement)
+  }
+})
+
+onBeforeUnmount(() => {
+  nameResizeObserver?.disconnect()
+  nameResizeObserver = null
+})
 
 function playerNumber(penalty: TeamPenalty | null, team: 'local' | 'visit'): string {
   if (!penalty) return ''
@@ -132,8 +175,10 @@ function penaltyTime(penalty: TeamPenalty | null): string {
     <div class="arena__panel">
       <div class="arena__top">
         <div class="arena__side">
-          <span class="arena__team" :style="teamNameStyle(state.localTeam)">
-            {{ displayTeamName(state.localTeam) }}
+          <span class="arena__team local">
+            <span ref="localNameEl" class="arena__team-text">
+              {{ displayTeamName(state.localTeam) }}
+            </span>
           </span>
           <div class="arena__cell arena__cell--score">{{ state.goalLocal }}</div>
         </div>
@@ -149,8 +194,10 @@ function penaltyTime(penalty: TeamPenalty | null): string {
         </div>
 
         <div class="arena__side">
-          <span class="arena__team" :style="teamNameStyle(state.visitTeam)">
-            {{ displayTeamName(state.visitTeam) }}
+          <span class="arena__team visit">
+            <span ref="visitNameEl" class="arena__team-text">
+              {{ displayTeamName(state.visitTeam) }}
+            </span>
           </span>
           <div class="arena__cell arena__cell--score">{{ state.goalVisit }}</div>
         </div>
@@ -267,15 +314,6 @@ function penaltyTime(penalty: TeamPenalty | null): string {
     0 1.5vh 4vh rgba(0, 0, 0, 0.45);
 }
 
-.arena__top {
-  flex: 2.4;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 50vw minmax(0, 1fr);
-  gap: 1vw;
-  align-items: stretch;
-}
-
 .arena__side,
 .arena__center {
   position: relative;
@@ -285,8 +323,62 @@ function penaltyTime(penalty: TeamPenalty | null): string {
 }
 
 .arena__side {
-  container-type: inline-size;
-  container-name: arena-side;
+  overflow: visible;
+}
+
+.arena__team {
+  &.local{
+
+    left: 6%;
+  }
+  &.visit{
+
+    right: 6%;
+  }
+  position: absolute;
+  top: 0;
+  /* Mismo margen horizontal que el card de goles (líneas verdes). */
+  
+  width: 130%;
+  box-sizing: border-box;
+  max-width: 130%;
+  min-width: 0;
+  height: 13.4vh;
+  max-height: 13.4vh;
+  padding-inline: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.arena__team-text {
+  display: block;
+  flex: 0 0 auto;
+  width: max-content;
+  max-width: none;
+  font-family: 'Inter', system-ui, sans-serif;
+  /* Base +15%; fitTeamNames() lo reduce solo si el nombre no cabe. */
+  font-size: clamp(4.96rem, 12.16vh, 9.04rem);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--arena-label);
+  text-align: center;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+.arena__top {
+  flex: 2.4;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 50vw minmax(0, 1fr);
+  gap: 1vw;
+  align-items: stretch;
+  overflow: visible;
 }
 
 .arena__team--spacer {
@@ -316,37 +408,6 @@ function penaltyTime(penalty: TeamPenalty | null): string {
   text-align: center;
 }
 
-.arena__team {
-  --arena-name-len: 10;
-
-  position: absolute;
-  inset: 0 0 auto;
-  box-sizing: border-box;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  height: 10vh;
-  max-height: 10vh;
-  padding-inline: 0.4vw;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: 'Inter', system-ui, sans-serif;
-  /* Escala al ancho real de la columna lateral para no cortar el nombre. */
-  font-size: min(
-    clamp(3.59rem, 8.81vh, 6.55rem),
-    calc(92cqi / (var(--arena-name-len) * 0.62))
-  );
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--arena-label);
-  text-align: center;
-  line-height: 1.1;
-  white-space: nowrap;
-  overflow: hidden;
-}
-
 .arena__cell {
   display: flex;
   align-items: center;
@@ -368,7 +429,7 @@ function penaltyTime(penalty: TeamPenalty | null): string {
 
 .arena__cell--score {
   position: absolute;
-  top: 11.4vh;
+  top: 13.6vh;
   bottom: 0;
   left: 6%;
   width: 88%;
@@ -381,7 +442,7 @@ function penaltyTime(penalty: TeamPenalty | null): string {
 
 .arena__cell--clock {
   position: absolute;
-  inset: 11.4vh 0 0;
+  inset: 13.6vh 0 0;
   width: 100%;
   min-height: 0;
   height: auto;
