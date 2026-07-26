@@ -331,8 +331,8 @@ watch(
   position: sticky;
   top: 0;
   z-index: 100;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(15, 20, 25, 0.92);
+  border-bottom: 1px solid var(--app-border);
+  background: var(--app-nav-bg);
   backdrop-filter: blur(10px);
 }
 
@@ -350,11 +350,12 @@ watch(
   align-items: center;
   gap: 0.55rem;
   text-decoration: none;
-  color: #e8edf5;
+  color: var(--app-text);
   flex-shrink: 0;
 
   &:hover {
-    color: #fff;
+    color: var(--app-text);
+    opacity: 0.92;
   }
 }
 
@@ -392,18 +393,18 @@ watch(
   padding: 0.45rem 0.75rem;
   border-radius: 8px;
   text-decoration: none;
-  color: rgba(232, 237, 245, 0.72);
+  color: var(--app-text-soft);
   font-size: 0.88rem;
   transition: color 0.15s, background 0.15s;
 
   &:hover {
-    color: #e8edf5;
-    background: rgba(255, 255, 255, 0.06);
+    color: var(--app-text);
+    background: var(--app-surface-strong);
   }
 
   &--active {
-    color: #00d4ff;
-    background: rgba(0, 212, 255, 0.1);
+    color: var(--app-link);
+    background: color-mix(in srgb, var(--app-link) 14%, transparent);
   }
 }
 
@@ -426,16 +427,16 @@ watch(
   gap: 0.55rem;
   max-width: 220px;
   padding: 0.25rem 0.55rem 0.25rem 0.25rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--app-border-strong);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  color: #e8edf5;
+  background: var(--app-surface);
+  color: var(--app-text);
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
 
   &:hover {
-    border-color: rgba(0, 212, 255, 0.35);
-    background: rgba(255, 255, 255, 0.07);
+    border-color: color-mix(in srgb, var(--app-link) 45%, transparent);
+    background: var(--app-surface-strong);
   }
 }
 
@@ -464,13 +465,13 @@ watch(
 .app-nav__menu-user {
   font-size: 0.85rem;
   font-weight: 600;
-  color: #e8edf5;
+  color: var(--app-text);
   line-height: 1.2;
 }
 
 .app-nav__menu-role {
   font-size: 0.75rem;
-  color: rgba(0, 212, 255, 0.9);
+  color: var(--app-link);
   margin-top: 0.2rem;
 }
 
@@ -478,9 +479,9 @@ watch(
   min-width: 200px;
   padding: 0.35rem;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: #1a222c;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--app-border-strong);
+  background: var(--app-dropdown-bg);
+  box-shadow: var(--app-shadow);
 }
 
 .app-nav__dropdown-meta {
@@ -492,13 +493,13 @@ watch(
   width: 100%;
   padding: 0.6rem 0.75rem;
   border-radius: 8px;
-  color: rgba(232, 237, 245, 0.9);
+  color: var(--app-text);
   font-size: 0.88rem;
   text-decoration: none;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.06);
-    color: #fff;
+    background: var(--app-surface-strong);
+    color: var(--app-text);
   }
 }
 
@@ -510,14 +511,13 @@ watch(
   border: none;
   border-radius: 8px;
   background: transparent;
-  color: #ff8f8f;
+  color: var(--app-danger-text);
   font-size: 0.88rem;
   text-align: left;
   cursor: pointer;
 
   &:hover {
-    background: rgba(255, 107, 107, 0.12);
-    color: #ffb0b0;
+    background: var(--app-danger-hover-bg);
   }
 }
 
@@ -529,7 +529,7 @@ watch(
   width: 2.25rem;
   height: 2.25rem;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid var(--app-border-strong);
   border-radius: 8px;
   background: transparent;
   cursor: pointer;
@@ -539,7 +539,7 @@ watch(
     width: 1.1rem;
     height: 2px;
     margin: 0 auto;
-    background: #e8edf5;
+    background: var(--app-text);
     border-radius: 1px;
   }
 }
@@ -568,8 +568,8 @@ watch(
     align-items: stretch;
     gap: 0.15rem;
     padding: 0.5rem 1rem 1rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
-    background: rgba(15, 20, 25, 0.98);
+    border-top: 1px solid var(--app-border);
+    background: var(--app-nav-bg);
 
     &--open {
       display: flex;
@@ -586,15 +586,15 @@ watch(
     padding: 0.7rem 0.75rem;
     border: none;
     border-radius: 8px;
-    background: rgba(0, 212, 255, 0.16);
-    color: #00d4ff;
+    background: color-mix(in srgb, var(--app-link) 16%, transparent);
+    color: var(--app-link);
     font-size: 0.88rem;
     font-weight: 600;
     text-align: left;
     cursor: pointer;
 
     &:hover:not(:disabled) {
-      background: rgba(0, 212, 255, 0.24);
+      background: color-mix(in srgb, var(--app-link) 24%, transparent);
     }
 
     &:disabled {
@@ -606,7 +606,7 @@ watch(
   .app-nav__mobile-divider {
     height: 1px;
     margin: 0.45rem 0.5rem;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--app-border);
   }
 
   .app-nav__mobile-profile {
@@ -624,28 +624,28 @@ watch(
     border: none;
     border-radius: 8px;
     background: transparent;
-    color: rgba(232, 237, 245, 0.85);
+    color: var(--app-text-soft);
     font-size: 0.88rem;
     text-align: left;
     cursor: pointer;
 
     &:hover {
-      background: rgba(255, 255, 255, 0.06);
-      color: #fff;
+      background: var(--app-surface-strong);
+      color: var(--app-text);
     }
   }
 
   .app-nav__mobile-logout {
-    color: #ff8f8f;
+    color: var(--app-danger-text);
 
     &:hover {
-      background: rgba(255, 107, 107, 0.12);
-      color: #ffb0b0;
+      background: var(--app-danger-hover-bg);
+      color: var(--app-danger-text);
     }
   }
 
   .app-nav__mobile-login {
-    color: #00d4ff;
+    color: var(--app-link);
   }
 }
 </style>

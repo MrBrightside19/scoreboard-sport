@@ -240,8 +240,8 @@ function playerName(team: 'local' | 'visit', playerId: string, fallback: string)
   gap: 0.65rem;
   padding: 1rem;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
 }
 
 .penalties-panel__header {
@@ -301,8 +301,8 @@ function playerName(team: 'local' | 'visit', playerId: string, fallback: string)
 .penalties-panel__catalog {
   padding: 0.75rem 1rem;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   font-size: 0.82rem;
 
   summary {

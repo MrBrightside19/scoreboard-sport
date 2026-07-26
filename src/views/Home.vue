@@ -99,9 +99,10 @@ onMounted(() => {
   padding: 2.5rem;
   border-radius: 20px;
   background:
-    linear-gradient(135deg, rgba(0, 180, 216, 0.12), transparent 50%),
-    rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+    linear-gradient(135deg, color-mix(in srgb, var(--app-primary) 14%, transparent), transparent 50%),
+    var(--app-surface);
+  border: 1px solid var(--app-border);
+  color: var(--app-text);
 }
 
 .home__eyebrow {
@@ -110,7 +111,7 @@ onMounted(() => {
   font-weight: 600;
   letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: #00d4ff;
+  color: var(--app-link);
 }
 
 .home__hero h1 {
@@ -119,6 +120,7 @@ onMounted(() => {
   font-size: clamp(2.5rem, 8vw, 4rem);
   letter-spacing: 0.04em;
   font-weight: 400;
+  color: var(--app-text);
 }
 
 .home__subtitle {
@@ -126,7 +128,7 @@ onMounted(() => {
   max-width: 36rem;
   font-size: 1.05rem;
   line-height: 1.55;
-  opacity: 0.75;
+  color: var(--app-text-muted);
 }
 
 .home__warning {
@@ -162,10 +164,10 @@ onMounted(() => {
   gap: 0.45rem;
   margin-top: 3rem;
   padding-top: 1.25rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--app-border);
   font-size: 0.78rem;
   letter-spacing: 0.04em;
-  opacity: 0.4;
+  color: var(--app-text-muted);
 }
 
 .home__footer-sep {

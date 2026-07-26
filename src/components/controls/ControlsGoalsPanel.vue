@@ -247,8 +247,8 @@ function rosterFor(team: 'local' | 'visit') {
   gap: 0.65rem;
   padding: 1rem;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   min-width: 0;
 
   &:first-child {
@@ -293,7 +293,7 @@ function rosterFor(team: 'local' | 'visit') {
 
 .goals-panel__shots {
   padding-top: 0.55rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--app-border);
 }
 
 .goals-panel__shots-head {
@@ -340,7 +340,7 @@ function rosterFor(team: 'local' | 'visit') {
   align-items: center;
   padding: 0.55rem 0.65rem;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--app-surface);
 
   &--pending {
     border: 1px solid rgba(255, 193, 7, 0.35);
@@ -351,7 +351,7 @@ function rosterFor(team: 'local' | 'visit') {
 .goals-panel__index {
   font-family: 'Bebas Neue', sans-serif;
   font-size: 1.1rem;
-  color: #00d4ff;
+  color: var(--app-link);
   min-width: 2ch;
 }
 

@@ -29,15 +29,15 @@ defineProps<{
   display: block;
   padding: 1.25rem;
   border-radius: 14px;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: inherit;
+  background: linear-gradient(145deg, var(--app-surface-strong), var(--app-surface));
+  border: 1px solid var(--app-border);
+  color: var(--app-text);
   text-decoration: none;
   transition: transform 0.2s, border-color 0.2s;
 
   &:hover {
     transform: translateY(-2px);
-    border-color: rgba(0, 212, 255, 0.35);
+    border-color: color-mix(in srgb, var(--app-link) 45%, transparent);
   }
 }
 

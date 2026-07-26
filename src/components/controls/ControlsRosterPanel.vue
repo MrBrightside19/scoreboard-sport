@@ -175,8 +175,8 @@ function onNumberPaste(
   gap: 0.65rem;
   padding: 1rem;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
 
   h3 {
     margin: 0;

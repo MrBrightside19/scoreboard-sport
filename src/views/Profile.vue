@@ -6,7 +6,10 @@ import { useAuthStore } from '@/stores/auth'
 import {
   getUserPreferences,
   setUserPreferences,
+  type AppTheme,
   type UserPreferences,
+  MIN_COUNTDOWN_BEEP_SECONDS,
+  MAX_COUNTDOWN_BEEP_SECONDS,
 } from '@/utils/userPreferences'
 
 const auth = useAuthStore()
@@ -132,6 +135,20 @@ function onBeepToggle(checked: boolean | string | number): void {
       ? 'Beep de cuenta regresiva activado'
       : 'Beep de cuenta regresiva desactivado',
   )
+}
+
+function onBeepSecondsChange(value: number | null): void {
+  if (value == null) return
+  prefs.countdownBeepSeconds = value
+  setUserPreferences({ countdownBeepSeconds: value })
+  message.success(`La cuenta regresiva inicia a los ${value} s`)
+}
+
+function setTheme(theme: AppTheme): void {
+  if (prefs.theme === theme) return
+  prefs.theme = theme
+  setUserPreferences({ theme })
+  message.success(theme === 'light' ? 'Tema claro activado' : 'Tema oscuro activado')
 }
 
 async function handleLogout(): Promise<void> {
@@ -285,6 +302,49 @@ async function handleLogout(): Promise<void> {
                 @update:checked="onBeepToggle"
               />
             </div>
+
+            <div class="profile__pref-row profile__pref-row--stack">
+              <div>
+                <h3>Inicio de la cuenta regresiva</h3>
+                <p>
+                  Desde cuántos segundos restantes empieza el beep
+                  ({{ MIN_COUNTDOWN_BEEP_SECONDS }}–{{ MAX_COUNTDOWN_BEEP_SECONDS }}).
+                  Por defecto 10.
+                </p>
+              </div>
+              <a-input-number
+                :value="prefs.countdownBeepSeconds"
+                :min="MIN_COUNTDOWN_BEEP_SECONDS"
+                :max="MAX_COUNTDOWN_BEEP_SECONDS"
+                :disabled="!prefs.countdownBeepEnabled"
+                addon-after="s"
+                class="profile__seconds-input"
+                @update:value="onBeepSecondsChange"
+              />
+            </div>
+
+            <div class="profile__pref-row profile__pref-row--stack">
+              <div>
+                <h3>Tema de la interfaz</h3>
+                <p>
+                  Cambia entre modo oscuro y claro. El marcador TV y el overlay OBS se mantienen oscuros.
+                </p>
+              </div>
+              <div class="profile__theme-toggle" role="group" aria-label="Tema">
+                <a-button
+                  :type="prefs.theme === 'dark' ? 'primary' : 'default'"
+                  @click="setTheme('dark')"
+                >
+                  Oscuro
+                </a-button>
+                <a-button
+                  :type="prefs.theme === 'light' ? 'primary' : 'default'"
+                  @click="setTheme('light')"
+                >
+                  Claro
+                </a-button>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -329,22 +389,23 @@ async function handleLogout(): Promise<void> {
   p {
     margin: 0.5rem 0 0;
     font-size: 0.92rem;
-    opacity: 0.55;
+    color: var(--app-text-muted);
   }
 }
 
 .profile__panel {
   padding: 1.15rem 1.2rem;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  color: var(--app-text);
 
   & + & {
     margin-top: 1rem;
   }
 
   &--danger {
-    border-color: rgba(255, 77, 79, 0.28);
+    border-color: var(--app-danger-border);
   }
 }
 
@@ -364,7 +425,7 @@ async function handleLogout(): Promise<void> {
 .profile__desc {
   margin: 0.35rem 0 0;
   font-size: 0.85rem;
-  opacity: 0.55;
+  color: var(--app-text-muted);
   line-height: 1.45;
 }
 
@@ -381,7 +442,7 @@ async function handleLogout(): Promise<void> {
 
 .profile__role-hint {
   font-size: 0.8rem;
-  opacity: 0.55;
+  color: var(--app-text-muted);
   line-height: 1.4;
 }
 
@@ -407,20 +468,35 @@ async function handleLogout(): Promise<void> {
   gap: 1rem;
   padding: 0.85rem 0.9rem;
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.16);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--app-surface-inset);
+  border: 1px solid var(--app-border);
+
+  &--stack {
+    flex-wrap: wrap;
+  }
 
   h3 {
     margin: 0;
     font-size: 0.92rem;
     font-weight: 650;
+    color: var(--app-text);
   }
 
   p {
     margin: 0.3rem 0 0;
     font-size: 0.8rem;
-    opacity: 0.55;
+    color: var(--app-text-muted);
     line-height: 1.4;
   }
+}
+
+.profile__seconds-input {
+  width: 8.5rem;
+}
+
+.profile__theme-toggle {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
 }
 </style>
