@@ -8,5 +8,6 @@ declare module 'vue-router' {
     transparent?: boolean
     hideNav?: boolean
     requiresStaff?: boolean
+    requiresAuth?: boolean
   }
 }

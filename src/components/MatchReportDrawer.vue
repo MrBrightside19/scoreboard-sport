@@ -243,8 +243,8 @@ const teamCards = computed(() => {
   min-width: 0;
   padding: 0.6rem 0.65rem;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.045);
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: var(--app-surface-strong);
+  border: 1px solid var(--app-border);
 }
 
 .report__award-title {
@@ -321,8 +321,8 @@ const teamCards = computed(() => {
 .report__team-card {
   padding: 0.85rem 0.9rem;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   min-width: 0;
 
   &--local {
@@ -373,7 +373,7 @@ const teamCards = computed(() => {
     gap: 0.15rem;
     padding: 0.4rem 0.35rem;
     border-radius: 6px;
-    background: rgba(0, 0, 0, 0.18);
+    background: var(--app-surface-inset);
     text-align: center;
 
     span {
@@ -395,7 +395,7 @@ const teamCards = computed(() => {
   & + & {
     margin-top: 0.75rem;
     padding-top: 0.7rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    border-top: 1px solid var(--app-border);
   }
 
   h5 {
@@ -440,6 +440,22 @@ const teamCards = computed(() => {
   bottom: 0;
   padding-top: 0.85rem;
   margin-top: 1rem;
-  background: linear-gradient(to top, rgba(14, 18, 28, 0.96) 60%, transparent);
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--app-bg-elevated) 97%, transparent) 55%,
+    transparent
+  );
+
+  :deep(.ant-btn-primary) {
+    color: #fff;
+    background: var(--app-primary);
+    border-color: var(--app-primary);
+
+    &:not(:disabled):hover {
+      color: #fff;
+      background: var(--app-link);
+      border-color: var(--app-link);
+    }
+  }
 }
 </style>

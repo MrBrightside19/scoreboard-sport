@@ -1264,25 +1264,25 @@ onUnmounted(() => {
     margin-bottom: 1.25rem;
 
     &::before {
-      border-color: rgba(255, 255, 255, 0.12);
+      border-color: var(--app-border-strong);
     }
   }
 
   :deep(.ant-tabs-tab) {
-    color: rgba(232, 237, 245, 0.65);
+    color: var(--app-text-muted);
 
     &:hover {
-      color: #e8edf5;
+      color: var(--app-text);
     }
   }
 
   :deep(.ant-tabs-tab-active .ant-tabs-tab-btn) {
-    color: #00d4ff;
+    color: var(--app-link);
     text-shadow: none;
   }
 
   :deep(.ant-tabs-ink-bar) {
-    background: #00d4ff;
+    background: var(--app-link);
   }
 }
 
@@ -1405,13 +1405,13 @@ onUnmounted(() => {
     margin: 0;
     font-size: 0.9rem;
     line-height: 1.45;
-    color: rgba(232, 237, 245, 0.62);
+    color: var(--app-text-muted);
   }
 }
 
 .config__panel {
   padding: 1.15rem 0 1.35rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--app-border);
 }
 
 .config__panel-head {
@@ -1427,7 +1427,7 @@ onUnmounted(() => {
     font-size: 1.2rem;
     font-weight: 600;
     letter-spacing: 0.01em;
-    color: #e8edf5;
+    color: var(--app-text);
   }
 }
 
@@ -1436,7 +1436,7 @@ onUnmounted(() => {
   max-width: 28rem;
   font-size: 0.85rem;
   line-height: 1.4;
-  color: rgba(232, 237, 245, 0.58);
+  color: var(--app-text-muted);
 }
 
 .config__actions {
@@ -1450,18 +1450,18 @@ onUnmounted(() => {
   margin: 0;
   padding: 0.75rem 0.9rem 0.75rem 1.35rem;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   font-size: 0.8rem;
   line-height: 1.45;
-  color: rgba(232, 237, 245, 0.55);
+  color: var(--app-text-muted);
 
   li + li {
     margin-top: 0.35rem;
   }
 
   strong {
-    color: rgba(232, 237, 245, 0.78);
+    color: var(--app-text-soft);
     font-weight: 600;
   }
 }
@@ -1487,8 +1487,8 @@ onUnmounted(() => {
   gap: 0.75rem;
   padding: 0.7rem 0.85rem;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
 }
 
 .config__row-main {
@@ -1522,7 +1522,7 @@ onUnmounted(() => {
 .config__empty {
   margin: 0;
   font-size: 0.85rem;
-  color: rgba(232, 237, 245, 0.45);
+  color: var(--app-text-muted);
 }
 
 .config__form {
@@ -1532,47 +1532,16 @@ onUnmounted(() => {
   margin-top: 0.75rem;
 }
 
-:deep(.config__form .ant-input) {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.18);
-  color: #e8edf5;
-
-  &::placeholder {
-    color: rgba(232, 237, 245, 0.45);
-  }
-
-  &:hover,
-  &:focus {
-    border-color: #00b4d8;
-    background: rgba(255, 255, 255, 0.08);
-  }
-}
-
 :deep(.config__form-submit.ant-btn-primary) {
-  background: #00b4d8;
-  border-color: #00b4d8;
-  color: #041018;
   font-weight: 600;
-
-  &:not(:disabled):hover {
-    background: #00d4ff;
-    border-color: #00d4ff;
-    color: #041018;
-  }
-
-  &:disabled {
-    background: rgba(0, 180, 216, 0.25);
-    border-color: rgba(0, 180, 216, 0.35);
-    color: rgba(232, 237, 245, 0.55);
-  }
 }
 
 .config__danger {
   margin-top: 0.5rem;
   padding: 1.15rem 1rem 1.25rem;
   border-radius: 10px;
-  border: 1px solid rgba(255, 77, 79, 0.28);
-  background: rgba(255, 77, 79, 0.04);
+  border: 1px solid var(--app-danger-border);
+  background: var(--app-danger-hover-bg);
 }
 
 .config__danger-head {
@@ -1582,7 +1551,7 @@ onUnmounted(() => {
     margin: 0 0 0.35rem;
     font-size: 1.2rem;
     font-weight: 600;
-    color: #ff7875;
+    color: var(--app-danger-text);
   }
 }
 
@@ -1610,7 +1579,7 @@ onUnmounted(() => {
     margin: 0 0 0.2rem;
     font-size: 0.92rem;
     font-weight: 600;
-    color: #e8edf5;
+    color: var(--app-text);
   }
 
   p {
@@ -1618,7 +1587,7 @@ onUnmounted(() => {
     max-width: 22rem;
     font-size: 0.8rem;
     line-height: 1.4;
-    color: rgba(232, 237, 245, 0.52);
+    color: var(--app-text-muted);
   }
 }
 

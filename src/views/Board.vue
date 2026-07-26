@@ -2,14 +2,18 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import ScoreBoard from '@/components/ScoreBoard.vue'
+import ArenaScoreBoard from '@/components/ArenaScoreBoard.vue'
 import { useScoreboardStore } from '@/stores/scoreboard'
 import { useLocalScoreboardSync } from '@/composables/useLocalScoreboardSync'
+import { useScoreboardDisplayPrefs } from '@/composables/useScoreboardDisplayPrefs'
+import { isArenaTvStyle, isClassicLightTvStyle } from '@/config/scoreboardStyles'
 import { readMatchIdFromStorage } from '@/utils/localSync'
 import { normalizeGameTime } from '@/utils/clock'
 
 const route = useRoute()
 const store = useScoreboardStore()
 const ready = ref(false)
+const { tvStyle } = useScoreboardDisplayPrefs()
 
 const matchId = computed(
   () => (route.query.matchId as string) || readMatchIdFromStorage() || '',
@@ -42,7 +46,16 @@ watch(
 </script>
 
 <template>
-  <ScoreBoard v-if="matchId && ready" tv :state="store.state" />
+  <ArenaScoreBoard
+    v-if="matchId && ready && isArenaTvStyle(tvStyle)"
+    :state="store.state"
+  />
+  <ScoreBoard
+    v-else-if="matchId && ready"
+    tv
+    :tv-light="isClassicLightTvStyle(tvStyle)"
+    :state="store.state"
+  />
   <div v-else-if="matchId" class="board-empty">Cargando marcador…</div>
   <div v-else class="board-empty">
     <p>No hay partido activo. Abre la mesa de control y crea un partido.</p>

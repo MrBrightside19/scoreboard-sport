@@ -72,17 +72,17 @@ onMounted(async () => {
   display: block;
   padding: 1.25rem;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: inherit;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  color: var(--app-text);
   text-decoration: none;
   transition: border-color 0.2s;
 
   &:hover {
-    border-color: rgba(0, 212, 255, 0.4);
+    border-color: color-mix(in srgb, var(--app-link) 45%, transparent);
   }
 
   h3 { margin: 0 0 0.5rem; }
-  p { margin: 0 0 0.5rem; font-size: 0.85rem; opacity: 0.7; }
+  p { margin: 0 0 0.5rem; font-size: 0.85rem; color: var(--app-text-muted); }
 }
 </style>

@@ -215,8 +215,8 @@ function rankValue(player: PlayerStatLine, metric: 'goals' | 'assists' | 'saves'
 .stats-panel__rank-card {
   padding: 0.85rem 0.9rem;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   min-width: 0;
 
   h4 {
