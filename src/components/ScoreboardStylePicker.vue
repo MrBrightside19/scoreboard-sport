@@ -89,7 +89,10 @@ function isSelected(id: string): boolean {
     >
       <div
         class="style-picker__preview"
-        :class="mode === 'tv' ? 'style-picker__preview--tv' : 'style-picker__preview--overlay'"
+        :class="[
+          mode === 'tv' ? 'style-picker__preview--tv' : 'style-picker__preview--overlay',
+          option.id === 'classic-light' && 'style-picker__preview--light',
+        ]"
         aria-hidden="true"
       >
         <div class="style-picker__preview-stage">
@@ -105,6 +108,7 @@ function isSelected(id: string): boolean {
             <ScoreBoard
               v-else-if="mode === 'tv'"
               tv
+              :tv-light="option.id === 'classic-light'"
               class="style-picker__classic-tv"
               :state="previewState"
             />
@@ -185,6 +189,16 @@ function isSelected(id: string): boolean {
 
 .style-picker__preview--overlay {
   height: 128px;
+}
+
+.style-picker__preview--light {
+  background:
+    linear-gradient(145deg, #dfe6ef 0%, #f4f7fb 55%, #e7edf5 100%),
+    repeating-conic-gradient(
+      from 0deg,
+      rgba(18, 24, 32, 0.03) 0deg 10deg,
+      transparent 10deg 20deg
+    );
 }
 
 .style-picker__preview-stage {

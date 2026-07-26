@@ -1,6 +1,6 @@
 /** Catálogo de estilos de marcador TV y overlay. Ampliar aquí al añadir variantes. */
 
-export type TvScoreboardStyle = 'classic' | 'arena'
+export type TvScoreboardStyle = 'classic' | 'classic-light' | 'arena'
 export type OverlayScoreboardStyle = 'bug'
 
 export interface ScoreboardStyleOption<T extends string> {
@@ -16,7 +16,12 @@ export const TV_SCOREBOARD_STYLES: ScoreboardStyleOption<TvScoreboardStyle>[] = 
   {
     id: 'classic',
     label: 'Clásico',
-    description: 'Marcador a pantalla completa para TV o proyección en cancha.',
+    description: 'Marcador a pantalla completa para TV o proyección en cancha (tema oscuro).',
+  },
+  {
+    id: 'classic-light',
+    label: 'Clásico claro',
+    description: 'Misma disposición del clásico, con fondo claro para pantallas o salas iluminadas.',
   },
   {
     id: 'arena',
@@ -47,4 +52,12 @@ export function normalizeTvScoreboardStyle(value: unknown): TvScoreboardStyle {
 
 export function normalizeOverlayScoreboardStyle(value: unknown): OverlayScoreboardStyle {
   return isOverlayScoreboardStyle(value) ? value : DEFAULT_OVERLAY_SCOREBOARD_STYLE
+}
+
+export function isArenaTvStyle(style: TvScoreboardStyle): boolean {
+  return style === 'arena'
+}
+
+export function isClassicLightTvStyle(style: TvScoreboardStyle): boolean {
+  return style === 'classic-light'
 }

@@ -6,6 +6,7 @@ import ArenaScoreBoard from '@/components/ArenaScoreBoard.vue'
 import { useScoreboardStore } from '@/stores/scoreboard'
 import { useLocalScoreboardSync } from '@/composables/useLocalScoreboardSync'
 import { useScoreboardDisplayPrefs } from '@/composables/useScoreboardDisplayPrefs'
+import { isArenaTvStyle, isClassicLightTvStyle } from '@/config/scoreboardStyles'
 import { readMatchIdFromStorage } from '@/utils/localSync'
 import { normalizeGameTime } from '@/utils/clock'
 
@@ -46,12 +47,13 @@ watch(
 
 <template>
   <ArenaScoreBoard
-    v-if="matchId && ready && tvStyle === 'arena'"
+    v-if="matchId && ready && isArenaTvStyle(tvStyle)"
     :state="store.state"
   />
   <ScoreBoard
     v-else-if="matchId && ready"
     tv
+    :tv-light="isClassicLightTvStyle(tvStyle)"
     :state="store.state"
   />
   <div v-else-if="matchId" class="board-empty">Cargando marcador…</div>

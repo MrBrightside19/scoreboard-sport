@@ -14,6 +14,7 @@ import {
   readMatchIdFromStorage,
 } from '@/utils/localSync'
 import { useScoreboardDisplayPrefs } from '@/composables/useScoreboardDisplayPrefs'
+import { isArenaTvStyle, isClassicLightTvStyle } from '@/config/scoreboardStyles'
 
 const route = useRoute()
 const store = useScoreboardStore()
@@ -132,14 +133,18 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="board-root">
+  <div
+    class="board-root"
+    :class="{ 'board-root--light': isClassicLightTvStyle(tvStyle) }"
+  >
     <ArenaScoreBoard
-      v-if="activeMatchId && ready && tvStyle === 'arena'"
+      v-if="activeMatchId && ready && isArenaTvStyle(tvStyle)"
       :state="store.state"
     />
     <ScoreBoard
       v-else-if="activeMatchId && ready"
       tv
+      :tv-light="isClassicLightTvStyle(tvStyle)"
       :state="store.state"
     />
     <div v-else-if="activeMatchId" class="board-empty">Cargando marcador…</div>
@@ -155,6 +160,10 @@ onUnmounted(() => {
   background: #0a0e17;
 }
 
+.board-root--light {
+  background: #e9eef5;
+}
+
 .board-empty {
   min-height: 100vh;
   display: grid;
@@ -162,5 +171,9 @@ onUnmounted(() => {
   color: rgba(255, 255, 255, 0.5);
   padding: 1.5rem;
   text-align: center;
+}
+
+.board-root--light .board-empty {
+  color: rgba(18, 24, 32, 0.55);
 }
 </style>

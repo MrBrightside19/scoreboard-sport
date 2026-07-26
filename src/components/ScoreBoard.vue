@@ -19,6 +19,8 @@ const props = withDefaults(
     overlayStyle?: OverlayScoreboardStyle
     /** Marcador grande para TV / cancha. Live usa el diseño responsivo. */
     tv?: boolean
+    /** Variante clara del marcador TV clásico. */
+    tvLight?: boolean
     compact?: boolean
     /** Nombre del torneo (reemplaza “Hockey en línea” en el live). */
     eventTitle?: string | null
@@ -376,7 +378,10 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   <div
     v-else-if="tv"
     class="scoreboard scoreboard--tv"
-    :class="{ 'scoreboard--compact': compact }"
+    :class="{
+      'scoreboard--compact': compact,
+      'scoreboard--tv-light': tvLight,
+    }"
   >
     <div class="scoreboard__glow" />
 
@@ -1417,6 +1422,84 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   text-align: center;
   line-height: 1.1;
   min-width: 9.5rem;
+}
+
+/* ——— TV clásico tema claro ——— */
+.scoreboard--tv-light {
+  --bg: #e9eef5;
+  --panel: rgba(255, 255, 255, 0.92);
+  --text: #121820;
+  --muted: rgba(18, 24, 32, 0.55);
+  --local-color: #007aa8;
+  --visit-color: #d4531f;
+
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(0, 122, 168, 0.1), transparent),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(212, 83, 31, 0.08), transparent),
+    var(--bg);
+  color: var(--text);
+}
+
+.scoreboard--tv-light .scoreboard__glow {
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(0, 122, 168, 0.04) 50%,
+    transparent 100%
+  );
+}
+
+.scoreboard--tv-light .scoreboard__team {
+  background: var(--panel);
+  border: 1px solid rgba(18, 24, 32, 0.08);
+  box-shadow:
+    0 10px 28px rgba(18, 24, 32, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  backdrop-filter: none;
+}
+
+.scoreboard--tv-light .scoreboard__team--local {
+  border-color: rgba(0, 122, 168, 0.28);
+  box-shadow:
+    0 10px 28px rgba(18, 24, 32, 0.08),
+    inset 0 0 36px rgba(0, 122, 168, 0.05);
+}
+
+.scoreboard--tv-light .scoreboard__team--visit {
+  border-color: rgba(212, 83, 31, 0.28);
+  box-shadow:
+    0 10px 28px rgba(18, 24, 32, 0.08),
+    inset 0 0 36px rgba(212, 83, 31, 0.05);
+}
+
+.scoreboard--tv-light .scoreboard__score {
+  text-shadow: none;
+  color: var(--text);
+}
+
+.scoreboard--tv-light .scoreboard__score--penalty {
+  color: #d9263a;
+}
+
+/* Más específico que .scoreboard--tv .scoreboard__clock(--paused|--intermission) */
+.scoreboard--tv.scoreboard--tv-light .scoreboard__clock,
+.scoreboard--tv.scoreboard--tv-light .scoreboard__clock--paused,
+.scoreboard--tv.scoreboard--tv-light .scoreboard__clock--intermission {
+  color: #0b0f16;
+  text-shadow: none;
+}
+
+.scoreboard--tv-light .scoreboard__period {
+  color: var(--muted);
+}
+
+.scoreboard--tv-light .scoreboard__period--intermission {
+  color: #a67c1a;
+}
+
+.scoreboard--tv-light .scoreboard__penalty-badge {
+  color: #fff;
+  background: rgba(217, 38, 58, 0.92);
 }
 
 @keyframes pulse {
