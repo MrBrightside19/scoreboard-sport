@@ -7,6 +7,7 @@ import {
   signIn,
   signOut,
   signUp,
+  updateProfileDisplayName,
 } from '@/services/authService'
 import { fetchAssistantTournamentIds } from '@/services/tournamentAssistantService'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
@@ -90,6 +91,12 @@ export const useAuthStore = defineStore('auth', () => {
     info.value = null
   }
 
+  async function updateDisplayName(displayName: string): Promise<void> {
+    error.value = null
+    const updated = await updateProfileDisplayName(displayName)
+    profile.value = updated
+  }
+
   function init(): () => void {
     void loadProfile()
     if (!isSupabaseConfigured) return () => undefined
@@ -118,6 +125,7 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     register,
     logout,
+    updateDisplayName,
     init,
   }
 })

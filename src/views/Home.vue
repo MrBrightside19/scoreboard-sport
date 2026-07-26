@@ -6,6 +6,7 @@ import { fetchLiveMatches } from '@/services/liveMatchesService'
 import type { LiveMatchSummary } from '@/types/match'
 import LiveMatchCard from '@/components/LiveMatchCard.vue'
 import AuthModal from '@/components/AuthModal.vue'
+import { APP_VERSION } from '@/config/version'
 
 const route = useRoute()
 
@@ -66,6 +67,12 @@ onMounted(() => {
       </a-spin>
     </section>
 
+    <footer class="home__footer">
+      <span>ScoreDesk</span>
+      <span class="home__footer-sep" aria-hidden="true">·</span>
+      <span>v{{ APP_VERSION }}</span>
+    </footer>
+
     <a-modal
       v-model:open="showAuth"
       title="Acceso"
@@ -81,7 +88,10 @@ onMounted(() => {
 .home {
   max-width: 1100px;
   margin: 0 auto;
-  padding: 2rem 1.5rem 4rem;
+  padding: 2rem 1.5rem 3rem;
+  min-height: calc(100vh - 57px);
+  display: flex;
+  flex-direction: column;
 }
 
 .home__hero {
@@ -123,6 +133,10 @@ onMounted(() => {
   margin-top: 1.25rem;
 }
 
+.home__section {
+  flex: 1;
+}
+
 .home__section-header {
   display: flex;
   justify-content: space-between;
@@ -139,5 +153,22 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 1rem;
+}
+
+.home__footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  margin-top: 3rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  opacity: 0.4;
+}
+
+.home__footer-sep {
+  opacity: 0.7;
 }
 </style>

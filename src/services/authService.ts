@@ -100,6 +100,28 @@ export async function updateProfileRole(role: UserRole): Promise<Profile> {
   return rows[0]
 }
 
+export async function updateProfileDisplayName(displayName: string): Promise<Profile> {
+  const supabase = getSupabaseClient()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  if (!session?.user) throw new Error('No autenticado')
+
+  const trimmed = displayName.trim()
+  if (!trimmed) throw new Error('El nombre no puede estar vacío.')
+
+  const rows = await supabaseRest<Profile[]>(
+    `profiles?id=eq.${session.user.id}`,
+    {
+      method: 'PATCH',
+      body: { display_name: trimmed },
+      prefer: 'return=representation',
+    },
+  )
+  if (!rows[0]) throw new Error('No se pudo actualizar el perfil.')
+  return rows[0]
+}
+
 export function onAuthStateChange(
   callback: (isAuthenticated: boolean) => void,
 ): () => void {

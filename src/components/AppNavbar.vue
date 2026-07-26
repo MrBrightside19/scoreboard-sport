@@ -223,6 +223,12 @@ watch(
                   <div class="app-nav__menu-user">{{ userLabel }}</div>
                   <div class="app-nav__menu-role">{{ roleLabel }}</div>
                 </div>
+                <RouterLink
+                  :to="{ name: 'profile' }"
+                  class="app-nav__dropdown-link"
+                >
+                  Perfil y configuración
+                </RouterLink>
                 <button
                   type="button"
                   class="app-nav__dropdown-logout"
@@ -286,6 +292,14 @@ watch(
               <div class="app-nav__menu-role">{{ roleLabel }}</div>
             </div>
           </div>
+          <RouterLink
+            :to="{ name: 'profile' }"
+            class="app-nav__link"
+            :class="{ 'app-nav__link--active': route.name === 'profile' }"
+            @click="closeMobile"
+          >
+            Perfil y configuración
+          </RouterLink>
           <button type="button" class="app-nav__mobile-logout" @click="handleLogout">
             Cerrar sesión
           </button>
@@ -471,6 +485,21 @@ watch(
 
 .app-nav__dropdown-meta {
   padding: 0.65rem 0.75rem 0.55rem;
+}
+
+.app-nav__dropdown-link {
+  display: block;
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  color: rgba(232, 237, 245, 0.9);
+  font-size: 0.88rem;
+  text-decoration: none;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+  }
 }
 
 .app-nav__dropdown-logout {
