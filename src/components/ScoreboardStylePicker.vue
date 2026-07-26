@@ -93,22 +93,28 @@ function isSelected(id: string): boolean {
         aria-hidden="true"
       >
         <div class="style-picker__preview-stage">
-          <ArenaScoreBoard
-            v-if="mode === 'tv' && option.id === 'arena'"
-            preview
-            :state="previewState"
-          />
-          <ScoreBoard
-            v-else-if="mode === 'tv'"
-            tv
-            :state="previewState"
-          />
-          <ScoreBoard
-            v-else
-            overlay
-            :overlay-style="option.id as OverlayScoreboardStyle"
-            :state="previewState"
-          />
+          <div
+            class="style-picker__preview-inner"
+            :class="mode === 'tv' ? 'style-picker__preview-inner--tv' : 'style-picker__preview-inner--overlay'"
+          >
+            <ArenaScoreBoard
+              v-if="mode === 'tv' && option.id === 'arena'"
+              preview
+              :state="previewState"
+            />
+            <ScoreBoard
+              v-else-if="mode === 'tv'"
+              tv
+              class="style-picker__classic-tv"
+              :state="previewState"
+            />
+            <ScoreBoard
+              v-else
+              overlay
+              :overlay-style="option.id as OverlayScoreboardStyle"
+              :state="previewState"
+            />
+          </div>
         </div>
       </div>
 
@@ -135,12 +141,12 @@ function isSelected(id: string): boolean {
   flex-direction: column;
   gap: 0.75rem;
   width: 100%;
-  padding: 0.75rem;
+  padding: 0.85rem;
   border-radius: 12px;
   border: 1px solid var(--app-border);
   background: var(--app-bg-elevated);
   color: var(--app-text);
-  text-align: left;
+  text-align: center;
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s;
 
@@ -158,6 +164,11 @@ function isSelected(id: string): boolean {
   position: relative;
   overflow: hidden;
   border-radius: 8px;
+  padding: 0.7rem;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background:
     linear-gradient(145deg, rgba(8, 12, 20, 0.92), rgba(18, 24, 36, 0.88)),
     repeating-conic-gradient(
@@ -169,23 +180,33 @@ function isSelected(id: string): boolean {
 }
 
 .style-picker__preview--tv {
-  height: 148px;
+  height: 176px;
 }
 
 .style-picker__preview--overlay {
-  height: 120px;
+  height: 128px;
 }
 
 .style-picker__preview-stage {
-  position: absolute;
-  inset: 0;
-  transform-origin: top left;
+  position: relative;
+  flex-shrink: 0;
+  transform-origin: center center;
 }
 
 .style-picker__preview--tv .style-picker__preview-stage {
+  /* Caja visual centrada; el stage grande se escala desde el centro. */
+  width: calc(1280px * 0.2);
+  height: calc(720px * 0.2);
+}
+
+.style-picker__preview-inner--tv {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 1280px;
   height: 720px;
-  transform: scale(0.22);
+  transform: scale(0.2);
+  transform-origin: top left;
 }
 
 .style-picker__preview--tv :deep(.arena--preview) {
@@ -193,10 +214,87 @@ function isSelected(id: string): boolean {
   height: 720px;
 }
 
+/* Clásico: en miniatura los vh/vw del viewport lo apelotonan; forzamos aire. */
+.style-picker__preview--tv :deep(.style-picker__classic-tv.scoreboard--tv) {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 2.75rem 3.25rem;
+  display: flex;
+  align-items: stretch;
+}
+
+.style-picker__preview--tv :deep(.style-picker__classic-tv .scoreboard__main) {
+  flex: 1;
+  min-height: 0;
+  gap: 2.75rem 3.5rem;
+  align-items: center;
+}
+
+.style-picker__preview--tv :deep(.style-picker__classic-tv .scoreboard__column) {
+  gap: 1.75rem;
+  height: 100%;
+}
+
+.style-picker__preview--tv :deep(.style-picker__classic-tv .scoreboard__team) {
+  min-height: 0;
+  height: 100%;
+  gap: 2.25rem;
+  padding: 2.5rem 2rem;
+  justify-content: space-evenly;
+}
+
+.style-picker__preview--tv :deep(.style-picker__classic-tv .scoreboard__team-name) {
+  font-size: 4.75rem;
+  min-height: 1.1em;
+  line-height: 1.05;
+}
+
+.style-picker__preview--tv :deep(.style-picker__classic-tv .scoreboard__score) {
+  font-size: 14rem;
+  margin-top: 0;
+}
+
+.style-picker__preview--tv :deep(.style-picker__classic-tv .scoreboard__center) {
+  gap: 1.25rem;
+  padding: 0 1.5rem;
+}
+
+.style-picker__preview--tv :deep(.style-picker__classic-tv .scoreboard__clock) {
+  font-size: 11.5rem;
+}
+
+.style-picker__preview--tv :deep(.style-picker__classic-tv .scoreboard__period) {
+  font-size: 3rem;
+  letter-spacing: 0.14em;
+}
+
+.style-picker__preview--tv :deep(.style-picker__classic-tv .scoreboard__penalties) {
+  gap: 1rem;
+  padding-top: 0.25rem;
+}
+
+.style-picker__preview--tv :deep(.style-picker__classic-tv .scoreboard__penalty-badge) {
+  font-size: 3.25rem;
+  padding: 0.7rem 1.6rem;
+  min-width: 10rem;
+}
+
 .style-picker__preview--overlay .style-picker__preview-stage {
   width: 100%;
   height: 100%;
-  padding: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.style-picker__preview-inner--overlay {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem;
   box-sizing: border-box;
 }
 
@@ -215,6 +313,8 @@ function isSelected(id: string): boolean {
 }
 
 .style-picker__meta {
+  text-align: center;
+
   strong {
     font-size: 0.92rem;
   }
@@ -230,6 +330,7 @@ function isSelected(id: string): boolean {
 .style-picker__title-row {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
   flex-wrap: wrap;
 }
