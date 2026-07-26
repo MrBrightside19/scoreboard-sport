@@ -16,6 +16,7 @@ import { isSupabaseConfigured } from '@/services/supabaseClient'
 import { readMatchIdFromStorage, writeCourtActiveMatch, clearMatchIdFromStorage } from '@/utils/localSync'
 import { normalizeGameTime, parseTimeToSeconds } from '@/utils/clock'
 import { playCountdownBeep } from '@/utils/countdownBeep'
+import { getCountdownBeepSeconds } from '@/utils/userPreferences'
 import { buildAppUrl, tournamentBoardPath } from '@/utils/appUrl'
 import { getLiveClockUpdateMs } from '@/config/poll'
 import { MAX_PERIODS, isGoalPending, DEFAULT_INTERMISSION_TIME } from '@/types/hockeyScoreboard'
@@ -68,6 +69,16 @@ function shotCount(team: 'local' | 'visit', result: 'miss' | 'save'): number {
   return store.state.shots.filter(
     (shot) => shot.team === team && shot.result === result,
   ).length
+}
+
+const countdownBeepPrefsTick = ref(0)
+const countdownBeepSeconds = computed(() => {
+  countdownBeepPrefsTick.value
+  return getCountdownBeepSeconds()
+})
+
+function onPrefsChange(): void {
+  countdownBeepPrefsTick.value += 1
 }
 
 const goalkeeperSelection = ref<{ local: string; visit: string }>({
@@ -297,7 +308,8 @@ watch(
       lastCountdownBeepSecond = null
       return
     }
-    if (seconds < 0 || seconds > 10) {
+    const threshold = getCountdownBeepSeconds()
+    if (seconds < 0 || seconds > threshold) {
       lastCountdownBeepSecond = null
       return
     }
@@ -320,7 +332,8 @@ watch(
       lastIntermissionBeepSecond = null
       return
     }
-    if (seconds < 0 || seconds > 10) {
+    const threshold = getCountdownBeepSeconds()
+    if (seconds < 0 || seconds > threshold) {
       lastIntermissionBeepSecond = null
       return
     }
@@ -612,6 +625,7 @@ watch(
 
 onMounted(() => {
   window.addEventListener('beforeunload', onBeforeUnload)
+  window.addEventListener('scoreboard:prefs-change', onPrefsChange)
   if (matchId.value) {
     const pollMs = getLiveClockUpdateMs()
     publishTimer = window.setInterval(() => {
@@ -655,6 +669,7 @@ onBeforeRouteLeave((_to, _from, next) => {
 
 onUnmounted(() => {
   window.removeEventListener('beforeunload', onBeforeUnload)
+  window.removeEventListener('scoreboard:prefs-change', onPrefsChange)
   if (!skipLeaveGuard.value) {
     void finalizeOnExit()
   }
@@ -1097,7 +1112,9 @@ onUnmounted(() => {
                     </a-button>
                   </div>
                   <span class="controls__clock-hint">
-                    El marcador TV muestra la cuenta de descanso. Beep en los últimos 10 s.
+                    El marcador TV muestra la cuenta de descanso.
+                    Beep en los últimos {{ countdownBeepSeconds }} s
+                    (configurable en Perfil).
                     Al terminar (o al pulsar Terminar descanso), pasa solo al siguiente periodo
                     (salvo el último). Las faltas pendientes no corren hasta entonces.
                   </span>
@@ -1338,8 +1355,8 @@ onUnmounted(() => {
   gap: 0.75rem;
   padding: 0.85rem 0.9rem;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
 }
 
 .controls__side--local {
@@ -1367,7 +1384,7 @@ onUnmounted(() => {
 }
 
 .controls__side--local .controls__side-label {
-  color: #00d4ff;
+  color: var(--app-link);
 }
 
 .controls__side--visit .controls__side-label {
@@ -1473,8 +1490,8 @@ onUnmounted(() => {
 .controls__shot-log-card {
   padding: 0.7rem 0.8rem;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   min-width: 0;
 
   &--local {
@@ -1573,25 +1590,25 @@ onUnmounted(() => {
     margin-bottom: 1rem;
 
     &::before {
-      border-color: rgba(255, 255, 255, 0.12);
+      border-color: var(--app-border-strong);
     }
   }
 
   :deep(.ant-tabs-tab) {
-    color: rgba(232, 237, 245, 0.65);
+    color: var(--app-text-muted);
 
     &:hover {
-      color: #e8edf5;
+      color: var(--app-text);
     }
   }
 
   :deep(.ant-tabs-tab-active .ant-tabs-tab-btn) {
-    color: #00d4ff;
+    color: var(--app-link);
     text-shadow: none;
   }
 
   :deep(.ant-tabs-ink-bar) {
-    background: #00d4ff;
+    background: var(--app-link);
   }
 }
 
@@ -1654,8 +1671,8 @@ onUnmounted(() => {
   gap: 0.65rem;
   padding: 1rem 1.25rem;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   text-align: center;
 }
 
@@ -1691,8 +1708,8 @@ onUnmounted(() => {
   height: 100%;
   padding: 0.9rem 1rem;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   text-align: center;
 
   label {
@@ -1753,8 +1770,8 @@ onUnmounted(() => {
   margin-top: 0.15rem;
   padding: 0.85rem 1rem;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   text-align: center;
 
   .controls__clock-field {

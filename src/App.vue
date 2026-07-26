@@ -1,24 +1,76 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import { theme } from 'ant-design-vue'
 import AppNavbar from '@/components/AppNavbar.vue'
+import {
+  applyAppTheme,
+  getAppTheme,
+  type AppTheme,
+} from '@/utils/userPreferences'
 
 const route = useRoute()
 const showNavbar = computed(() => !route.meta.hideNav)
 const isTransparent = computed(() => Boolean(route.meta.transparent))
+const forceDarkShell = computed(
+  () => Boolean(route.meta.bare || route.meta.transparent),
+)
 
-const appTheme = {
-  token: {
-    colorPrimary: '#00b4d8',
-    borderRadius: 10,
-    fontFamily: 'Inter, system-ui, sans-serif',
-    colorBgContainer: '#161b22',
-    colorBgElevated: '#1c2128',
-    colorBorder: '#30363d',
-  },
-  algorithm: theme.darkAlgorithm,
+const currentTheme = ref<AppTheme>(getAppTheme())
+
+function syncThemeFromPrefs(): void {
+  const next = getAppTheme()
+  currentTheme.value = next
+  applyAppTheme(forceDarkShell.value ? 'dark' : next)
 }
+
+onMounted(() => {
+  syncThemeFromPrefs()
+  window.addEventListener('scoreboard:theme-change', syncThemeFromPrefs)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('scoreboard:theme-change', syncThemeFromPrefs)
+})
+
+watch(
+  () => [route.meta.bare, route.meta.transparent] as const,
+  () => {
+    syncThemeFromPrefs()
+  },
+)
+
+const appTheme = computed(() => {
+  const light = currentTheme.value === 'light' && !forceDarkShell.value
+  if (light) {
+    return {
+      token: {
+        colorPrimary: '#0096c7',
+        borderRadius: 10,
+        fontFamily: 'Inter, system-ui, sans-serif',
+        colorBgContainer: '#ffffff',
+        colorBgElevated: '#ffffff',
+        colorBorder: '#d0d7de',
+        colorText: '#1a2332',
+        colorTextSecondary: 'rgba(26, 35, 50, 0.65)',
+      },
+      algorithm: theme.defaultAlgorithm,
+    }
+  }
+  return {
+    token: {
+      colorPrimary: '#00b4d8',
+      borderRadius: 10,
+      fontFamily: 'Inter, system-ui, sans-serif',
+      colorBgContainer: '#161b22',
+      colorBgElevated: '#1c2128',
+      colorBorder: '#30363d',
+      colorText: '#e8edf5',
+      colorTextSecondary: 'rgba(232, 237, 245, 0.65)',
+    },
+    algorithm: theme.darkAlgorithm,
+  }
+})
 </script>
 
 <template>
@@ -54,16 +106,19 @@ body,
 
 body {
   font-family: 'Inter', system-ui, sans-serif;
-  background: #0f1419;
-  color: #e8edf5;
+  background: var(--app-bg);
+  color: var(--app-text);
   -webkit-font-smoothing: antialiased;
 }
 
 .app-shell {
   min-height: 100vh;
+  background: var(--app-bg);
+  color: var(--app-text);
 
   &--bare {
-    background: #0a0e17;
+    background: var(--app-bg-bare);
+    color: #e8edf5;
   }
 
   &--transparent {
@@ -93,6 +148,6 @@ html:has(.app-shell--transparent) #app {
 }
 
 a {
-  color: #00d4ff;
+  color: var(--app-link);
 }
 </style>

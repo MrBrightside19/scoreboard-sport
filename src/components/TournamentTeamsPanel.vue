@@ -496,7 +496,7 @@ defineExpose({ reload: loadTeams })
     margin: 0;
     font-size: 0.9rem;
     line-height: 1.45;
-    color: rgba(232, 237, 245, 0.62);
+    color: var(--app-text-muted);
   }
 }
 
@@ -509,8 +509,8 @@ defineExpose({ reload: loadTeams })
 .teams-panel__card {
   padding: 1rem 1.1rem 1.15rem;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--app-border);
+  background: var(--app-surface);
 }
 
 .teams-panel__head {
@@ -528,13 +528,13 @@ defineExpose({ reload: loadTeams })
     margin: 0;
     font-size: 1.15rem;
     font-weight: 600;
-    color: #e8edf5;
+    color: var(--app-text);
   }
 
   p {
     margin: 0.15rem 0 0;
     font-size: 0.8rem;
-    color: rgba(232, 237, 245, 0.5);
+    color: var(--app-text-muted);
   }
 }
 
@@ -542,7 +542,7 @@ defineExpose({ reload: loadTeams })
   width: 1.35rem;
   height: 1.35rem;
   border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--app-border-strong);
   flex-shrink: 0;
 
   &--sm {
@@ -571,8 +571,8 @@ defineExpose({ reload: loadTeams })
   height: 40px;
   object-fit: contain;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--app-surface-strong);
+  border: 1px solid var(--app-border);
   transition: transform 0.15s ease;
 
   .teams-panel__logo-btn:hover & {
@@ -605,7 +605,7 @@ defineExpose({ reload: loadTeams })
   flex-direction: column;
   gap: 0.3rem;
   font-size: 0.75rem;
-  color: rgba(232, 237, 245, 0.55);
+  color: var(--app-text-muted);
 
   &--grow {
     flex: 1;
@@ -617,7 +617,7 @@ defineExpose({ reload: loadTeams })
   width: 3rem;
   height: 2rem;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid var(--app-border-strong);
   border-radius: 6px;
   background: transparent;
   cursor: pointer;
@@ -631,7 +631,7 @@ defineExpose({ reload: loadTeams })
 
 .teams-panel__muted {
   font-size: 0.8rem;
-  color: rgba(232, 237, 245, 0.45);
+  color: var(--app-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -651,7 +651,7 @@ defineExpose({ reload: loadTeams })
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: rgba(0, 180, 216, 0.9);
+    color: var(--app-primary);
   }
 }
 
@@ -668,17 +668,17 @@ defineExpose({ reload: loadTeams })
   align-items: center;
   padding: 0.4rem 0.55rem;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--app-surface);
   font-size: 0.85rem;
 }
 
 .teams-panel__number {
   font-weight: 600;
-  color: rgba(232, 237, 245, 0.75);
+  color: var(--app-text-soft);
 }
 
 .teams-panel__name {
-  color: #e8edf5;
+  color: var(--app-text);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -687,7 +687,7 @@ defineExpose({ reload: loadTeams })
 
 .teams-panel__role {
   font-size: 0.72rem;
-  color: rgba(232, 237, 245, 0.45);
+  color: var(--app-text-muted);
 }
 
 .teams-panel__edit {
@@ -699,7 +699,7 @@ defineExpose({ reload: loadTeams })
 .teams-panel__empty-roster {
   margin: 0.85rem 0 0;
   font-size: 0.82rem;
-  color: rgba(232, 237, 245, 0.42);
+  color: var(--app-text-muted);
 }
 
 .player-form__grid {

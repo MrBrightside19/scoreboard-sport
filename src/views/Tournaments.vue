@@ -222,9 +222,9 @@ onMounted(() => void load())
   gap: 0.75rem;
   padding: 1rem 1.25rem;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: inherit;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  color: var(--app-text);
   text-decoration: none;
 
   h3 { margin: 0; flex: 1; }
@@ -245,38 +245,38 @@ onMounted(() => void load())
 }
 
 :deep(.page__tag--assistant) {
-  background: rgba(179, 127, 235, 0.2);
-  border-color: rgba(179, 127, 235, 0.45);
-  color: #d3adf7;
+  background: color-mix(in srgb, #9254de 22%, transparent);
+  border-color: color-mix(in srgb, #9254de 45%, transparent);
+  color: color-mix(in srgb, #9254de 70%, var(--app-text));
 }
 
 :deep(.page__tag--status-draft) {
-  background: rgba(0, 180, 216, 0.15);
-  border-color: rgba(0, 180, 216, 0.4);
-  color: #7dd3fc;
+  background: color-mix(in srgb, var(--app-primary) 18%, transparent);
+  border-color: color-mix(in srgb, var(--app-primary) 40%, transparent);
+  color: var(--app-link);
 }
 
 :deep(.page__tag--status-active) {
   background: rgba(82, 196, 26, 0.15);
   border-color: rgba(82, 196, 26, 0.4);
-  color: #95de64;
+  color: color-mix(in srgb, #389e0d 55%, var(--app-text));
 }
 
 :deep(.page__tag--status-finished) {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: rgba(232, 237, 245, 0.8);
+  background: var(--app-surface-strong);
+  border-color: var(--app-border-strong);
+  color: var(--app-text-soft);
 }
 
 :deep(.page__tag--visibility-public) {
-  background: rgba(0, 212, 255, 0.12);
-  border-color: rgba(0, 212, 255, 0.35);
-  color: #00d4ff;
+  background: color-mix(in srgb, var(--app-link) 14%, transparent);
+  border-color: color-mix(in srgb, var(--app-link) 35%, transparent);
+  color: var(--app-link);
 }
 
 :deep(.page__tag--visibility-private) {
   background: rgba(255, 107, 53, 0.12);
   border-color: rgba(255, 107, 53, 0.35);
-  color: #ff9f6b;
+  color: color-mix(in srgb, #d4380d 45%, var(--app-text));
 }
 </style>

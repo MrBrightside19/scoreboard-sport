@@ -76,6 +76,12 @@ const router = createRouter({
       component: () => import('@/views/TournamentDetail.vue'),
       meta: { requiresStaff: true, title: 'Detalle torneo' },
     },
+    {
+      path: '/perfil',
+      name: 'profile',
+      component: () => import('@/views/Profile.vue'),
+      meta: { requiresAuth: true, title: 'Perfil' },
+    },
   ],
   scrollBehavior: () => ({ top: 0 }),
 })
@@ -85,7 +91,8 @@ router.beforeEach(async (to) => {
     document.title = `${to.meta.title} · Marcador Hockey`
   }
 
-  if (!to.meta.requiresStaff) return true
+  const needsAuth = Boolean(to.meta.requiresAuth || to.meta.requiresStaff)
+  if (!needsAuth) return true
 
   const auth = useAuthStore()
   if (auth.loading) {
@@ -100,10 +107,10 @@ router.beforeEach(async (to) => {
   }
 
   if (!auth.isAuthenticated) {
-    return { name: 'home', query: { auth: 'staff' } }
+    return { name: 'home', query: { auth: to.meta.requiresStaff ? 'staff' : '1' } }
   }
 
-  if (!auth.isStaff) {
+  if (to.meta.requiresStaff && !auth.isStaff) {
     return { name: 'home', query: { auth: 'staff' } }
   }
 

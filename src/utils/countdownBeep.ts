@@ -1,5 +1,7 @@
 /** Beep corto para cuenta regresiva final (sin archivo de audio). */
 
+import { isCountdownBeepEnabled } from '@/utils/userPreferences'
+
 let audioCtx: AudioContext | null = null
 
 function getAudioContext(): AudioContext | null {
@@ -13,6 +15,8 @@ function getAudioContext(): AudioContext | null {
 }
 
 export async function playCountdownBeep(final = false): Promise<void> {
+  if (!isCountdownBeepEnabled()) return
+
   const ctx = getAudioContext()
   if (!ctx) return
 
