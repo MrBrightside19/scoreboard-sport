@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Profile } from '@/types/auth'
 import {
+  changePassword,
   getCurrentProfile,
   onAuthStateChange,
   signIn,
@@ -97,6 +98,14 @@ export const useAuthStore = defineStore('auth', () => {
     profile.value = updated
   }
 
+  async function updatePassword(
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    error.value = null
+    await changePassword(currentPassword, newPassword)
+  }
+
   function init(): () => void {
     void loadProfile()
     if (!isSupabaseConfigured) return () => undefined
@@ -126,6 +135,7 @@ export const useAuthStore = defineStore('auth', () => {
     register,
     logout,
     updateDisplayName,
+    updatePassword,
     init,
   }
 })

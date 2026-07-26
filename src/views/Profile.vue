@@ -13,11 +13,19 @@ const auth = useAuthStore()
 const router = useRouter()
 
 const savingProfile = ref(false)
+const savingPassword = ref(false)
 const loggingOut = ref(false)
 const profileError = ref<string | null>(null)
+const passwordError = ref<string | null>(null)
 
 const form = reactive({
   displayName: '',
+})
+
+const passwordForm = reactive({
+  current: '',
+  next: '',
+  confirm: '',
 })
 
 const prefs = reactive<UserPreferences>({
@@ -44,6 +52,13 @@ const displayNameDirty = computed(() => {
   const current = (auth.profile?.display_name ?? '').trim()
   return form.displayName.trim() !== current && form.displayName.trim().length > 0
 })
+
+const canSubmitPassword = computed(
+  () =>
+    passwordForm.current.length > 0 &&
+    passwordForm.next.length >= 6 &&
+    passwordForm.next === passwordForm.confirm,
+)
 
 watch(
   () => auth.profile,
@@ -79,6 +94,32 @@ async function saveProfile(): Promise<void> {
     profileError.value = err instanceof Error ? err.message : 'No se pudo guardar'
   } finally {
     savingProfile.value = false
+  }
+}
+
+async function savePassword(): Promise<void> {
+  passwordError.value = null
+  if (passwordForm.next.length < 6) {
+    passwordError.value = 'La nueva contraseña debe tener al menos 6 caracteres.'
+    return
+  }
+  if (passwordForm.next !== passwordForm.confirm) {
+    passwordError.value = 'La confirmación no coincide.'
+    return
+  }
+
+  savingPassword.value = true
+  try {
+    await auth.updatePassword(passwordForm.current, passwordForm.next)
+    passwordForm.current = ''
+    passwordForm.next = ''
+    passwordForm.confirm = ''
+    message.success('Contraseña actualizada')
+  } catch (err) {
+    passwordError.value =
+      err instanceof Error ? err.message : 'No se pudo cambiar la contraseña'
+  } finally {
+    savingPassword.value = false
   }
 }
 
@@ -160,6 +201,62 @@ async function handleLogout(): Promise<void> {
                 :disabled="!displayNameDirty"
               >
                 Guardar cambios
+              </a-button>
+            </div>
+          </a-form>
+        </section>
+
+        <section class="profile__panel" aria-labelledby="profile-password">
+          <div class="profile__panel-head">
+            <div>
+              <h2 id="profile-password">Contraseña</h2>
+              <p class="profile__desc">
+                Cambia tu contraseña. Necesitas la actual para confirmar el cambio.
+              </p>
+            </div>
+          </div>
+
+          <a-form layout="vertical" class="profile__form" @submit.prevent="savePassword">
+            <a-form-item label="Contraseña actual">
+              <a-input-password
+                v-model:value="passwordForm.current"
+                autocomplete="current-password"
+                placeholder="Tu contraseña actual"
+              />
+            </a-form-item>
+
+            <a-form-item label="Nueva contraseña">
+              <a-input-password
+                v-model:value="passwordForm.next"
+                autocomplete="new-password"
+                placeholder="Mínimo 6 caracteres"
+              />
+            </a-form-item>
+
+            <a-form-item label="Confirmar nueva contraseña">
+              <a-input-password
+                v-model:value="passwordForm.confirm"
+                autocomplete="new-password"
+                placeholder="Repite la nueva contraseña"
+              />
+            </a-form-item>
+
+            <a-alert
+              v-if="passwordError"
+              type="error"
+              :message="passwordError"
+              show-icon
+              class="profile__alert"
+            />
+
+            <div class="profile__actions">
+              <a-button
+                type="primary"
+                html-type="submit"
+                :loading="savingPassword"
+                :disabled="!canSubmitPassword"
+              >
+                Cambiar contraseña
               </a-button>
             </div>
           </a-form>

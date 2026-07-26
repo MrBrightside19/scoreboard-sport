@@ -122,6 +122,41 @@ export async function updateProfileDisplayName(displayName: string): Promise<Pro
   return rows[0]
 }
 
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const supabase = getSupabaseClient()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  if (!session?.user?.email) throw new Error('No autenticado')
+
+  if (!currentPassword) throw new Error('Ingresa tu contraseña actual.')
+  if (newPassword.length < 6) {
+    throw new Error('La nueva contraseña debe tener al menos 6 caracteres.')
+  }
+  if (currentPassword === newPassword) {
+    throw new Error('La nueva contraseña debe ser distinta a la actual.')
+  }
+
+  const { error: reauthError } = await supabase.auth.signInWithPassword({
+    email: session.user.email,
+    password: currentPassword,
+  })
+  if (reauthError) {
+    throw new Error(
+      reauthError.code === 'invalid_credentials' ||
+        reauthError.message.toLowerCase().includes('invalid login credentials')
+        ? 'La contraseña actual no es correcta.'
+        : toAuthMessage(reauthError),
+    )
+  }
+
+  const { error } = await supabase.auth.updateUser({ password: newPassword })
+  if (error) throw new Error(toAuthMessage(error))
+}
+
 export function onAuthStateChange(
   callback: (isAuthenticated: boolean) => void,
 ): () => void {
