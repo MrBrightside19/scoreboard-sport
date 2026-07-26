@@ -40,8 +40,23 @@ import type {
   TournamentMatch,
 } from '@/types/tournament'
 import { MAX_TOURNAMENT_ASSISTANTS } from '@/types/tournament'
-import TournamentStandings from '@/components/TournamentStandings.vue'
 import TournamentTeamsPanel from '@/components/TournamentTeamsPanel.vue'
+import MatchReportDrawer from '@/components/MatchReportDrawer.vue'
+import TournamentStatsPanel from '@/components/TournamentStatsPanel.vue'
+import { fetchMatchState } from '@/services/matchSync'
+import {
+  buildMatchReport,
+  buildMatchReportFromFinishedScores,
+  matchReportMetaFromTournamentMatch,
+  type MatchReport,
+} from '@/utils/matchReport'
+import {
+  buildMatchWorkbook,
+  buildTournamentWorkbook,
+  downloadWorkbookBuffer,
+  matchReportFilename,
+  tournamentReportFilename,
+} from '@/utils/matchReportWorkbook'
 
 const route = useRoute()
 const router = useRouter()
@@ -65,6 +80,11 @@ const creatingMatch = ref(false)
 const matchFormError = ref<string | null>(null)
 const editingMatchId = ref<string | null>(null)
 const deletingMatchId = ref<string | null>(null)
+const reportOpen = ref(false)
+const reportLoading = ref(false)
+const reportDownloading = ref(false)
+const tournamentReportDownloading = ref(false)
+const activeReport = ref<MatchReport | null>(null)
 
 const matchForm = reactive({
   local_team: '',
@@ -108,6 +128,10 @@ const streamCourts = computed(() =>
   [...new Set(matches.value.map((m) => m.court))].sort((a, b) =>
     a.localeCompare(b, undefined, { numeric: true }),
   ),
+)
+
+const canDownloadTournamentReport = computed(
+  () => matches.value.some((m) => m.status === 'finished' && m.match_id),
 )
 
 const standings = computed(() =>
@@ -226,6 +250,78 @@ function downloadTemplate(): void {
   a.download = 'plantilla-torneo.xlsx'
   a.click()
   URL.revokeObjectURL(url)
+}
+
+async function loadReportForMatch(tm: TournamentMatch): Promise<MatchReport> {
+  const meta = matchReportMetaFromTournamentMatch(tm)
+  if (!tm.match_id) {
+    return buildMatchReportFromFinishedScores(
+      meta,
+      tm.goal_local ?? 0,
+      tm.goal_visit ?? 0,
+    )
+  }
+  const record = await fetchMatchState(tm.match_id)
+  if (!record?.state) {
+    return buildMatchReportFromFinishedScores(
+      meta,
+      tm.goal_local ?? record?.goal_local ?? 0,
+      tm.goal_visit ?? record?.goal_visit ?? 0,
+    )
+  }
+  return buildMatchReport(meta, {
+    ...record.state,
+    goalLocal: record.goal_local ?? record.state.goalLocal,
+    goalVisit: record.goal_visit ?? record.state.goalVisit,
+  })
+}
+
+async function openMatchReport(tm: TournamentMatch): Promise<void> {
+  reportOpen.value = true
+  reportLoading.value = true
+  activeReport.value = null
+  try {
+    activeReport.value = await loadReportForMatch(tm)
+  } catch (err) {
+    message.error(err instanceof Error ? err.message : 'No se pudo cargar el informe')
+    reportOpen.value = false
+  } finally {
+    reportLoading.value = false
+  }
+}
+
+function downloadActiveReport(): void {
+  if (!activeReport.value) return
+  reportDownloading.value = true
+  try {
+    const buffer = buildMatchWorkbook(activeReport.value)
+    downloadWorkbookBuffer(buffer, matchReportFilename(activeReport.value))
+  } finally {
+    reportDownloading.value = false
+  }
+}
+
+async function downloadTournamentReports(): Promise<void> {
+  if (!tournament.value) return
+  const targets = matches.value.filter((m) => m.status === 'finished' && m.match_id)
+  if (targets.length === 0) {
+    message.warning('No hay partidos finalizados con datos para exportar')
+    return
+  }
+
+  tournamentReportDownloading.value = true
+  try {
+    const reports: MatchReport[] = []
+    for (const tm of targets) {
+      reports.push(await loadReportForMatch(tm))
+    }
+    const buffer = buildTournamentWorkbook(tournament.value.name, reports)
+    downloadWorkbookBuffer(buffer, tournamentReportFilename(tournament.value.name))
+  } catch (err) {
+    message.error(err instanceof Error ? err.message : 'No se pudo generar el Excel del torneo')
+  } finally {
+    tournamentReportDownloading.value = false
+  }
 }
 
 async function importCalendarRows(
@@ -667,7 +763,7 @@ onUnmounted(() => {
                     <span v-else>—</span>
                   </template>
                 </a-table-column>
-                <a-table-column title="Acciones" :width="150" fixed="right">
+                <a-table-column title="Acciones" :width="180" fixed="right">
                   <template #default="{ record }">
                     <div class="detail__match-actions">
                       <a-button
@@ -689,6 +785,25 @@ onUnmounted(() => {
                         @click="openControls(record)"
                       >
                         Controles
+                      </a-button>
+                      <a-button
+                        v-if="
+                          record.match_id
+                            && (record.status === 'finished' || record.status === 'live')
+                        "
+                        size="small"
+                        class="detail__info-btn"
+                        aria-label="Ver informe"
+                        title="Ver informe"
+                        @click="openMatchReport(record)"
+                      >
+                        <span class="detail__btn-icon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="9" />
+                            <path d="M12 11v6" />
+                            <path d="M12 8h.01" />
+                          </svg>
+                        </span>
                       </a-button>
                       <a-dropdown
                         v-if="canEditMatches && record.status !== 'live'"
@@ -740,11 +855,8 @@ onUnmounted(() => {
           </section>
         </a-tab-pane>
 
-        <a-tab-pane key="posiciones" tab="Tabla de Posiciones">
-          <section class="detail__section">
-            <h2>Tabla de posiciones</h2>
-            <TournamentStandings :standings="standings" />
-          </section>
+        <a-tab-pane key="estadisticas" tab="Estadísticas">
+          <TournamentStatsPanel :standings="standings" :matches="matches" />
         </a-tab-pane>
 
         <a-tab-pane key="equipos" tab="Equipos">
@@ -796,6 +908,38 @@ onUnmounted(() => {
                   Al iniciar un partido, el roster se filtra por equipo y categoría.
                 </li>
               </ul>
+            </section>
+
+            <section class="config__panel" aria-labelledby="config-informes">
+              <div class="config__panel-head">
+                <div>
+                  <h2 id="config-informes">Informes</h2>
+                  <p class="config__desc">
+                    Exporta el Excel consolidado con resultados, destacados y estadísticas de todos los partidos finalizados.
+                  </p>
+                </div>
+                <div class="config__actions">
+                  <a-button
+                    type="primary"
+                    :loading="tournamentReportDownloading"
+                    :disabled="!canDownloadTournamentReport"
+                    class="detail__report-torneo-btn"
+                    @click="downloadTournamentReports"
+                  >
+                    <span class="detail__btn-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 3v12" />
+                        <path d="m7 10 5 5 5-5" />
+                        <path d="M5 21h14" />
+                      </svg>
+                    </span>
+                    Informe torneo
+                  </a-button>
+                </div>
+              </div>
+              <p v-if="!canDownloadTournamentReport" class="config__empty">
+                Disponible cuando haya al menos un partido finalizado con datos.
+              </p>
             </section>
 
             <section
@@ -1061,6 +1205,15 @@ onUnmounted(() => {
         </div>
       </a-form>
     </a-modal>
+
+    <MatchReportDrawer
+      v-model:open="reportOpen"
+      :report="activeReport"
+      :loading="reportLoading"
+      :can-download="true"
+      :downloading="reportDownloading"
+      @download="downloadActiveReport"
+    />
   </div>
 </template>
 
@@ -1160,6 +1313,27 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.detail__btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.detail__report-torneo-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.detail__info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  padding-inline: 0.4rem;
 }
 
 .detail__refreshing {

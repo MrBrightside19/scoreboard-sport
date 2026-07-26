@@ -26,6 +26,7 @@ const teams = computed(() => [
     name: store.state.localTeam,
     roster: store.state.rosterLocal,
     goals: store.state.goals.filter((goal) => goal.team === 'local'),
+    shots: store.state.shots.filter((shot) => shot.team === 'local'),
   },
   {
     key: 'visit' as const,
@@ -33,6 +34,7 @@ const teams = computed(() => [
     name: store.state.visitTeam,
     roster: store.state.rosterVisit,
     goals: store.state.goals.filter((goal) => goal.team === 'visit'),
+    shots: store.state.shots.filter((shot) => shot.team === 'visit'),
   },
 ])
 
@@ -98,7 +100,8 @@ function rosterFor(team: 'local' | 'visit') {
         class="goals-panel__team"
       >
         <div class="goals-panel__header">
-          <h3>{{ team.label }} — {{ team.name }}</h3>
+          <h3>{{ team.label }}</h3>
+          <span class="goals-panel__team-name">{{ team.name }}</span>
         </div>
 
         <div v-if="team.goals.length" class="goals-panel__list">
@@ -130,6 +133,23 @@ function rosterFor(team: 'local' | 'visit') {
           </div>
         </div>
         <a-empty v-else :image-style="{ height: '36px' }" description="Sin goles registrados" />
+
+        <div class="goals-panel__shots">
+          <div class="goals-panel__shots-head">
+            <h4>Tiros y atajadas</h4>
+            <span>
+              {{ team.shots.filter((s) => s.result === 'miss').length }} tiros ·
+              {{ team.shots.filter((s) => s.result === 'save').length }} atajadas
+            </span>
+          </div>
+          <ul v-if="team.shots.length" class="goals-panel__shot-list">
+            <li v-for="shot in team.shots" :key="shot.id">
+              {{ shot.result === 'save' ? 'Atajada' : 'Tiro' }}
+              · P{{ shot.period }} {{ shot.gameMinute }}
+            </li>
+          </ul>
+          <p v-else class="goals-panel__shot-empty">Sin tiros ni atajadas</p>
+        </div>
 
         <a-button
           v-if="team.goals.length"
@@ -213,8 +233,12 @@ function rosterFor(team: 'local' | 'visit') {
 
 .goals-panel__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: 1fr 1fr;
   gap: 1rem;
+
+  @media (max-width: 720px) {
+    grid-template-columns: 1fr;
+  }
 }
 
 .goals-panel__team {
@@ -225,24 +249,89 @@ function rosterFor(team: 'local' | 'visit') {
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.07);
+  min-width: 0;
+
+  &:first-child {
+    border-top: 2px solid rgba(0, 212, 255, 0.45);
+  }
+
+  &:last-child {
+    border-top: 2px solid rgba(255, 107, 53, 0.45);
+  }
 }
 
 .goals-panel__header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.5rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
 
   h3 {
     margin: 0;
-    font-size: 0.95rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    opacity: 0.55;
   }
+}
+
+.goals-panel__team-name {
+  font-size: 0.95rem;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
 .goals-panel__list {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
+}
+
+.goals-panel__shots {
+  padding-top: 0.55rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.goals-panel__shots-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-bottom: 0.4rem;
+
+  h4 {
+    margin: 0;
+    font-size: 0.72rem;
+    font-weight: 650;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    opacity: 0.65;
+  }
+
+  span {
+    font-size: 0.72rem;
+    opacity: 0.5;
+  }
+}
+
+.goals-panel__shot-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+.goals-panel__shot-empty {
+  margin: 0;
+  font-size: 0.8rem;
+  opacity: 0.45;
 }
 
 .goals-panel__item {
