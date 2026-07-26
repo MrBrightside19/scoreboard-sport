@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import ScoreBoard from '@/components/ScoreBoard.vue'
+import ArenaScoreBoard from '@/components/ArenaScoreBoard.vue'
 import { useScoreboardStore } from '@/stores/scoreboard'
 import { useLocalScoreboardSync } from '@/composables/useLocalScoreboardSync'
 import { fetchCourtStream } from '@/services/tournamentCourtStream'
@@ -132,10 +133,13 @@ onUnmounted(() => {
 
 <template>
   <div class="board-root">
+    <ArenaScoreBoard
+      v-if="activeMatchId && ready && tvStyle === 'arena'"
+      :state="store.state"
+    />
     <ScoreBoard
-      v-if="activeMatchId && ready"
+      v-else-if="activeMatchId && ready"
       tv
-      :tv-style="tvStyle"
       :state="store.state"
     />
     <div v-else-if="activeMatchId" class="board-empty">Cargando marcador…</div>

@@ -32,6 +32,7 @@ declare module 'vue' {
     AppNavbar: typeof import('./src/components/AppNavbar.vue')['default']
     ARadio: typeof import('ant-design-vue/es')['Radio']
     ARadioGroup: typeof import('ant-design-vue/es')['RadioGroup']
+    ArenaScoreBoard: typeof import('./src/components/ArenaScoreBoard.vue')['default']
     ASegmented: typeof import('ant-design-vue/es')['Segmented']
     ASelect: typeof import('ant-design-vue/es')['Select']
     ASelectOption: typeof import('ant-design-vue/es')['SelectOption']

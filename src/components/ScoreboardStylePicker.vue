@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import ScoreBoard from '@/components/ScoreBoard.vue'
+import ArenaScoreBoard from '@/components/ArenaScoreBoard.vue'
 import { createDefaultScoreboardState } from '@/types/hockeyScoreboard'
 import type {
   OverlayScoreboardStyle,
@@ -33,6 +34,36 @@ previewState.timeGame = '12:45'
 previewState.matchCategory = 'U15'
 previewState.localColor = '#3da5ff'
 previewState.visitColor = '#ff5a36'
+previewState.penaltiesLocal = [
+  {
+    id: 'preview-p1',
+    playerId: '',
+    player: '12',
+    penaltyTypeId: 'minor',
+    infraction: '',
+    time: '1:42',
+  },
+]
+previewState.shots = [
+  {
+    id: 'preview-s1',
+    team: 'visit',
+    result: 'save',
+    goalkeeperPlayerId: '',
+    gameMinute: '10:00',
+    period: 2,
+    createdAt: '',
+  },
+  {
+    id: 'preview-s2',
+    team: 'local',
+    result: 'save',
+    goalkeeperPlayerId: '',
+    gameMinute: '11:00',
+    period: 2,
+    createdAt: '',
+  },
+]
 
 function select(option: ScoreboardStyleOption<string>): void {
   if (option.id === props.modelValue) return
@@ -62,10 +93,14 @@ function isSelected(id: string): boolean {
         aria-hidden="true"
       >
         <div class="style-picker__preview-stage">
+          <ArenaScoreBoard
+            v-if="mode === 'tv' && option.id === 'arena'"
+            preview
+            :state="previewState"
+          />
           <ScoreBoard
-            v-if="mode === 'tv'"
+            v-else-if="mode === 'tv'"
             tv
-            :tv-style="option.id as TvScoreboardStyle"
             :state="previewState"
           />
           <ScoreBoard
@@ -151,6 +186,11 @@ function isSelected(id: string): boolean {
   width: 1280px;
   height: 720px;
   transform: scale(0.22);
+}
+
+.style-picker__preview--tv :deep(.arena--preview) {
+  width: 1280px;
+  height: 720px;
 }
 
 .style-picker__preview--overlay .style-picker__preview-stage {

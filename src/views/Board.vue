@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import ScoreBoard from '@/components/ScoreBoard.vue'
+import ArenaScoreBoard from '@/components/ArenaScoreBoard.vue'
 import { useScoreboardStore } from '@/stores/scoreboard'
 import { useLocalScoreboardSync } from '@/composables/useLocalScoreboardSync'
 import { useScoreboardDisplayPrefs } from '@/composables/useScoreboardDisplayPrefs'
@@ -44,10 +45,13 @@ watch(
 </script>
 
 <template>
+  <ArenaScoreBoard
+    v-if="matchId && ready && tvStyle === 'arena'"
+    :state="store.state"
+  />
   <ScoreBoard
-    v-if="matchId && ready"
+    v-else-if="matchId && ready"
     tv
-    :tv-style="tvStyle"
     :state="store.state"
   />
   <div v-else-if="matchId" class="board-empty">Cargando marcador…</div>

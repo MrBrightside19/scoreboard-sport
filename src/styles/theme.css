@@ -44,3 +44,14 @@ html[data-theme='light'] {
   --app-danger-hover-bg: rgba(207, 34, 46, 0.08);
   --app-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
 }
+
+@font-face {
+  font-family: 'DSEG7 Classic';
+  src: url('https://cdn.jsdelivr.net/npm/dseg@0.46.0/fonts/DSEG7-Classic/DSEG7Classic-Bold.woff2')
+      format('woff2'),
+    url('https://cdn.jsdelivr.net/npm/dseg@0.46.0/fonts/DSEG7-Classic/DSEG7Classic-Bold.woff')
+      format('woff');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}

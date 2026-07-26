@@ -4,14 +4,8 @@ import type { GoalEvent, ScoreboardState, TeamPenalty } from '@/types/hockeyScor
 import { isGoalPending, MAX_PERIODS } from '@/types/hockeyScoreboard'
 import { penaltyTypeLabel } from '@/data/penaltyCatalog'
 import { findPlayerById, findPlayerByNumber, playerLabel } from '@/utils/roster'
-import type {
-  OverlayScoreboardStyle,
-  TvScoreboardStyle,
-} from '@/config/scoreboardStyles'
-import {
-  DEFAULT_OVERLAY_SCOREBOARD_STYLE,
-  DEFAULT_TV_SCOREBOARD_STYLE,
-} from '@/config/scoreboardStyles'
+import type { OverlayScoreboardStyle } from '@/config/scoreboardStyles'
+import { DEFAULT_OVERLAY_SCOREBOARD_STYLE } from '@/config/scoreboardStyles'
 
 const props = withDefaults(
   defineProps<{
@@ -21,12 +15,10 @@ const props = withDefaults(
     displayPenaltiesLocal?: TeamPenalty[]
     displayPenaltiesVisit?: TeamPenalty[]
     overlay?: boolean
-    /** Marcador grande para TV / cancha. Live usa el diseño responsivo. */
-    tv?: boolean
-    /** Variante visual del marcador TV (extensible). */
-    tvStyle?: TvScoreboardStyle
     /** Variante visual del overlay OBS (extensible). */
     overlayStyle?: OverlayScoreboardStyle
+    /** Marcador grande para TV / cancha. Live usa el diseño responsivo. */
+    tv?: boolean
     compact?: boolean
     /** Nombre del torneo (reemplaza “Hockey en línea” en el live). */
     eventTitle?: string | null
@@ -34,7 +26,6 @@ const props = withDefaults(
     eventDate?: string | null
   }>(),
   {
-    tvStyle: DEFAULT_TV_SCOREBOARD_STYLE,
     overlayStyle: DEFAULT_OVERLAY_SCOREBOARD_STYLE,
   },
 )
@@ -383,7 +374,7 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
 
   <!-- TV / cancha (pantalla grande) -->
   <div
-    v-else-if="tv && tvStyle === 'classic'"
+    v-else-if="tv"
     class="scoreboard scoreboard--tv"
     :class="{ 'scoreboard--compact': compact }"
   >

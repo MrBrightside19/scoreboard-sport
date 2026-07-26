@@ -1,6 +1,6 @@
 /** Catálogo de estilos de marcador TV y overlay. Ampliar aquí al añadir variantes. */
 
-export type TvScoreboardStyle = 'classic'
+export type TvScoreboardStyle = 'classic' | 'arena'
 export type OverlayScoreboardStyle = 'bug'
 
 export interface ScoreboardStyleOption<T extends string> {
@@ -17,6 +17,11 @@ export const TV_SCOREBOARD_STYLES: ScoreboardStyleOption<TvScoreboardStyle>[] = 
     id: 'classic',
     label: 'Clásico',
     description: 'Marcador a pantalla completa para TV o proyección en cancha.',
+  },
+  {
+    id: 'arena',
+    label: 'Arena LED',
+    description: 'Marcador de estadio con dígitos LED: marcador, periodo, faltas y tiros.',
   },
 ]
 
