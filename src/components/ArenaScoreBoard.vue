@@ -98,6 +98,7 @@ function displayTeamName(name: string): string {
 
 const localNameEl = ref<HTMLElement | null>(null)
 const visitNameEl = ref<HTMLElement | null>(null)
+const clockValueEl = ref<HTMLElement | null>(null)
 let nameResizeObserver: ResizeObserver | null = null
 
 /**
@@ -122,14 +123,59 @@ function fitTeamNames() {
   }
 }
 
+let clockMeasureCtx: CanvasRenderingContext2D | null = null
+
+/**
+ * Centrado óptico estándar: mide la "tinta" real del texto (canvas) y la
+ * centra en la celda. Corrige el hueco que dejan dígitos como el 1 en DSEG,
+ * sin compensaciones fijas que solo funcionan para una hora concreta.
+ */
+function fitClock() {
+  const el = clockValueEl.value
+  const parent = el?.parentElement
+  if (!el || !parent) return
+
+  el.style.fontSize = ''
+  el.style.transform = ''
+
+  const parentStyle = getComputedStyle(parent)
+  const padX =
+    (parseFloat(parentStyle.paddingLeft) || 0) +
+    (parseFloat(parentStyle.paddingRight) || 0)
+  const available = parent.clientWidth - padX
+  const needed = Math.max(el.scrollWidth, el.offsetWidth)
+  if (needed > available && available > 0) {
+    const base = parseFloat(getComputedStyle(el).fontSize)
+    el.style.fontSize = `${(base * available * 0.96) / needed}px`
+  }
+
+  clockMeasureCtx ??= document.createElement('canvas').getContext('2d')
+  if (!clockMeasureCtx) return
+
+  const style = getComputedStyle(el)
+  clockMeasureCtx.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`
+  const metrics = clockMeasureCtx.measureText(el.textContent?.trim() ?? '')
+  // Centro de la tinta respecto al centro de la caja de texto.
+  const inkCenter =
+    (metrics.actualBoundingBoxRight - metrics.actualBoundingBoxLeft) / 2
+  const boxCenter = metrics.width / 2
+  const offset = inkCenter - boxCenter
+  if (Number.isFinite(offset) && Math.abs(offset) > 0.5) {
+    el.style.transform = `translateX(${-offset}px)`
+  }
+}
+
 function scheduleFitTeamNames() {
   nextTick(() => {
-    requestAnimationFrame(fitTeamNames)
+    requestAnimationFrame(() => {
+      fitTeamNames()
+      fitClock()
+    })
   })
 }
 
 watch(
-  () => [props.state.localTeam, props.state.visitTeam],
+  () => [props.state.localTeam, props.state.visitTeam, arenaClock.value],
   scheduleFitTeamNames,
 )
 
@@ -137,7 +183,7 @@ onMounted(() => {
   scheduleFitTeamNames()
   void document.fonts?.ready.then(scheduleFitTeamNames)
   nameResizeObserver = new ResizeObserver(scheduleFitTeamNames)
-  for (const el of [localNameEl.value, visitNameEl.value]) {
+  for (const el of [localNameEl.value, visitNameEl.value, clockValueEl.value]) {
     if (el?.parentElement) nameResizeObserver.observe(el.parentElement)
   }
 })
@@ -189,7 +235,7 @@ function penaltyTime(penalty: TeamPenalty | null): string {
             class="arena__cell arena__cell--clock"
             :class="{ 'arena__cell--blink': state.isPaused }"
           >
-            <span class="arena__clock-value">{{ arenaClock }}</span>
+            <span ref="clockValueEl" class="arena__clock-value">{{ arenaClock }}</span>
           </div>
         </div>
 
@@ -450,8 +496,7 @@ function penaltyTime(penalty: TeamPenalty | null): string {
   line-height: 1.15;
   letter-spacing: 0;
   color: var(--arena-yellow);
-  /* Más aire a ambos lados; DSEG sigue necesitando menos padding izq. */
-  padding: 3vh 5.8vw 3vh 3.4vw;
+  padding: 3vh 3.2vw;
   box-sizing: border-box;
   overflow: hidden;
   white-space: nowrap;
@@ -461,7 +506,10 @@ function penaltyTime(penalty: TeamPenalty | null): string {
 
 .arena__clock-value {
   display: block;
-  transform: translateX(-2.4vw);
+  flex: 0 0 auto;
+  width: max-content;
+  max-width: none;
+  /* El centrado óptico lo aplica fitClock() midiendo la tinta real. */
 }
 
 .arena__cell--period {
