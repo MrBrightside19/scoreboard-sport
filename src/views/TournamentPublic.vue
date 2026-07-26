@@ -9,8 +9,8 @@ import {
 import { fetchMatchState } from '@/services/matchSync'
 import { calculateStandings } from '@/utils/standings'
 import type { Tournament, TournamentMatch } from '@/types/tournament'
-import TournamentStandings from '@/components/TournamentStandings.vue'
 import MatchReportDrawer from '@/components/MatchReportDrawer.vue'
+import TournamentStatsPanel from '@/components/TournamentStatsPanel.vue'
 import {
   buildMatchReport,
   buildMatchReportFromFinishedScores,
@@ -118,8 +118,7 @@ onMounted(async () => {
       </header>
 
       <section class="tournament-public__section">
-        <h2>Tabla de posiciones</h2>
-        <TournamentStandings :standings="standings" />
+        <TournamentStatsPanel :standings="standings" :matches="matches" />
       </section>
 
       <section class="tournament-public__section">

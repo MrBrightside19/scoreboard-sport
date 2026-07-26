@@ -40,9 +40,9 @@ import type {
   TournamentMatch,
 } from '@/types/tournament'
 import { MAX_TOURNAMENT_ASSISTANTS } from '@/types/tournament'
-import TournamentStandings from '@/components/TournamentStandings.vue'
 import TournamentTeamsPanel from '@/components/TournamentTeamsPanel.vue'
 import MatchReportDrawer from '@/components/MatchReportDrawer.vue'
+import TournamentStatsPanel from '@/components/TournamentStatsPanel.vue'
 import { fetchMatchState } from '@/services/matchSync'
 import {
   buildMatchReport,
@@ -855,11 +855,8 @@ onUnmounted(() => {
           </section>
         </a-tab-pane>
 
-        <a-tab-pane key="posiciones" tab="Tabla de Posiciones">
-          <section class="detail__section">
-            <h2>Tabla de posiciones</h2>
-            <TournamentStandings :standings="standings" />
-          </section>
+        <a-tab-pane key="estadisticas" tab="Estadísticas">
+          <TournamentStatsPanel :standings="standings" :matches="matches" />
         </a-tab-pane>
 
         <a-tab-pane key="equipos" tab="Equipos">
