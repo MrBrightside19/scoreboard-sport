@@ -12,6 +12,11 @@ import {
   writeMatchIdToStorage,
 } from '@/utils/localSync'
 import AuthModal from '@/components/AuthModal.vue'
+import {
+  getAppTheme,
+  setUserPreferences,
+  type AppTheme,
+} from '@/utils/userPreferences'
 
 const route = useRoute()
 const router = useRouter()
@@ -20,6 +25,21 @@ const showAuth = ref(false)
 const mobileOpen = ref(false)
 const creating = ref(false)
 const activeFreeMatchId = ref<string | null>(null)
+const theme = ref<AppTheme>(getAppTheme())
+
+function syncThemeFromPrefs(): void {
+  theme.value = getAppTheme()
+}
+
+function toggleTheme(): void {
+  const next: AppTheme = theme.value === 'dark' ? 'light' : 'dark'
+  theme.value = next
+  setUserPreferences({ theme: next })
+}
+
+const themeToggleLabel = computed(() =>
+  theme.value === 'dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro',
+)
 
 const createButtonLabel = computed(() => {
   if (creating.value) {
@@ -158,12 +178,15 @@ async function createMatchFlow(): Promise<void> {
 }
 
 onMounted(() => {
+  syncThemeFromPrefs()
   void refreshActiveFreeMatch()
   window.addEventListener('focus', refreshActiveFreeMatch)
+  window.addEventListener('scoreboard:theme-change', syncThemeFromPrefs)
 })
 
 onUnmounted(() => {
   window.removeEventListener('focus', refreshActiveFreeMatch)
+  window.removeEventListener('scoreboard:theme-change', syncThemeFromPrefs)
 })
 
 watch(
@@ -211,6 +234,44 @@ watch(
       </nav>
 
       <div class="app-nav__trailing">
+        <button
+          type="button"
+          class="app-nav__theme"
+          :aria-label="themeToggleLabel"
+          :title="themeToggleLabel"
+          @click="toggleTheme"
+        >
+          <svg
+            v-if="theme === 'dark'"
+            viewBox="0 0 24 24"
+            width="16"
+            height="16"
+            aria-hidden="true"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+          </svg>
+          <svg
+            v-else
+            viewBox="0 0 24 24"
+            width="16"
+            height="16"
+            aria-hidden="true"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5z" />
+          </svg>
+        </button>
+
         <div v-if="isSupabaseConfigured" class="app-nav__desktop-auth">
           <a-dropdown v-if="auth.isAuthenticated" placement="bottomRight" :trigger="['click']">
             <button type="button" class="app-nav__profile-btn" aria-label="Menú de usuario">
@@ -414,6 +475,27 @@ watch(
   gap: 0.5rem;
   margin-left: auto;
   flex-shrink: 0;
+}
+
+.app-nav__theme {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 8px;
+  background: var(--app-surface);
+  color: var(--app-text);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+
+  &:hover {
+    border-color: color-mix(in srgb, var(--app-link) 45%, transparent);
+    background: var(--app-surface-strong);
+    color: var(--app-link);
+  }
 }
 
 .app-nav__desktop-auth {
