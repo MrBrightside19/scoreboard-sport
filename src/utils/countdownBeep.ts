@@ -14,8 +14,11 @@ function getAudioContext(): AudioContext | null {
   return audioCtx
 }
 
-export async function playCountdownBeep(final = false): Promise<void> {
-  if (!isCountdownBeepEnabled()) return
+export async function playCountdownBeep(
+  final = false,
+  options?: { force?: boolean },
+): Promise<void> {
+  if (!options?.force && !isCountdownBeepEnabled()) return
 
   const ctx = getAudioContext()
   if (!ctx) return

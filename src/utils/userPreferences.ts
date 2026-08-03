@@ -16,6 +16,10 @@ export interface UserPreferences {
   countdownBeepEnabled: boolean
   /** Desde cuántos segundos restantes suena el beep (inclusive). */
   countdownBeepSeconds: number
+  /** Aviso sonoro al entrar en los últimos minutos de juego. */
+  lateGameWarningEnabled: boolean
+  /** Minutos restantes para disparar el aviso (1–5). */
+  lateGameWarningMinutes: number
   /** Tema de la interfaz (páginas de app; TV/overlay siguen oscuros). */
   theme: AppTheme
   /** Estilo del marcador TV / cancha. */
@@ -28,9 +32,15 @@ export const DEFAULT_COUNTDOWN_BEEP_SECONDS = 10
 export const MIN_COUNTDOWN_BEEP_SECONDS = 3
 export const MAX_COUNTDOWN_BEEP_SECONDS = 30
 
+export const DEFAULT_LATE_GAME_WARNING_MINUTES = 2
+export const MIN_LATE_GAME_WARNING_MINUTES = 1
+export const MAX_LATE_GAME_WARNING_MINUTES = 5
+
 const DEFAULTS: UserPreferences = {
   countdownBeepEnabled: true,
   countdownBeepSeconds: DEFAULT_COUNTDOWN_BEEP_SECONDS,
+  lateGameWarningEnabled: true,
+  lateGameWarningMinutes: DEFAULT_LATE_GAME_WARNING_MINUTES,
   theme: 'dark',
   tvScoreboardStyle: DEFAULT_TV_SCOREBOARD_STYLE,
   overlayScoreboardStyle: DEFAULT_OVERLAY_SCOREBOARD_STYLE,
@@ -42,6 +52,15 @@ function clampCountdownSeconds(value: unknown): number {
   return Math.min(
     MAX_COUNTDOWN_BEEP_SECONDS,
     Math.max(MIN_COUNTDOWN_BEEP_SECONDS, Math.round(n)),
+  )
+}
+
+function clampLateGameMinutes(value: unknown): number {
+  const n = typeof value === 'number' ? value : Number.parseInt(String(value ?? ''), 10)
+  if (Number.isNaN(n)) return DEFAULT_LATE_GAME_WARNING_MINUTES
+  return Math.min(
+    MAX_LATE_GAME_WARNING_MINUTES,
+    Math.max(MIN_LATE_GAME_WARNING_MINUTES, Math.round(n)),
   )
 }
 
@@ -69,6 +88,13 @@ export function getUserPreferences(): UserPreferences {
     countdownBeepSeconds: clampCountdownSeconds(
       stored.countdownBeepSeconds ?? DEFAULTS.countdownBeepSeconds,
     ),
+    lateGameWarningEnabled:
+      typeof stored.lateGameWarningEnabled === 'boolean'
+        ? stored.lateGameWarningEnabled
+        : DEFAULTS.lateGameWarningEnabled,
+    lateGameWarningMinutes: clampLateGameMinutes(
+      stored.lateGameWarningMinutes ?? DEFAULTS.lateGameWarningMinutes,
+    ),
     theme: normalizeTheme(stored.theme ?? DEFAULTS.theme),
     tvScoreboardStyle: normalizeTvScoreboardStyle(
       stored.tvScoreboardStyle ?? DEFAULTS.tvScoreboardStyle,
@@ -88,6 +114,13 @@ export function setUserPreferences(partial: Partial<UserPreferences>): UserPrefe
         : current.countdownBeepEnabled,
     countdownBeepSeconds: clampCountdownSeconds(
       partial.countdownBeepSeconds ?? current.countdownBeepSeconds,
+    ),
+    lateGameWarningEnabled:
+      typeof partial.lateGameWarningEnabled === 'boolean'
+        ? partial.lateGameWarningEnabled
+        : current.lateGameWarningEnabled,
+    lateGameWarningMinutes: clampLateGameMinutes(
+      partial.lateGameWarningMinutes ?? current.lateGameWarningMinutes,
     ),
     theme: normalizeTheme(partial.theme ?? current.theme),
     tvScoreboardStyle: normalizeTvScoreboardStyle(
@@ -112,6 +145,14 @@ export function isCountdownBeepEnabled(): boolean {
 
 export function getCountdownBeepSeconds(): number {
   return getUserPreferences().countdownBeepSeconds
+}
+
+export function isLateGameWarningEnabled(): boolean {
+  return getUserPreferences().lateGameWarningEnabled
+}
+
+export function getLateGameWarningMinutes(): number {
+  return getUserPreferences().lateGameWarningMinutes
 }
 
 export function getAppTheme(): AppTheme {

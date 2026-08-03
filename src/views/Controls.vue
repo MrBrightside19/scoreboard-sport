@@ -16,7 +16,12 @@ import { isSupabaseConfigured } from '@/services/supabaseClient'
 import { readMatchIdFromStorage, writeCourtActiveMatch, clearMatchIdFromStorage } from '@/utils/localSync'
 import { normalizeGameTime, parseTimeToSeconds } from '@/utils/clock'
 import { playCountdownBeep } from '@/utils/countdownBeep'
-import { getCountdownBeepSeconds } from '@/utils/userPreferences'
+import { playLateGameWarning } from '@/utils/lateGameWarningBeep'
+import {
+  getCountdownBeepSeconds,
+  getLateGameWarningMinutes,
+  isLateGameWarningEnabled,
+} from '@/utils/userPreferences'
 import { buildAppUrl, tournamentBoardPath } from '@/utils/appUrl'
 import { getLiveClockUpdateMs } from '@/config/poll'
 import { MAX_PERIODS, isGoalPending, DEFAULT_INTERMISSION_TIME } from '@/types/hockeyScoreboard'
@@ -60,6 +65,9 @@ const activeTab = ref('match')
 const clockDraft = ref(store.state.timeGame)
 const clockEditing = ref(false)
 let lastCountdownBeepSecond: number | null = null
+/** Evita repetir el aviso de últimos minutos en el mismo periodo/umbral. */
+let lateGameWarningKey: string | null = null
+let prevLateGameSeconds: number | null = null
 
 const pendingGoalsCount = computed(
   () => store.state.goals.filter((goal) => isGoalPending(goal)).length,
@@ -75,6 +83,14 @@ const countdownBeepPrefsTick = ref(0)
 const countdownBeepSeconds = computed(() => {
   countdownBeepPrefsTick.value
   return getCountdownBeepSeconds()
+})
+const lateGameWarningMinutes = computed(() => {
+  countdownBeepPrefsTick.value
+  return getLateGameWarningMinutes()
+})
+const lateGameWarningEnabled = computed(() => {
+  countdownBeepPrefsTick.value
+  return isLateGameWarningEnabled()
 })
 
 function onPrefsChange(): void {
@@ -316,6 +332,33 @@ watch(
     if (lastCountdownBeepSecond === seconds) return
     lastCountdownBeepSecond = seconds
     void playCountdownBeep(seconds === 0)
+  },
+)
+
+watch(
+  () => ({
+    seconds: parseTimeToSeconds(store.state.timeGame),
+    period: store.state.gamePeriod,
+    paused: store.state.isPaused,
+    intermission: store.state.intermissionActive,
+    enabled: lateGameWarningEnabled.value,
+    minutes: lateGameWarningMinutes.value,
+  }),
+  ({ seconds, period, paused, intermission, enabled, minutes }) => {
+    const threshold = minutes * 60
+    const prev = prevLateGameSeconds
+    prevLateGameSeconds = seconds
+
+    if (!enabled || paused || intermission || seconds < 0) return
+
+    // Solo al cruzar el umbral (p. ej. 2:01 → 2:00), no al cargar la mesa ya dentro.
+    const crossed = prev != null && prev > threshold && seconds <= threshold
+    if (!crossed) return
+
+    const key = `${period}:${threshold}`
+    if (lateGameWarningKey === key) return
+    lateGameWarningKey = key
+    void playLateGameWarning()
   },
 )
 
@@ -1045,6 +1088,10 @@ onUnmounted(() => {
                             ? 'Escribe minutos y segundos (solo números). Tab o flechas cambian de campo.'
                             : 'Pausa el reloj para ajustarlo.'
                       }}
+                      <template v-if="lateGameWarningEnabled && !store.state.intermissionActive">
+                        Aviso a los {{ lateGameWarningMinutes }} min
+                        (Perfil).
+                      </template>
                     </span>
                   </div>
 

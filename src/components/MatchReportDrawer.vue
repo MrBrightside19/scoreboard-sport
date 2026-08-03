@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { MatchReport } from '@/utils/matchReport'
 
 const open = defineModel<boolean>('open', { default: false })
@@ -14,6 +14,31 @@ const props = defineProps<{
 const emit = defineEmits<{
   download: []
 }>()
+
+const viewportWidth = ref(
+  typeof window !== 'undefined' ? window.innerWidth : 1024,
+)
+
+function syncViewportWidth(): void {
+  viewportWidth.value = window.innerWidth
+}
+
+onMounted(() => {
+  syncViewportWidth()
+  window.addEventListener('resize', syncViewportWidth, { passive: true })
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', syncViewportWidth)
+})
+
+/** Pantalla completa en móvil; en desktop respeta 560px sin salir del viewport. */
+const drawerWidth = computed(() => {
+  if (viewportWidth.value < 640) return '100%'
+  return Math.min(560, viewportWidth.value)
+})
+
+const isCompact = computed(() => viewportWidth.value < 640)
 
 function statusLabel(status: string): string {
   if (status === 'live') return 'En vivo'
@@ -67,8 +92,10 @@ const teamCards = computed(() => {
     v-model:open="open"
     title="Informe del partido"
     placement="right"
-    :width="560"
+    :width="drawerWidth"
     :destroy-on-close="true"
+    root-class-name="match-report-drawer"
+    :class="{ 'match-report-drawer--compact': isCompact }"
   >
     <a-spin :spinning="loading">
       <template v-if="report">
@@ -201,9 +228,12 @@ const teamCards = computed(() => {
   font-size: 1.15rem;
   font-weight: 650;
   line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .report__vs {
+  display: inline-block;
   opacity: 0.45;
   font-weight: 500;
   text-transform: uppercase;
@@ -215,6 +245,7 @@ const teamCards = computed(() => {
   margin: 0.35rem 0 0;
   font-size: 0.82rem;
   opacity: 0.65;
+  overflow-wrap: anywhere;
 }
 
 .report__score {
@@ -231,7 +262,7 @@ const teamCards = computed(() => {
   gap: 0.5rem;
   margin-bottom: 1rem;
 
-  @media (max-width: 520px) {
+  @media (max-width: 640px) {
     grid-template-columns: 1fr;
   }
 }
@@ -290,6 +321,7 @@ const teamCards = computed(() => {
     align-items: baseline;
     justify-content: space-between;
     gap: 0.4rem;
+    min-width: 0;
   }
 }
 
@@ -313,7 +345,7 @@ const teamCards = computed(() => {
   gap: 0.75rem;
   align-items: start;
 
-  @media (max-width: 520px) {
+  @media (max-width: 640px) {
     grid-template-columns: 1fr;
   }
 }
@@ -324,6 +356,7 @@ const teamCards = computed(() => {
   background: var(--app-surface);
   border: 1px solid var(--app-border);
   min-width: 0;
+  box-sizing: border-box;
 
   &--local {
     border-top: 2px solid rgba(0, 212, 255, 0.55);
@@ -340,11 +373,13 @@ const teamCards = computed(() => {
   justify-content: space-between;
   gap: 0.5rem;
   margin-bottom: 0.65rem;
+  min-width: 0;
 
   h4 {
     margin: 0;
     font-size: 0.92rem;
     font-weight: 650;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -375,6 +410,7 @@ const teamCards = computed(() => {
     border-radius: 6px;
     background: var(--app-surface-inset);
     text-align: center;
+    min-width: 0;
 
     span {
       font-size: 0.62rem;
@@ -417,6 +453,7 @@ const teamCards = computed(() => {
   gap: 0.35rem;
   font-size: 0.8rem;
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .report__badge {
@@ -456,6 +493,51 @@ const teamCards = computed(() => {
       background: var(--app-link);
       border-color: var(--app-link);
     }
+  }
+}
+</style>
+
+<!-- Estilos del shell Ant Drawer (teleport fuera del scoped). -->
+<style lang="scss">
+.match-report-drawer {
+  .ant-drawer-content-wrapper {
+    max-width: 100vw;
+  }
+
+  .ant-drawer-header {
+    padding: 12px 16px;
+  }
+
+  .ant-drawer-header-title {
+    gap: 0.5rem;
+  }
+
+  .ant-drawer-title {
+    font-size: 1rem;
+    line-height: 1.3;
+  }
+
+  .ant-drawer-body {
+    padding: 16px;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+  }
+}
+
+.ant-drawer.match-report-drawer--compact {
+  .ant-drawer-header {
+    padding: 12px 14px;
+    padding-top: max(12px, env(safe-area-inset-top));
+  }
+
+  .ant-drawer-body {
+    padding: 12px 14px;
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    overflow-x: hidden;
+  }
+
+  .ant-drawer-close {
+    padding: 12px;
   }
 }
 </style>
