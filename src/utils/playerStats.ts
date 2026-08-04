@@ -63,7 +63,7 @@ export function playerStatsFromState(
     if (!player) return null
 
     const teamName = team === 'local' ? state.localTeam : state.visitTeam
-    const fullName = `${player.name} ${player.lastName}`.trim()
+    const fullName = player.name.trim()
     const key = statKey(teamName, player.number, fullName)
     const existing = lines.get(key)
     if (existing) return existing

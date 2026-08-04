@@ -1337,6 +1337,67 @@ onUnmounted(() => {
             </div>
 
             <a-card
+              title="Árbitros y mesa"
+              class="controls__card controls__card--wide"
+            >
+              <div class="controls__officials">
+                <label class="controls__officials-field">
+                  <span>Árbitro 1</span>
+                  <a-input
+                    :value="store.state.referee1"
+                    placeholder="Nombre"
+                    :maxlength="40"
+                    allow-clear
+                    @update:value="(v: string) => store.patch({ referee1: v })"
+                  />
+                </label>
+                <label class="controls__officials-field">
+                  <span>Árbitro 2</span>
+                  <a-input
+                    :value="store.state.referee2"
+                    placeholder="Nombre"
+                    :maxlength="40"
+                    allow-clear
+                    @update:value="(v: string) => store.patch({ referee2: v })"
+                  />
+                </label>
+                <label class="controls__officials-field">
+                  <span>Mesa 1</span>
+                  <a-input
+                    :value="store.state.tableOfficial1"
+                    placeholder="Nombre"
+                    :maxlength="40"
+                    allow-clear
+                    @update:value="(v: string) => store.patch({ tableOfficial1: v })"
+                  />
+                </label>
+                <label class="controls__officials-field">
+                  <span>Mesa 2</span>
+                  <a-input
+                    :value="store.state.tableOfficial2"
+                    placeholder="Nombre"
+                    :maxlength="40"
+                    allow-clear
+                    @update:value="(v: string) => store.patch({ tableOfficial2: v })"
+                  />
+                </label>
+                <label class="controls__officials-field">
+                  <span>Mesa 3</span>
+                  <a-input
+                    :value="store.state.tableOfficial3"
+                    placeholder="Opcional"
+                    :maxlength="40"
+                    allow-clear
+                    @update:value="(v: string) => store.patch({ tableOfficial3: v })"
+                  />
+                </label>
+              </div>
+              <p class="controls__tournament-hint">
+                Quedan guardados con el partido y salen en el informe Excel.
+              </p>
+            </a-card>
+
+            <a-card
               v-if="!tournamentContext"
               title="Partido libre"
               class="controls__card controls__card--wide"
@@ -1810,6 +1871,24 @@ onUnmounted(() => {
 
 .controls__card--wide {
   grid-column: 1 / -1;
+}
+
+.controls__officials {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem 1rem;
+}
+
+.controls__officials-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.controls__officials-field > span {
+  font-size: 0.8rem;
+  opacity: 0.7;
 }
 
 .controls__tournament-meta {

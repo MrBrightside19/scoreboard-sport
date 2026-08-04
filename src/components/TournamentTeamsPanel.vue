@@ -9,6 +9,7 @@ import {
   updateTournamentTeam,
 } from '@/services/tournamentService'
 import {
+  joinPersonName,
   parseRoleFromText,
   roleLabel,
   roleToPositionText,
@@ -47,7 +48,6 @@ const drafts = reactive<Record<string, { color: string; logo_url: string }>>({})
 const playerForm = reactive({
   number: '',
   name: '',
-  last_name: '',
   category: '',
   role: 'player' as PlayerRole,
 })
@@ -173,6 +173,10 @@ function playerRole(player: TournamentRosterPlayer): string {
   return roleLabel(parseRoleFromText(player.position))
 }
 
+function playerDisplayName(player: TournamentRosterPlayer): string {
+  return joinPersonName(player.name, player.last_name)
+}
+
 function openLogoPreview(view: { team: TournamentTeam }): void {
   const url = drafts[view.team.id]?.logo_url || view.team.logo_url
   if (!url) return
@@ -183,7 +187,6 @@ function resetPlayerForm(): void {
   editingPlayerId.value = null
   playerForm.number = ''
   playerForm.name = ''
-  playerForm.last_name = ''
   playerForm.category = ''
   playerForm.role = 'player'
   playerFormError.value = null
@@ -193,8 +196,7 @@ function openEditPlayer(player: TournamentRosterPlayer): void {
   if (!props.canEdit) return
   editingPlayerId.value = player.id
   playerForm.number = player.number
-  playerForm.name = player.name
-  playerForm.last_name = player.last_name ?? ''
+  playerForm.name = playerDisplayName(player)
   playerForm.category = player.category ?? ''
   playerForm.role = parseRoleFromText(player.position)
   playerFormError.value = null
@@ -210,7 +212,6 @@ async function submitPlayer(): Promise<void> {
     const updated = await updateTournamentRosterPlayer(editingPlayerId.value, {
       number: digitsOnly(playerForm.number),
       name: playerForm.name.trim(),
-      last_name: playerForm.last_name.trim(),
       category: playerForm.category.trim() || null,
       position: roleToPositionText(playerForm.role),
     })
@@ -345,7 +346,7 @@ defineExpose({ reload: loadTeams })
                 >
                   <span class="teams-panel__number">#{{ player.number }}</span>
                   <span class="teams-panel__name">
-                    {{ player.name }} {{ player.last_name }}
+                    {{ playerDisplayName(player) }}
                   </span>
                   <span class="teams-panel__role">{{ playerRole(player) }}</span>
                   <a-button
@@ -403,22 +404,13 @@ defineExpose({ reload: loadTeams })
           </a-form-item>
         </div>
 
-        <div class="player-form__grid">
-          <a-form-item label="Nombre" name="name">
-            <a-input
-              v-model:value="playerForm.name"
-              placeholder="Nombre"
-              :disabled="!!savingPlayerId"
-            />
-          </a-form-item>
-          <a-form-item label="Apellido">
-            <a-input
-              v-model:value="playerForm.last_name"
-              placeholder="Apellido"
-              :disabled="!!savingPlayerId"
-            />
-          </a-form-item>
-        </div>
+        <a-form-item label="Nombre" name="name">
+          <a-input
+            v-model:value="playerForm.name"
+            placeholder="Nombre y apellido"
+            :disabled="!!savingPlayerId"
+          />
+        </a-form-item>
 
         <a-form-item label="Tipo de jugador">
           <a-select

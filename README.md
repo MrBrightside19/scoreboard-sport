@@ -73,7 +73,7 @@ Para plantillas de jugadores del calendario, ejecuta también `supabase/tourname
 
 La **plantilla del torneo** (Excel `.xlsx`) incluye dos hojas:
 - **Calendario**: partidos (`local`, `visita`, `categoria`, `tiempo_juego`, `cancha`, `fecha_programada`)
-- **Jugadores**: plantilla por equipo (`equipo`, `categoria`, `numero`, `nombre`, `apellido`, `posicion`). `posicion` es el tipo de jugador: `Jugador`, `Arquero`, `Capitán` o `Asistente Capitán`.
+- **Jugadores**: plantilla por equipo (`equipo`, `categoria`, `numero`, `nombre`, `posicion`). `nombre` es el nombre completo en una sola columna. `posicion` es el tipo de jugador: `Jugador`, `Arquero`, `Capitán` o `Asistente Capitán`.
 
 Al importar el Excel se cargan partidos y jugadores. Al iniciar un partido, los controles cargan los jugadores del equipo filtrados por la categoría. Sigue siendo posible agregar o editar jugadores manualmente en la pestaña Plantillas. También se acepta un `.csv` solo de calendario.
 

@@ -48,8 +48,17 @@ export interface MatchReportPenaltyRow {
   time: string
 }
 
+export interface MatchReportOfficials {
+  referee1: string
+  referee2: string
+  tableOfficial1: string
+  tableOfficial2: string
+  tableOfficial3: string
+}
+
 export interface MatchReport {
   meta: MatchReportMeta
+  officials: MatchReportOfficials
   goalLocal: number
   goalVisit: number
   gamePeriod: number
@@ -62,6 +71,34 @@ export interface MatchReport {
   penalties: MatchReportPenaltyRow[]
   playerStats: PlayerStatLine[]
   awards: MatchAwards
+}
+
+export function emptyMatchOfficials(): MatchReportOfficials {
+  return {
+    referee1: '',
+    referee2: '',
+    tableOfficial1: '',
+    tableOfficial2: '',
+    tableOfficial3: '',
+  }
+}
+
+/** Nombres de mesa no vacíos, unidos para resúmenes compactos. */
+export function formatTableOfficials(officials: MatchReportOfficials): string {
+  return [officials.tableOfficial1, officials.tableOfficial2, officials.tableOfficial3]
+    .map((name) => name.trim())
+    .filter(Boolean)
+    .join(', ')
+}
+
+export function hasMatchOfficials(officials: MatchReportOfficials): boolean {
+  return Boolean(
+    officials.referee1.trim() ||
+      officials.referee2.trim() ||
+      officials.tableOfficial1.trim() ||
+      officials.tableOfficial2.trim() ||
+      officials.tableOfficial3.trim(),
+  )
 }
 
 export function matchReportMetaFromTournamentMatch(tm: TournamentMatch): MatchReportMeta {
@@ -137,6 +174,13 @@ export function buildMatchReport(
       localTeam,
       visitTeam,
     },
+    officials: {
+      referee1: state.referee1.trim(),
+      referee2: state.referee2.trim(),
+      tableOfficial1: state.tableOfficial1.trim(),
+      tableOfficial2: state.tableOfficial2.trim(),
+      tableOfficial3: state.tableOfficial3.trim(),
+    },
     goalLocal: state.goalLocal,
     goalVisit: state.goalVisit,
     gamePeriod: state.gamePeriod,
@@ -162,6 +206,7 @@ export function buildMatchReportFromFinishedScores(
 ): MatchReport {
   return {
     meta,
+    officials: emptyMatchOfficials(),
     goalLocal,
     goalVisit,
     gamePeriod: 0,

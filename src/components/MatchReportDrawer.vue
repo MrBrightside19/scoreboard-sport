@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { MatchReport } from '@/utils/matchReport'
+import {
+  formatTableOfficials,
+  hasMatchOfficials,
+} from '@/utils/matchReport'
 
 const open = defineModel<boolean>('open', { default: false })
 
@@ -39,6 +43,19 @@ const drawerWidth = computed(() => {
 })
 
 const isCompact = computed(() => viewportWidth.value < 640)
+
+const officialsSummary = computed(() => {
+  const officials = props.report?.officials
+  if (!officials || !hasMatchOfficials(officials)) return null
+  const referees = [officials.referee1, officials.referee2]
+    .map((name) => name.trim())
+    .filter(Boolean)
+  const table = formatTableOfficials(officials)
+  return {
+    referees: referees.length ? referees.join(' · ') : '',
+    table,
+  }
+})
 
 function statusLabel(status: string): string {
   if (status === 'live') return 'En vivo'
@@ -112,6 +129,15 @@ const teamCards = computed(() => {
           </p>
           <p class="report__score">
             {{ report.goalLocal }} — {{ report.goalVisit }}
+          </p>
+          <p v-if="officialsSummary" class="report__officials">
+            <span v-if="officialsSummary.referees">
+              Árbitros: {{ officialsSummary.referees }}
+            </span>
+            <span v-if="officialsSummary.referees && officialsSummary.table"> · </span>
+            <span v-if="officialsSummary.table">
+              Mesa: {{ officialsSummary.table }}
+            </span>
           </p>
         </header>
 
@@ -254,6 +280,14 @@ const teamCards = computed(() => {
   font-size: 2rem;
   letter-spacing: 0.04em;
   line-height: 1;
+}
+
+.report__officials {
+  margin: 0.45rem 0 0;
+  font-size: 0.82rem;
+  opacity: 0.7;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .report__awards {

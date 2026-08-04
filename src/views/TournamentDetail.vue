@@ -899,7 +899,8 @@ onUnmounted(() => {
               <ul class="config__notes">
                 <li>
                   Hojas: <strong>Calendario</strong> (partidos) y <strong>Jugadores</strong>
-                  (equipo, categoría, número, nombre, apellido, posición).
+                  (equipo, categoría, número, nombre, posición).
+                  El nombre va completo en una sola columna.
                 </li>
                 <li>
                   Posición = tipo de jugador (jugador, arquero, capitán o Asistente Capitán).

@@ -17,7 +17,7 @@ import { createDefaultScoreboardState } from '@/types/hockeyScoreboard'
 import { generateMatchId } from '@/utils/matchId'
 import { generateId } from '@/utils/id'
 import { normalizeGameTime } from '@/utils/clock'
-import { parseRoleFromText } from '@/utils/roster'
+import { parseRoleFromText, joinPersonName } from '@/utils/roster'
 import { parseScheduledAt } from '@/utils/tournamentImport'
 import { supabaseRest } from './supabaseRest'
 import { createMatch, fetchMatchState, finishMatch } from './matchSync'
@@ -54,8 +54,7 @@ export function rosterPlayersForMatch(
     .map((player) => ({
       id: generateId(),
       number: player.number,
-      name: player.name,
-      lastName: player.last_name ?? '',
+      name: joinPersonName(player.name, player.last_name),
       role: parseRoleFromText(player.position),
     }))
 }
@@ -319,7 +318,6 @@ export async function updateTournamentTeam(
 export type TournamentRosterInput = {
   number?: string
   name?: string
-  last_name?: string
   category?: string | null
   position?: string | null
 }
@@ -330,8 +328,10 @@ export async function updateTournamentRosterPlayer(
 ): Promise<TournamentRosterPlayer> {
   const body: Record<string, string | null> = {}
   if (input.number !== undefined) body.number = input.number.trim()
-  if (input.name !== undefined) body.name = input.name.trim()
-  if (input.last_name !== undefined) body.last_name = input.last_name.trim()
+  if (input.name !== undefined) {
+    body.name = input.name.trim()
+    body.last_name = ''
+  }
   if (input.category !== undefined) body.category = input.category?.trim() || null
   if (input.position !== undefined) body.position = input.position?.trim() || null
 
@@ -383,7 +383,7 @@ export async function importTournamentCsv(
       category: player.categoria?.trim() || null,
       number: player.numero.trim(),
       name: player.nombre.trim(),
-      last_name: player.apellido.trim(),
+      last_name: '',
       position: player.posicion?.trim() || null,
     }))
 
