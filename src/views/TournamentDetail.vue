@@ -80,6 +80,7 @@ const creatingMatch = ref(false)
 const matchFormError = ref<string | null>(null)
 const editingMatchId = ref<string | null>(null)
 const deletingMatchId = ref<string | null>(null)
+const startingMatchId = ref<string | null>(null)
 const reportOpen = ref(false)
 const reportLoading = ref(false)
 const reportDownloading = ref(false)
@@ -573,11 +574,12 @@ async function removeTournamentCompletely(): Promise<void> {
 }
 
 async function startMatch(tm: TournamentMatch): Promise<void> {
-  if (!auth.profile) return
+  if (!auth.profile || startingMatchId.value) return
   if (tournament.value?.status === 'finished') {
     message.warning('El torneo está finalizado. No se pueden iniciar partidos.')
     return
   }
+  startingMatchId.value = tm.id
   try {
     const matchId = await startTournamentMatch(tm, auth.profile.id)
     openControls({ ...tm, match_id: matchId })
@@ -587,6 +589,8 @@ async function startMatch(tm: TournamentMatch): Promise<void> {
       title: 'No se pudo iniciar el partido',
       content: err instanceof Error ? err.message : 'Error desconocido',
     })
+  } finally {
+    startingMatchId.value = null
   }
 }
 
@@ -770,6 +774,8 @@ onUnmounted(() => {
                         v-if="record.status === 'scheduled' && tournament.status !== 'finished'"
                         type="primary"
                         size="small"
+                        :loading="startingMatchId === record.id"
+                        :disabled="startingMatchId !== null && startingMatchId !== record.id"
                         @click="startMatch(record)"
                       >
                         Iniciar

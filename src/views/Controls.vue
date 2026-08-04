@@ -28,10 +28,10 @@ import { MAX_PERIODS, isGoalPending, DEFAULT_INTERMISSION_TIME } from '@/types/h
 import type { TeamPenalty } from '@/types/hockeyScoreboard'
 import { penaltyTypeLabel } from '@/data/penaltyCatalog'
 import { findPlayerById, findPlayerByNumber, playerLabel } from '@/utils/roster'
+import TimeInput from '@/components/controls/TimeInput.vue'
 import ControlsRosterPanel from '@/components/controls/ControlsRosterPanel.vue'
 import ControlsGoalsPanel from '@/components/controls/ControlsGoalsPanel.vue'
 import ControlsPenaltiesPanel from '@/components/controls/ControlsPenaltiesPanel.vue'
-import TimeInput from '@/components/controls/TimeInput.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -1043,7 +1043,7 @@ onUnmounted(() => {
                         {{
                           goalkeeperName('local')
                             ? `Atajadas para ${goalkeeperName('local')}`
-                            : 'Sin arquero en la plantilla'
+                            : 'Sin arquero en la nómina'
                         }}
                       </span>
                     </div>
@@ -1140,7 +1140,7 @@ onUnmounted(() => {
                         {{
                           goalkeeperName('visit')
                             ? `Atajadas para ${goalkeeperName('visit')}`
-                            : 'Sin arquero en la plantilla'
+                            : 'Sin arquero en la nómina'
                         }}
                       </span>
                     </div>
@@ -1482,8 +1482,11 @@ onUnmounted(() => {
           </div>
         </a-tab-pane>
 
-        <a-tab-pane key="roster" tab="Plantillas">
-          <ControlsRosterPanel />
+        <a-tab-pane key="roster" tab="Nómina">
+          <ControlsRosterPanel
+            :tournament-id="tournamentContext?.tournamentId ?? null"
+            :sync-enabled="hydrated && Boolean(tournamentContext)"
+          />
         </a-tab-pane>
 
         <a-tab-pane key="goals">
