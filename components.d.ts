@@ -31,6 +31,7 @@ declare module 'vue' {
     APopconfirm: typeof import('ant-design-vue/es')['Popconfirm']
     AppNavbar: typeof import('./src/components/AppNavbar.vue')['default']
     ARadio: typeof import('ant-design-vue/es')['Radio']
+    ARadioButton: typeof import('ant-design-vue/es')['RadioButton']
     ARadioGroup: typeof import('ant-design-vue/es')['RadioGroup']
     ArenaScoreBoard: typeof import('./src/components/ArenaScoreBoard.vue')['default']
     ASegmented: typeof import('ant-design-vue/es')['Segmented']

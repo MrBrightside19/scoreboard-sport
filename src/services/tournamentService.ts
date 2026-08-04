@@ -17,7 +17,7 @@ import { createDefaultScoreboardState } from '@/types/hockeyScoreboard'
 import { generateMatchId } from '@/utils/matchId'
 import { generateId } from '@/utils/id'
 import { normalizeGameTime } from '@/utils/clock'
-import { parseRoleFromText } from '@/utils/roster'
+import { parseRoleFromText, joinPersonName, roleToPositionText } from '@/utils/roster'
 import { parseScheduledAt } from '@/utils/tournamentImport'
 import { supabaseRest } from './supabaseRest'
 import { createMatch, fetchMatchState, finishMatch } from './matchSync'
@@ -54,8 +54,7 @@ export function rosterPlayersForMatch(
     .map((player) => ({
       id: generateId(),
       number: player.number,
-      name: player.name,
-      lastName: player.last_name ?? '',
+      name: joinPersonName(player.name, player.last_name),
       role: parseRoleFromText(player.position),
     }))
 }
@@ -124,6 +123,23 @@ export async function updateTournamentStatus(
     method: 'PATCH',
     body: { status },
   })
+}
+
+export async function updateTournamentVisibility(
+  id: string,
+  visibility: Tournament['visibility'],
+): Promise<Tournament> {
+  const rows = await supabaseRest<Tournament[]>(`tournaments?id=eq.${id}`, {
+    method: 'PATCH',
+    body: { visibility },
+    prefer: 'return=representation',
+  })
+
+  if (!rows[0]) {
+    throw new Error('No se pudo actualizar la visibilidad del torneo.')
+  }
+
+  return rows[0]
 }
 
 /** Cierra partidos en vivo/sin jugar y marca el torneo como finalizado. */
@@ -319,9 +335,66 @@ export async function updateTournamentTeam(
 export type TournamentRosterInput = {
   number?: string
   name?: string
-  last_name?: string
   category?: string | null
   position?: string | null
+}
+
+export type TournamentRosterCreateInput = {
+  team: string
+  number: string
+  name: string
+  category?: string | null
+  position?: string | null
+}
+
+export async function createTournamentRosterPlayer(
+  tournamentId: string,
+  input: TournamentRosterCreateInput,
+): Promise<TournamentRosterPlayer> {
+  const number = input.number.trim()
+  const name = input.name.trim()
+  const team = input.team.trim()
+  if (!tournamentId || !team || !number || !name) {
+    throw new Error('Equipo, dorsal y nombre son obligatorios.')
+  }
+
+  try {
+    const rows = await supabaseRest<TournamentRosterPlayer[]>(
+      'tournament_rosters',
+      {
+        method: 'POST',
+        body: {
+          tournament_id: tournamentId,
+          team,
+          category: input.category?.trim() || null,
+          number,
+          name,
+          last_name: '',
+          position: input.position?.trim() || null,
+        },
+        prefer: 'return=representation',
+      },
+    )
+
+    if (!rows[0]) {
+      throw new Error('No se pudo agregar el jugador.')
+    }
+
+    return rows[0]
+  } catch (err) {
+    const message = err instanceof Error ? err.message : ''
+    if (
+      message.includes('tournament_rosters_unique_idx') ||
+      message.includes('duplicate key')
+    ) {
+      throw new Error(
+        `Ya existe el dorsal #${number} en este equipo` +
+          (input.category?.trim() ? ` (${input.category.trim()})` : '') +
+          '.',
+      )
+    }
+    throw err
+  }
 }
 
 export async function updateTournamentRosterPlayer(
@@ -330,25 +403,263 @@ export async function updateTournamentRosterPlayer(
 ): Promise<TournamentRosterPlayer> {
   const body: Record<string, string | null> = {}
   if (input.number !== undefined) body.number = input.number.trim()
-  if (input.name !== undefined) body.name = input.name.trim()
-  if (input.last_name !== undefined) body.last_name = input.last_name.trim()
+  if (input.name !== undefined) {
+    body.name = input.name.trim()
+    body.last_name = ''
+  }
   if (input.category !== undefined) body.category = input.category?.trim() || null
   if (input.position !== undefined) body.position = input.position?.trim() || null
 
-  const rows = await supabaseRest<TournamentRosterPlayer[]>(
-    `tournament_rosters?id=eq.${playerId}`,
-    {
-      method: 'PATCH',
-      body,
-      prefer: 'return=representation',
-    },
-  )
+  try {
+    const rows = await supabaseRest<TournamentRosterPlayer[]>(
+      `tournament_rosters?id=eq.${playerId}`,
+      {
+        method: 'PATCH',
+        body,
+        prefer: 'return=representation',
+      },
+    )
 
-  if (!rows[0]) {
-    throw new Error('No se pudo actualizar el jugador.')
+    if (!rows[0]) {
+      throw new Error('No se pudo actualizar el jugador.')
+    }
+
+    return rows[0]
+  } catch (err) {
+    const message = err instanceof Error ? err.message : ''
+    if (
+      message.includes('tournament_rosters_unique_idx') ||
+      message.includes('duplicate key')
+    ) {
+      throw new Error('Ese dorsal ya está usado en esta categoría del equipo.')
+    }
+    throw err
+  }
+}
+
+export async function deleteTournamentRosterPlayer(
+  playerId: string,
+): Promise<void> {
+  await supabaseRest(`tournament_rosters?id=eq.${playerId}`, {
+    method: 'DELETE',
+  })
+}
+
+/**
+ * Filas de nómina del torneo que corresponden al equipo/categoría del partido actual.
+ * Misma regla que al cargar la nómina en un partido nuevo.
+ */
+function rosterRowsForMatchScope(
+  players: TournamentRosterPlayer[],
+  teamName: string,
+  matchCategory: string | null,
+): TournamentRosterPlayer[] {
+  const team = normalizeLabel(teamName)
+  return players.filter(
+    (player) =>
+      normalizeLabel(player.team) === team &&
+      playerMatchesCategory(player.category, matchCategory),
+  )
+}
+
+function mergeRosterPlayers(
+  primary: RosterPlayer[],
+  secondary: RosterPlayer[],
+): RosterPlayer[] {
+  const byNumber = new Map<string, RosterPlayer>()
+  for (const player of [...secondary, ...primary]) {
+    const number = player.number.trim()
+    if (!number) continue
+    byNumber.set(number, player)
+  }
+  return [...byNumber.values()]
+}
+
+/** Serializa syncs del mismo torneo para evitar choques de unique index. */
+const rosterSyncChain = new Map<string, Promise<void>>()
+
+function enqueueTournamentRosterSync(
+  tournamentId: string,
+  task: () => Promise<void>,
+): Promise<void> {
+  const previous = rosterSyncChain.get(tournamentId) ?? Promise.resolve()
+  const next = previous.catch(() => undefined).then(task)
+  rosterSyncChain.set(
+    tournamentId,
+    next.then(() => undefined).catch(() => undefined),
+  )
+  return next
+}
+
+/**
+ * Reemplaza en el torneo la nómina de un equipo (misma categoría del partido)
+ * con los jugadores actuales del marcador. Así los próximos partidos heredan
+ * correcciones, altas y bajas hechas desde Controles.
+ */
+export async function syncMatchRosterToTournament(
+  tournamentId: string,
+  teamName: string,
+  matchCategory: string | null | undefined,
+  players: RosterPlayer[],
+): Promise<void> {
+  const team = teamName.trim()
+  if (!tournamentId || !team) return
+
+  const category = matchCategory?.trim() || null
+
+  const seenNumbers = new Set<string>()
+  const desired: Array<{
+    number: string
+    name: string
+    position: string
+  }> = []
+
+  for (const player of players) {
+    const number = player.number.trim()
+    if (!number || seenNumbers.has(number)) continue
+    seenNumbers.add(number)
+    desired.push({
+      number,
+      name: player.name.trim(),
+      position: roleToPositionText(player.role),
+    })
   }
 
-  return rows[0]
+  const existing = await fetchTournamentRosters(tournamentId)
+  const scoped = rosterRowsForMatchScope(existing, team, category)
+
+  /** Por dorsal, preferir la fila de la categoría exacta del partido. */
+  const preferredByNumber = new Map<string, TournamentRosterPlayer>()
+  for (const row of scoped) {
+    const number = row.number.trim()
+    if (!number) continue
+    const current = preferredByNumber.get(number)
+    if (!current) {
+      preferredByNumber.set(number, row)
+      continue
+    }
+    const rowExact = normalizeLabel(row.category) === normalizeLabel(category)
+    const currentExact = normalizeLabel(current.category) === normalizeLabel(category)
+    if (rowExact && !currentExact) preferredByNumber.set(number, row)
+  }
+
+  const keptIds = new Set<string>()
+  const toInsert: Array<{
+    tournament_id: string
+    team: string
+    category: string | null
+    number: string
+    name: string
+    last_name: string
+    position: string
+  }> = []
+  const toUpdate: Array<{
+    id: string
+    number: string
+    name: string
+    position: string
+  }> = []
+
+  for (const player of desired) {
+    const current = preferredByNumber.get(player.number)
+    if (current) {
+      keptIds.add(current.id)
+      const needsUpdate =
+        current.name !== player.name ||
+        (current.last_name ?? '') !== '' ||
+        (current.position ?? '') !== player.position ||
+        normalizeLabel(current.team) !== normalizeLabel(team) ||
+        normalizeLabel(current.category) !== normalizeLabel(category)
+
+      if (needsUpdate) {
+        toUpdate.push({
+          id: current.id,
+          number: player.number,
+          name: player.name,
+          position: player.position,
+        })
+      }
+      continue
+    }
+
+    toInsert.push({
+      tournament_id: tournamentId,
+      team,
+      category,
+      number: player.number,
+      name: player.name,
+      last_name: '',
+      position: player.position,
+    })
+  }
+
+  // Borrar primero (incluye duplicados vacío/categoría) para no chocar el unique index.
+  const toRemove = scoped.filter((row) => !keptIds.has(row.id))
+  if (toRemove.length > 0) {
+    const ids = toRemove.map((row) => row.id).join(',')
+    await supabaseRest(`tournament_rosters?id=in.(${ids})`, {
+      method: 'DELETE',
+    })
+  }
+
+  for (const row of toUpdate) {
+    await supabaseRest(`tournament_rosters?id=eq.${row.id}`, {
+      method: 'PATCH',
+      body: {
+        team,
+        category,
+        number: row.number,
+        name: row.name,
+        last_name: '',
+        position: row.position,
+      },
+    })
+  }
+
+  if (toInsert.length > 0) {
+    await supabaseRest('tournament_rosters', {
+      method: 'POST',
+      body: toInsert,
+    })
+  }
+}
+
+export async function syncBothMatchRostersToTournament(
+  tournamentId: string,
+  matchCategory: string | null | undefined,
+  localTeam: string,
+  visitTeam: string,
+  rosterLocal: RosterPlayer[],
+  rosterVisit: RosterPlayer[],
+): Promise<void> {
+  return enqueueTournamentRosterSync(tournamentId, async () => {
+    const local = localTeam.trim()
+    const visit = visitTeam.trim()
+
+    // Mismo nombre en ambos lados: una sola escritura (si no, el 2º insert choca).
+    if (local && normalizeLabel(local) === normalizeLabel(visit)) {
+      await syncMatchRosterToTournament(
+        tournamentId,
+        local,
+        matchCategory,
+        mergeRosterPlayers(rosterLocal, rosterVisit),
+      )
+      return
+    }
+
+    await syncMatchRosterToTournament(
+      tournamentId,
+      local,
+      matchCategory,
+      rosterLocal,
+    )
+    await syncMatchRosterToTournament(
+      tournamentId,
+      visit,
+      matchCategory,
+      rosterVisit,
+    )
+  })
 }
 
 export async function importTournamentCsv(
@@ -383,7 +694,7 @@ export async function importTournamentCsv(
       category: player.categoria?.trim() || null,
       number: player.numero.trim(),
       name: player.nombre.trim(),
-      last_name: player.apellido.trim(),
+      last_name: '',
       position: player.posicion?.trim() || null,
     }))
 
@@ -607,6 +918,17 @@ export async function finishTournamentMatch(
   tournamentMatch: TournamentMatch,
   state: ScoreboardState,
 ): Promise<void> {
+  // Persistir plantilla del partido en el torneo antes de cerrar,
+  // para que el siguiente partido herede altas/bajas/correcciones.
+  await syncBothMatchRostersToTournament(
+    tournamentMatch.tournament_id,
+    state.matchCategory || tournamentMatch.category,
+    state.localTeam || tournamentMatch.local_team,
+    state.visitTeam || tournamentMatch.visit_team,
+    state.rosterLocal,
+    state.rosterVisit,
+  )
+
   if (!tournamentMatch.match_id) {
     await supabaseRest(`tournament_matches?id=eq.${tournamentMatch.id}`, {
       method: 'PATCH',

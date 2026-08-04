@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { Modal } from 'ant-design-vue'
 import { useScoreboardStore } from '@/stores/scoreboard'
@@ -28,10 +28,10 @@ import { MAX_PERIODS, isGoalPending, DEFAULT_INTERMISSION_TIME } from '@/types/h
 import type { TeamPenalty } from '@/types/hockeyScoreboard'
 import { penaltyTypeLabel } from '@/data/penaltyCatalog'
 import { findPlayerById, findPlayerByNumber, playerLabel } from '@/utils/roster'
+import TimeInput from '@/components/controls/TimeInput.vue'
 import ControlsRosterPanel from '@/components/controls/ControlsRosterPanel.vue'
 import ControlsGoalsPanel from '@/components/controls/ControlsGoalsPanel.vue'
 import ControlsPenaltiesPanel from '@/components/controls/ControlsPenaltiesPanel.vue'
-import TimeInput from '@/components/controls/TimeInput.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -64,10 +64,153 @@ const skipLeaveGuard = ref(false)
 const activeTab = ref('match')
 const clockDraft = ref(store.state.timeGame)
 const clockEditing = ref(false)
+const clockSectionEl = ref<HTMLElement | null>(null)
+const clockDisplayEl = ref<HTMLElement | null>(null)
+/** Empieza en false: en pantallas chicas el reloj suele estar fuera de vista al cargar. */
+const clockInView = ref(false)
+let clockObserver: IntersectionObserver | null = null
 let lastCountdownBeepSecond: number | null = null
 /** Evita repetir el aviso de últimos minutos en el mismo periodo/umbral. */
 let lateGameWarningKey: string | null = null
 let prevLateGameSeconds: number | null = null
+
+const dockClockTime = computed(() =>
+  store.state.intermissionActive
+    ? store.state.intermissionTime
+    : store.state.timeGame,
+)
+
+const dockClockLabel = computed(() => {
+  if (store.state.intermissionActive) {
+    return store.state.isPaused ? 'Descanso · pausa' : 'Descanso'
+  }
+  return store.state.isPaused
+    ? `P${store.state.gamePeriod} · pausa`
+    : `Periodo ${store.state.gamePeriod}`
+})
+
+const dockPenaltyTeams = computed(() => {
+  const teams = [
+    {
+      key: 'local' as const,
+      name: store.state.localTeam,
+      penalties: store.state.penaltiesLocal,
+    },
+    {
+      key: 'visit' as const,
+      name: store.state.visitTeam,
+      penalties: store.state.penaltiesVisit,
+    },
+  ]
+  return teams
+    .map((team) => ({
+      ...team,
+      items: team.penalties.map((penalty) => ({
+        id: penalty.id,
+        player: dockPenaltyPlayer(team.key, penalty),
+        time: penalty.time.trim() || '0:00',
+      })),
+    }))
+    .filter((team) => team.items.length > 0)
+})
+
+const showDockClock = computed(
+  () => Boolean(matchId.value) && !clockInView.value,
+)
+
+const showDockPenalties = computed(
+  () =>
+    Boolean(matchId.value) &&
+    dockPenaltyTeams.value.length > 0 &&
+    activeTab.value !== 'penalties',
+)
+
+const showDock = computed(() => showDockClock.value || showDockPenalties.value)
+
+function dockPenaltyPlayer(
+  team: 'local' | 'visit',
+  penalty: TeamPenalty,
+): string {
+  const roster = team === 'local' ? store.state.rosterLocal : store.state.rosterVisit
+  const player =
+    findPlayerById(roster, penalty.playerId) ??
+    findPlayerByNumber(roster, penalty.player)
+  const number = (penalty.player.trim() || player?.number.trim() || '').replace(/\D/g, '')
+  if (number) return `#${number.slice(0, 2)}`
+  if (player) return playerLabel(player).slice(0, 8)
+  return '—'
+}
+
+function scrollToClock(): void {
+  if (activeTab.value !== 'match') {
+    activeTab.value = 'match'
+    void nextTick(() => {
+      clockSectionEl.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+    return
+  }
+  clockSectionEl.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+
+function openPenaltiesTab(): void {
+  activeTab.value = 'penalties'
+}
+
+/** Espacio superior ocupado por navbar + tabs (no cuenta como “visible”). */
+function clockViewportTopInset(): number {
+  const nav = document.querySelector('.app-nav')
+  const tabs = document.querySelector('.controls__tabs .ant-tabs-nav')
+  const navBottom = nav?.getBoundingClientRect().bottom ?? 0
+  const tabsBottom = tabs?.getBoundingClientRect().bottom ?? 0
+  return Math.max(navBottom, tabsBottom, 0) + 8
+}
+
+/**
+ * El tiempo es visible solo si el centro del display está dentro del área
+ * útil de la pantalla (debajo del navbar/tabs). Así no basta con que asome
+ * el borde del card.
+ */
+function measureClockDisplayInView(): boolean {
+  const el = clockDisplayEl.value
+  if (!el) return false
+  const rect = el.getBoundingClientRect()
+  if (rect.width <= 0 || rect.height <= 0) return false
+  const top = clockViewportTopInset()
+  const bottom = (window.innerHeight || document.documentElement.clientHeight) - 8
+  const midY = rect.top + rect.height / 2
+  return midY >= top && midY <= bottom
+}
+
+function syncClockInView(): void {
+  clockInView.value = measureClockDisplayInView()
+}
+
+function setupClockObserver(): void {
+  clockObserver?.disconnect()
+  clockObserver = null
+  const el = clockDisplayEl.value
+  if (!el || typeof IntersectionObserver === 'undefined') {
+    syncClockInView()
+    return
+  }
+
+  const topInset = clockViewportTopInset()
+  clockObserver = new IntersectionObserver(
+    () => {
+      syncClockInView()
+    },
+    {
+      root: null,
+      threshold: [0, 0.25, 0.5, 0.75, 1],
+      rootMargin: `-${Math.round(topInset)}px 0px -8px 0px`,
+    },
+  )
+  clockObserver.observe(el)
+  syncClockInView()
+  requestAnimationFrame(() => {
+    requestAnimationFrame(syncClockInView)
+  })
+}
 
 const pendingGoalsCount = computed(
   () => store.state.goals.filter((goal) => isGoalPending(goal)).length,
@@ -669,12 +812,27 @@ watch(
 onMounted(() => {
   window.addEventListener('beforeunload', onBeforeUnload)
   window.addEventListener('scoreboard:prefs-change', onPrefsChange)
+  window.addEventListener('resize', syncClockInView, { passive: true })
+  window.addEventListener('scroll', syncClockInView, { passive: true, capture: true })
   if (matchId.value) {
     const pollMs = getLiveClockUpdateMs()
     publishTimer = window.setInterval(() => {
       if (hydrated.value) void publish()
     }, pollMs)
   }
+  void nextTick(setupClockObserver)
+})
+
+watch(activeTab, () => {
+  void nextTick(setupClockObserver)
+})
+
+watch(matchId, () => {
+  void nextTick(setupClockObserver)
+})
+
+watch(hydrated, (ready) => {
+  if (ready) void nextTick(setupClockObserver)
 })
 
 onBeforeRouteLeave((_to, _from, next) => {
@@ -713,6 +871,10 @@ onBeforeRouteLeave((_to, _from, next) => {
 onUnmounted(() => {
   window.removeEventListener('beforeunload', onBeforeUnload)
   window.removeEventListener('scoreboard:prefs-change', onPrefsChange)
+  window.removeEventListener('resize', syncClockInView)
+  window.removeEventListener('scroll', syncClockInView)
+  clockObserver?.disconnect()
+  clockObserver = null
   if (!skipLeaveGuard.value) {
     void finalizeOnExit()
   }
@@ -881,7 +1043,7 @@ onUnmounted(() => {
                         {{
                           goalkeeperName('local')
                             ? `Atajadas para ${goalkeeperName('local')}`
-                            : 'Sin arquero en la plantilla'
+                            : 'Sin arquero en la nómina'
                         }}
                       </span>
                     </div>
@@ -978,7 +1140,7 @@ onUnmounted(() => {
                         {{
                           goalkeeperName('visit')
                             ? `Atajadas para ${goalkeeperName('visit')}`
-                            : 'Sin arquero en la plantilla'
+                            : 'Sin arquero en la nómina'
                         }}
                       </span>
                     </div>
@@ -1037,136 +1199,202 @@ onUnmounted(() => {
               </div>
             </a-card>
 
-            <a-card title="Reloj y periodo" class="controls__card controls__card--wide controls__card--clock">
-              <div class="controls__clock">
-                <div class="controls__clock-main">
-                  <div class="controls__clock-display">
-                    {{
-                      store.state.intermissionActive
-                        ? store.state.intermissionTime
-                        : store.state.timeGame
-                    }}
-                  </div>
-                  <p class="controls__clock-status">
-                    <template v-if="store.state.intermissionActive">
-                      {{ store.state.isPaused ? 'Descanso en pausa' : 'Descanso' }}
-                    </template>
-                    <template v-else>
-                      {{ store.state.isPaused ? 'En pausa' : 'En juego' }}
-                    </template>
-                  </p>
-                  <a-button
-                    class="controls__clock-toggle"
-                    size="large"
-                    :type="store.state.isPaused ? 'primary' : 'default'"
-                    @click="store.togglePause()"
-                  >
-                    {{ store.state.isPaused ? 'Reanudar' : 'Pausar' }}
-                  </a-button>
-                </div>
-
-                <div class="controls__clock-panels">
-                  <div class="controls__clock-field controls__clock-field--time">
-                    <div class="controls__clock-field-head">
-                      <label for="controls-game-time">Ajustar tiempo</label>
-                      <TimeInput
-                        id="controls-game-time"
-                        compact
-                        :value="clockDraft"
-                        :disabled="!store.state.isPaused || store.state.intermissionActive"
-                        @update:value="onClockDraftUpdate"
-                        @focus="onClockFocus"
-                        @blur="commitClockDraft"
-                        @enter="commitClockDraft"
-                      />
-                    </div>
-                    <span class="controls__clock-hint">
+            <div ref="clockSectionEl" class="controls__clock-section">
+              <a-card
+                title="Reloj y periodo"
+                class="controls__card controls__card--wide controls__card--clock"
+              >
+                <div class="controls__clock">
+                  <div class="controls__clock-main">
+                    <div ref="clockDisplayEl" class="controls__clock-display">
                       {{
                         store.state.intermissionActive
-                          ? 'Durante el descanso usa el campo de abajo.'
-                          : store.state.isPaused
-                            ? 'Escribe minutos y segundos (solo números). Tab o flechas cambian de campo.'
-                            : 'Pausa el reloj para ajustarlo.'
+                          ? store.state.intermissionTime
+                          : store.state.timeGame
                       }}
-                      <template v-if="lateGameWarningEnabled && !store.state.intermissionActive">
-                        Aviso a los {{ lateGameWarningMinutes }} min
-                        (Perfil).
-                      </template>
-                    </span>
-                  </div>
-
-                  <div class="controls__clock-field controls__clock-field--period">
-                    <label>Periodo</label>
-                    <div class="controls__clock-period">
-                      <a-button @click="store.setPeriod(store.state.gamePeriod - 1)">−</a-button>
-                      <span class="controls__clock-period-label">
-                        {{ store.state.gamePeriod }} / {{ MAX_PERIODS }}
-                      </span>
-                      <a-button @click="store.setPeriod(store.state.gamePeriod + 1)">+</a-button>
                     </div>
-                    <a-button
-                      block
-                      class="controls__next-period"
-                      :disabled="!canAdvancePeriod"
-                      @click="goToNextPeriod"
-                    >
-                      Siguiente periodo
-                    </a-button>
-                    <span class="controls__clock-hint">
-                      Las faltas con tiempo restante continúan en el siguiente periodo.
-                    </span>
-                  </div>
-                </div>
-
-                <div
-                  v-if="showIntermissionControls"
-                  class="controls__intermission"
-                >
-                  <div class="controls__clock-field controls__clock-field--time">
-                    <div class="controls__clock-field-head">
-                      <label for="controls-intermission-time">Descanso</label>
-                      <TimeInput
-                        id="controls-intermission-time"
-                        compact
-                        :value="intermissionDraft"
-                        :disabled="store.state.intermissionActive && !store.state.isPaused"
-                        @update:value="onIntermissionDraftUpdate"
-                        @blur="commitIntermissionDraft"
-                        @enter="commitIntermissionDraft"
-                      />
-                    </div>
-                  </div>
-                  <div class="controls__intermission-actions">
-                    <a-button
-                      type="primary"
-                      @click="startOrToggleIntermission"
-                    >
-                      <template v-if="!store.state.intermissionActive">
-                        Iniciar descanso
-                      </template>
-                      <template v-else-if="store.state.isPaused">
-                        Reanudar descanso
+                    <p class="controls__clock-status">
+                      <template v-if="store.state.intermissionActive">
+                        {{ store.state.isPaused ? 'Descanso en pausa' : 'Descanso' }}
                       </template>
                       <template v-else>
-                        Pausar descanso
+                        {{ store.state.isPaused ? 'En pausa' : 'En juego' }}
                       </template>
-                    </a-button>
+                    </p>
                     <a-button
-                      v-if="store.state.intermissionActive"
-                      @click="stopIntermission"
+                      class="controls__clock-toggle"
+                      size="large"
+                      :type="store.state.isPaused ? 'primary' : 'default'"
+                      @click="store.togglePause()"
                     >
-                      Terminar descanso
+                      {{ store.state.isPaused ? 'Reanudar' : 'Pausar' }}
                     </a-button>
                   </div>
-                  <span class="controls__clock-hint">
-                    El marcador TV muestra la cuenta de descanso.
-                    Beep en los últimos {{ countdownBeepSeconds }} s
-                    (configurable en Perfil).
-                    Al terminar (o al pulsar Terminar descanso), pasa solo al siguiente periodo
-                    (salvo el último). Las faltas pendientes no corren hasta entonces.
-                  </span>
+
+                  <div class="controls__clock-panels">
+                    <div class="controls__clock-field controls__clock-field--time">
+                      <div class="controls__clock-field-head">
+                        <label for="controls-game-time">Ajustar tiempo</label>
+                        <TimeInput
+                          id="controls-game-time"
+                          compact
+                          :value="clockDraft"
+                          :disabled="!store.state.isPaused || store.state.intermissionActive"
+                          @update:value="onClockDraftUpdate"
+                          @focus="onClockFocus"
+                          @blur="commitClockDraft"
+                          @enter="commitClockDraft"
+                        />
+                      </div>
+                      <span class="controls__clock-hint">
+                        {{
+                          store.state.intermissionActive
+                            ? 'Durante el descanso usa el campo de abajo.'
+                            : store.state.isPaused
+                              ? 'Escribe minutos y segundos (solo números). Tab o flechas cambian de campo.'
+                              : 'Pausa el reloj para ajustarlo.'
+                        }}
+                        <template v-if="lateGameWarningEnabled && !store.state.intermissionActive">
+                          Aviso a los {{ lateGameWarningMinutes }} min
+                          (Perfil).
+                        </template>
+                      </span>
+                    </div>
+
+                    <div class="controls__clock-field controls__clock-field--period">
+                      <label>Periodo</label>
+                      <div class="controls__clock-period">
+                        <a-button @click="store.setPeriod(store.state.gamePeriod - 1)">−</a-button>
+                        <span class="controls__clock-period-label">
+                          {{ store.state.gamePeriod }} / {{ MAX_PERIODS }}
+                        </span>
+                        <a-button @click="store.setPeriod(store.state.gamePeriod + 1)">+</a-button>
+                      </div>
+                      <a-button
+                        block
+                        class="controls__next-period"
+                        :disabled="!canAdvancePeriod"
+                        @click="goToNextPeriod"
+                      >
+                        Siguiente periodo
+                      </a-button>
+                      <span class="controls__clock-hint">
+                        Las faltas con tiempo restante continúan en el siguiente periodo.
+                      </span>
+                    </div>
+                  </div>
+
+                  <div
+                    v-if="showIntermissionControls"
+                    class="controls__intermission"
+                  >
+                    <div class="controls__clock-field controls__clock-field--time">
+                      <div class="controls__clock-field-head">
+                        <label for="controls-intermission-time">Descanso</label>
+                        <TimeInput
+                          id="controls-intermission-time"
+                          compact
+                          :value="intermissionDraft"
+                          :disabled="store.state.intermissionActive && !store.state.isPaused"
+                          @update:value="onIntermissionDraftUpdate"
+                          @blur="commitIntermissionDraft"
+                          @enter="commitIntermissionDraft"
+                        />
+                      </div>
+                    </div>
+                    <div class="controls__intermission-actions">
+                      <a-button
+                        type="primary"
+                        @click="startOrToggleIntermission"
+                      >
+                        <template v-if="!store.state.intermissionActive">
+                          Iniciar descanso
+                        </template>
+                        <template v-else-if="store.state.isPaused">
+                          Reanudar descanso
+                        </template>
+                        <template v-else>
+                          Pausar descanso
+                        </template>
+                      </a-button>
+                      <a-button
+                        v-if="store.state.intermissionActive"
+                        @click="stopIntermission"
+                      >
+                        Terminar descanso
+                      </a-button>
+                    </div>
+                    <span class="controls__clock-hint">
+                      El marcador TV muestra la cuenta de descanso.
+                      Beep en los últimos {{ countdownBeepSeconds }} s
+                      (configurable en Perfil).
+                      Al terminar (o al pulsar Terminar descanso), pasa solo al siguiente periodo
+                      (salvo el último). Las faltas pendientes no corren hasta entonces.
+                    </span>
+                  </div>
                 </div>
+              </a-card>
+            </div>
+
+            <a-card
+              title="Árbitros y mesa"
+              class="controls__card controls__card--wide"
+            >
+              <div class="controls__officials">
+                <label class="controls__officials-field">
+                  <span>Árbitro 1</span>
+                  <a-input
+                    :value="store.state.referee1"
+                    placeholder="Nombre"
+                    :maxlength="40"
+                    allow-clear
+                    @update:value="(v: string) => store.patch({ referee1: v })"
+                  />
+                </label>
+                <label class="controls__officials-field">
+                  <span>Árbitro 2</span>
+                  <a-input
+                    :value="store.state.referee2"
+                    placeholder="Nombre"
+                    :maxlength="40"
+                    allow-clear
+                    @update:value="(v: string) => store.patch({ referee2: v })"
+                  />
+                </label>
+                <label class="controls__officials-field">
+                  <span>Mesa 1</span>
+                  <a-input
+                    :value="store.state.tableOfficial1"
+                    placeholder="Nombre"
+                    :maxlength="40"
+                    allow-clear
+                    @update:value="(v: string) => store.patch({ tableOfficial1: v })"
+                  />
+                </label>
+                <label class="controls__officials-field">
+                  <span>Mesa 2</span>
+                  <a-input
+                    :value="store.state.tableOfficial2"
+                    placeholder="Nombre"
+                    :maxlength="40"
+                    allow-clear
+                    @update:value="(v: string) => store.patch({ tableOfficial2: v })"
+                  />
+                </label>
+                <label class="controls__officials-field">
+                  <span>Mesa 3</span>
+                  <a-input
+                    :value="store.state.tableOfficial3"
+                    placeholder="Opcional"
+                    :maxlength="40"
+                    allow-clear
+                    @update:value="(v: string) => store.patch({ tableOfficial3: v })"
+                  />
+                </label>
               </div>
+              <p class="controls__tournament-hint">
+                Quedan guardados con el partido y salen en el informe Excel.
+              </p>
             </a-card>
 
             <a-card
@@ -1254,8 +1482,11 @@ onUnmounted(() => {
           </div>
         </a-tab-pane>
 
-        <a-tab-pane key="roster" tab="Plantillas">
-          <ControlsRosterPanel />
+        <a-tab-pane key="roster" tab="Nómina">
+          <ControlsRosterPanel
+            :tournament-id="tournamentContext?.tournamentId ?? null"
+            :sync-enabled="hydrated && Boolean(tournamentContext)"
+          />
         </a-tab-pane>
 
         <a-tab-pane key="goals">
@@ -1310,6 +1541,65 @@ onUnmounted(() => {
         </a-radio>
       </a-radio-group>
     </a-modal>
+
+    <Transition name="controls-dock">
+      <div
+        v-if="showDock"
+        class="controls__dock"
+        :class="{ 'controls__dock--with-penalties': showDockPenalties }"
+      >
+        <aside
+          v-if="showDockClock"
+          class="controls__dock-clock"
+          :class="{
+            'controls__dock-clock--paused': store.state.isPaused,
+            'controls__dock-clock--intermission': store.state.intermissionActive,
+          }"
+          role="status"
+          aria-live="polite"
+          title="Ir al reloj"
+          tabindex="0"
+          @click="scrollToClock"
+          @keydown.enter="scrollToClock"
+        >
+          <span class="controls__dock-clock-label">{{ dockClockLabel }}</span>
+          <span class="controls__dock-clock-time">{{ dockClockTime }}</span>
+        </aside>
+
+        <aside
+          v-if="showDockPenalties"
+          class="controls__dock-penalties"
+          aria-label="Penalidades activas"
+        >
+          <header class="controls__dock-penalties-head">
+            <span>Faltas</span>
+            <button
+              type="button"
+              class="controls__dock-penalties-link"
+              @click="openPenaltiesTab"
+            >
+              Ver
+            </button>
+          </header>
+          <div
+            v-for="team in dockPenaltyTeams"
+            :key="team.key"
+            class="controls__dock-penalties-team"
+            :class="`controls__dock-penalties-team--${team.key}`"
+          >
+            <span class="controls__dock-penalties-side" :title="team.name">
+              {{ team.name }}
+            </span>
+            <ul class="controls__dock-penalties-list">
+              <li v-for="item in team.items" :key="item.id">
+                <span class="controls__dock-penalties-player">{{ item.player }}</span>
+                <span class="controls__dock-penalties-time">{{ item.time }}</span>
+              </li>
+            </ul>
+          </div>
+        </aside>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -1318,6 +1608,223 @@ onUnmounted(() => {
   max-width: 1100px;
   margin: 0 auto;
   padding: 1.5rem;
+}
+
+.controls__clock-section {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+/* Dock fijo en el margen derecho (reloj + faltas). */
+.controls__dock {
+  --dock-width: 6.4rem;
+
+  position: fixed;
+  z-index: 220;
+  top: 50%;
+  transform: translateY(-50%);
+  right: max(
+    0.75rem,
+    calc((100vw - 1100px) / 2 - var(--dock-width) - 0.85rem)
+  );
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  width: var(--dock-width);
+  max-height: min(70vh, 28rem);
+
+  &--with-penalties {
+    --dock-width: 9rem;
+  }
+}
+
+.controls__dock-clock {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.7rem 0.55rem 0.75rem;
+  border-radius: 12px;
+  border: 1px solid var(--app-border);
+  background: var(--app-bg-elevated);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+
+  &:hover {
+    border-color: color-mix(in srgb, var(--app-link) 45%, var(--app-border));
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--app-link);
+    outline-offset: 2px;
+  }
+
+  &--paused .controls__dock-clock-time {
+    opacity: 0.72;
+  }
+
+  &--intermission .controls__dock-clock-time {
+    color: #c9a227;
+  }
+}
+
+.controls__dock-clock-label {
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+  line-height: 1.2;
+  margin-bottom: 0.35rem;
+}
+
+.controls__dock-clock-time {
+  display: block;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.85rem;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text);
+}
+
+.controls__dock-penalties {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.55rem 0.5rem 0.6rem;
+  border-radius: 12px;
+  border: 1px solid var(--app-border);
+  background: var(--app-bg-elevated);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+}
+
+.controls__dock-penalties-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  margin-bottom: 0.45rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+.controls__dock-penalties-link {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--app-link);
+  font: inherit;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.controls__dock-penalties-team {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+
+  & + & {
+    margin-top: 0.45rem;
+    padding-top: 0.45rem;
+    border-top: 1px solid var(--app-border);
+  }
+
+  &--local .controls__dock-penalties-side {
+    color: #3da5ff;
+  }
+
+  &--visit .controls__dock-penalties-side {
+    color: #ff5a36;
+  }
+}
+
+.controls__dock-penalties-side {
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.controls__dock-penalties-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+
+  li {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.3rem;
+    min-width: 0;
+  }
+}
+
+.controls__dock-penalties-player {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  font-weight: 650;
+  color: var(--app-text);
+}
+
+.controls__dock-penalties-time {
+  flex-shrink: 0;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 0.95rem;
+  line-height: 1;
+  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
+  color: #ff4d5e;
+}
+
+.controls-dock-enter-active,
+.controls-dock-leave-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
+.controls-dock-enter-from,
+.controls-dock-leave-to {
+  opacity: 0;
+  transform: translateY(-50%) translateX(0.6rem);
+}
+
+@media (max-width: 1280px) {
+  .controls__dock {
+    top: auto;
+    bottom: max(1rem, env(safe-area-inset-bottom));
+    right: max(0.75rem, env(safe-area-inset-right));
+    transform: none;
+    max-height: min(55vh, 24rem);
+  }
+
+  .controls-dock-enter-from,
+  .controls-dock-leave-to {
+    transform: translateY(0.6rem);
+  }
 }
 
 .controls__header {
@@ -1367,6 +1874,24 @@ onUnmounted(() => {
 
 .controls__card--wide {
   grid-column: 1 / -1;
+}
+
+.controls__officials {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem 1rem;
+}
+
+.controls__officials-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.controls__officials-field > span {
+  font-size: 0.8rem;
+  opacity: 0.7;
 }
 
 .controls__tournament-meta {
