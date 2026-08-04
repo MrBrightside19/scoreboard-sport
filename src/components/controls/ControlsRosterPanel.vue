@@ -34,8 +34,9 @@ const teams = computed(() => [
 const syncStatus = ref<'idle' | 'pending' | 'saving' | 'saved' | 'error'>('idle')
 const syncError = ref('')
 let debounceTimer: number | null = null
-let skipInitialWatch = true
 let syncSeq = 0
+/** Última firma de nómina vista; null = aún no hay baseline (evitar sync al montar/hidratar). */
+let lastRosterSyncKey: string | null = null
 
 const canSyncToTournament = computed(
   () => Boolean(props.tournamentId) && props.syncEnabled,
@@ -43,6 +44,28 @@ const canSyncToTournament = computed(
 
 function rosterFor(team: 'local' | 'visit') {
   return team === 'local' ? store.state.rosterLocal : store.state.rosterVisit
+}
+
+/** Firma estable: solo cambia si el contenido de nómina/equipos/categoría cambia de verdad. */
+function buildRosterSyncKey(): string | null {
+  if (!canSyncToTournament.value) return null
+
+  const pack = (players: typeof store.state.rosterLocal) =>
+    players
+      .map(
+        (player) =>
+          `${player.number.trim()}\t${player.name.trim()}\t${player.role}`,
+      )
+      .join('\n')
+
+  return [
+    store.state.localTeam.trim(),
+    store.state.visitTeam.trim(),
+    (store.state.matchCategory ?? '').trim(),
+    pack(store.state.rosterLocal),
+    '---',
+    pack(store.state.rosterVisit),
+  ].join('|')
 }
 
 function digitsOnly(value: string, max = 3): string {
@@ -142,34 +165,24 @@ async function flushTournamentRosterSync(): Promise<void> {
 watch(
   () => [props.syncEnabled, props.tournamentId] as const,
   () => {
-    skipInitialWatch = true
+    lastRosterSyncKey = null
     syncStatus.value = 'idle'
     syncError.value = ''
     clearDebounce()
   },
 )
 
-watch(
-  () =>
-    canSyncToTournament.value
-      ? {
-          local: store.state.rosterLocal,
-          visit: store.state.rosterVisit,
-          localTeam: store.state.localTeam,
-          visitTeam: store.state.visitTeam,
-          category: store.state.matchCategory,
-        }
-      : null,
-  () => {
-    if (!canSyncToTournament.value) return
-    if (skipInitialWatch) {
-      skipInitialWatch = false
-      return
-    }
-    scheduleTournamentRosterSync()
-  },
-  { deep: true },
-)
+watch(buildRosterSyncKey, (key) => {
+  if (!key || !canSyncToTournament.value) return
+  // Primera lectura tras montar/habilitar: solo baseline, sin escribir al torneo.
+  if (lastRosterSyncKey === null) {
+    lastRosterSyncKey = key
+    return
+  }
+  if (key === lastRosterSyncKey) return
+  lastRosterSyncKey = key
+  scheduleTournamentRosterSync()
+})
 
 onUnmounted(() => {
   clearDebounce()
