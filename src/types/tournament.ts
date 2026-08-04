@@ -51,8 +51,8 @@ export interface CsvPlayerRow {
   equipo: string
   categoria?: string
   numero: string
+  /** Nombre completo (nombre y apellido en un solo campo). */
   nombre: string
-  apellido: string
   posicion?: string
 }
 
@@ -63,6 +63,7 @@ export interface TournamentRosterPlayer {
   category: string | null
   number: string
   name: string
+  /** Legacy: se fusiona en `name` al leer/mostrar. */
   last_name: string
   position: string | null
   created_at: string

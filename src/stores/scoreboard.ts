@@ -194,7 +194,6 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
       id: generateId(),
       number: '',
       name: '',
-      lastName: '',
       role: 'player',
     })
     patch({ [key]: list })
@@ -203,7 +202,7 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
   function updateRosterPlayer(
     team: 'local' | 'visit',
     playerId: string,
-    updates: Partial<Pick<RosterPlayer, 'number' | 'name' | 'lastName' | 'role'>>,
+    updates: Partial<Pick<RosterPlayer, 'number' | 'name' | 'role'>>,
   ): void {
     const key = rosterKey(team)
     const list = [...state.value[key]]

@@ -10,7 +10,11 @@ import {
   type UserPreferences,
   MIN_COUNTDOWN_BEEP_SECONDS,
   MAX_COUNTDOWN_BEEP_SECONDS,
+  MIN_LATE_GAME_WARNING_MINUTES,
+  MAX_LATE_GAME_WARNING_MINUTES,
 } from '@/utils/userPreferences'
+import { playLateGameWarning } from '@/utils/lateGameWarningBeep'
+import { playCountdownBeep } from '@/utils/countdownBeep'
 import type {
   OverlayScoreboardStyle,
   TvScoreboardStyle,
@@ -147,6 +151,41 @@ function onBeepSecondsChange(value: number | null): void {
   prefs.countdownBeepSeconds = value
   setUserPreferences({ countdownBeepSeconds: value })
   message.success(`La cuenta regresiva inicia a los ${value} s`)
+}
+
+function onLateGameWarningToggle(checked: boolean | string | number): void {
+  const enabled = Boolean(checked)
+  prefs.lateGameWarningEnabled = enabled
+  setUserPreferences({ lateGameWarningEnabled: enabled })
+  message.success(
+    enabled
+      ? 'Aviso de últimos minutos activado'
+      : 'Aviso de últimos minutos desactivado',
+  )
+}
+
+function onLateGameWarningMinutesChange(value: number | null): void {
+  if (value == null) return
+  prefs.lateGameWarningMinutes = value
+  setUserPreferences({ lateGameWarningMinutes: value })
+  message.success(`Aviso a los ${value} min restantes`)
+}
+
+async function previewLateGameWarning(): Promise<void> {
+  try {
+    await playLateGameWarning({ force: true })
+  } catch {
+    message.warning('No se pudo reproducir el sonido de prueba')
+  }
+}
+
+async function previewCountdownBeep(): Promise<void> {
+  try {
+    // Mismo beep que en controles (un tick), sin alargar la prueba.
+    await playCountdownBeep(false, { force: true })
+  } catch {
+    message.warning('No se pudo reproducir el sonido de prueba')
+  }
 }
 
 function setTheme(theme: AppTheme): void {
@@ -310,90 +349,149 @@ async function handleLogout(): Promise<void> {
             </div>
           </div>
 
-          <div class="profile__pref-list">
-            <div class="profile__pref-row">
-              <div>
-                <h3>Beep de cuenta regresiva</h3>
+          <div class="profile__pref-groups">
+            <section class="profile__pref-group" aria-labelledby="profile-alerts">
+              <header class="profile__pref-group-head">
+                <h3 id="profile-alerts">Alertas de mesa</h3>
                 <p>
-                  Sonido corto en la mesa de control cuando el reloj llega a los últimos segundos.
+                  Sonidos de la mesa de control para árbitros y operadores.
                 </p>
-              </div>
-              <a-switch
-                :checked="prefs.countdownBeepEnabled"
-                @update:checked="onBeepToggle"
-              />
-            </div>
+              </header>
 
-            <div class="profile__pref-row profile__pref-row--stack">
-              <div>
-                <h3>Inicio de la cuenta regresiva</h3>
-                <p>
-                  Desde cuántos segundos restantes empieza el beep
-                  ({{ MIN_COUNTDOWN_BEEP_SECONDS }}–{{ MAX_COUNTDOWN_BEEP_SECONDS }}).
-                  Por defecto 10.
-                </p>
+              <div class="profile__pref-card">
+                <div class="profile__pref-card-top">
+                  <div class="profile__pref-card-copy">
+                    <h4>Cuenta regresiva final</h4>
+                    <p>
+                      Beep corto en los últimos segundos del reloj
+                      ({{ MIN_COUNTDOWN_BEEP_SECONDS }}–{{ MAX_COUNTDOWN_BEEP_SECONDS }} s;
+                      por defecto 10).
+                    </p>
+                  </div>
+                  <a-switch
+                    :checked="prefs.countdownBeepEnabled"
+                    aria-label="Activar beep de cuenta regresiva"
+                    @update:checked="onBeepToggle"
+                  />
+                </div>
+                <div class="profile__pref-card-controls">
+                  <label class="profile__field-label" for="profile-countdown-seconds">
+                    Inicia a los
+                  </label>
+                  <a-input-number
+                    id="profile-countdown-seconds"
+                    :value="prefs.countdownBeepSeconds"
+                    :min="MIN_COUNTDOWN_BEEP_SECONDS"
+                    :max="MAX_COUNTDOWN_BEEP_SECONDS"
+                    :disabled="!prefs.countdownBeepEnabled"
+                    addon-after="s"
+                    class="profile__seconds-input"
+                    @update:value="onBeepSecondsChange"
+                  />
+                  <a-button @click="previewCountdownBeep">
+                    Probar sonido
+                  </a-button>
+                </div>
               </div>
-              <a-input-number
-                :value="prefs.countdownBeepSeconds"
-                :min="MIN_COUNTDOWN_BEEP_SECONDS"
-                :max="MAX_COUNTDOWN_BEEP_SECONDS"
-                :disabled="!prefs.countdownBeepEnabled"
-                addon-after="s"
-                class="profile__seconds-input"
-                @update:value="onBeepSecondsChange"
-              />
-            </div>
 
-            <div class="profile__pref-row profile__pref-row--stack">
-              <div>
-                <h3>Tema de la interfaz</h3>
-                <p>
-                  Cambia entre modo oscuro y claro. El marcador TV y el overlay OBS se mantienen oscuros.
-                </p>
+              <div class="profile__pref-card">
+                <div class="profile__pref-card-top">
+                  <div class="profile__pref-card-copy">
+                    <h4>Últimos minutos de juego</h4>
+                    <p>
+                      Aviso distinto al beep final, al entrar en los últimos minutos
+                      ({{ MIN_LATE_GAME_WARNING_MINUTES }}–{{ MAX_LATE_GAME_WARNING_MINUTES }};
+                      por defecto 2).
+                    </p>
+                  </div>
+                  <a-switch
+                    :checked="prefs.lateGameWarningEnabled"
+                    aria-label="Activar aviso de últimos minutos"
+                    @update:checked="onLateGameWarningToggle"
+                  />
+                </div>
+                <div class="profile__pref-card-controls">
+                  <label class="profile__field-label" for="profile-late-game-minutes">
+                    Avisa a los
+                  </label>
+                  <a-input-number
+                    id="profile-late-game-minutes"
+                    :value="prefs.lateGameWarningMinutes"
+                    :min="MIN_LATE_GAME_WARNING_MINUTES"
+                    :max="MAX_LATE_GAME_WARNING_MINUTES"
+                    :disabled="!prefs.lateGameWarningEnabled"
+                    addon-after="min"
+                    class="profile__seconds-input"
+                    @update:value="onLateGameWarningMinutesChange"
+                  />
+                  <a-button @click="previewLateGameWarning">
+                    Probar sonido
+                  </a-button>
+                </div>
               </div>
-              <div class="profile__theme-toggle" role="group" aria-label="Tema">
-                <a-button
-                  :type="prefs.theme === 'dark' ? 'primary' : 'default'"
-                  @click="setTheme('dark')"
-                >
-                  Oscuro
-                </a-button>
-                <a-button
-                  :type="prefs.theme === 'light' ? 'primary' : 'default'"
-                  @click="setTheme('light')"
-                >
-                  Claro
-                </a-button>
-              </div>
-            </div>
+            </section>
 
-            <div class="profile__pref-row profile__pref-row--stack">
-              <div>
-                <h3>Marcador TV</h3>
+            <section class="profile__pref-group" aria-labelledby="profile-appearance">
+              <header class="profile__pref-group-head">
+                <h3 id="profile-appearance">Apariencia</h3>
                 <p>
-                  Diseño de la pantalla grande de cancha. Más estilos se añadirán después.
+                  Tema de la aplicación. El marcador TV y el overlay OBS se mantienen oscuros.
                 </p>
-              </div>
-              <ScoreboardStylePicker
-                mode="tv"
-                :model-value="prefs.tvScoreboardStyle"
-                @update:model-value="onTvStyleChange"
-              />
-            </div>
+              </header>
 
-            <div class="profile__pref-row profile__pref-row--stack">
-              <div>
-                <h3>Overlay OBS</h3>
-                <p>
-                  Diseño del marcador transparente para transmisión. Más estilos se añadirán después.
-                </p>
+              <div class="profile__pref-card profile__pref-card--inline">
+                <div class="profile__pref-card-copy">
+                  <h4>Tema de la interfaz</h4>
+                </div>
+                <div class="profile__theme-toggle" role="group" aria-label="Tema">
+                  <a-button
+                    :type="prefs.theme === 'dark' ? 'primary' : 'default'"
+                    @click="setTheme('dark')"
+                  >
+                    Oscuro
+                  </a-button>
+                  <a-button
+                    :type="prefs.theme === 'light' ? 'primary' : 'default'"
+                    @click="setTheme('light')"
+                  >
+                    Claro
+                  </a-button>
+                </div>
               </div>
-              <ScoreboardStylePicker
-                mode="overlay"
-                :model-value="prefs.overlayScoreboardStyle"
-                @update:model-value="onOverlayStyleChange"
-              />
-            </div>
+            </section>
+
+            <section class="profile__pref-group" aria-labelledby="profile-boards">
+              <header class="profile__pref-group-head">
+                <h3 id="profile-boards">Marcadores</h3>
+                <p>
+                  Estilos visuales para la pantalla de cancha y la transmisión OBS.
+                </p>
+              </header>
+
+              <div class="profile__pref-card profile__pref-card--stack">
+                <div class="profile__pref-card-copy">
+                  <h4>Marcador TV</h4>
+                  <p>Diseño de la pantalla grande de cancha.</p>
+                </div>
+                <ScoreboardStylePicker
+                  mode="tv"
+                  :model-value="prefs.tvScoreboardStyle"
+                  @update:model-value="onTvStyleChange"
+                />
+              </div>
+
+              <div class="profile__pref-card profile__pref-card--stack">
+                <div class="profile__pref-card-copy">
+                  <h4>Overlay OBS</h4>
+                  <p>Diseño del marcador transparente para transmisión.</p>
+                </div>
+                <ScoreboardStylePicker
+                  mode="overlay"
+                  :model-value="prefs.overlayScoreboardStyle"
+                  @update:model-value="onOverlayStyleChange"
+                />
+              </div>
+            </section>
           </div>
         </section>
 
@@ -504,29 +602,72 @@ async function handleLogout(): Promise<void> {
   justify-content: flex-start;
 }
 
-.profile__pref-list {
+.profile__pref-groups {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 1.35rem;
 }
 
-.profile__pref-row {
+.profile__pref-group {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.85rem 0.9rem;
-  border-radius: 8px;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.profile__pref-group-head {
+  h3 {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--app-text-muted);
+  }
+
+  p {
+    margin: 0.3rem 0 0;
+    font-size: 0.82rem;
+    color: var(--app-text-muted);
+    line-height: 1.4;
+  }
+}
+
+.profile__pref-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 0.95rem 1rem;
+  border-radius: 10px;
   background: var(--app-surface-inset);
   border: 1px solid var(--app-border);
 
-  &--stack {
+  &--inline {
+    flex-direction: row;
     flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.85rem 1rem;
   }
 
-  h3 {
+  &--stack {
+    gap: 0.75rem;
+  }
+}
+
+.profile__pref-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.profile__pref-card-copy {
+  min-width: 0;
+  flex: 1;
+
+  h4 {
     margin: 0;
-    font-size: 0.92rem;
+    font-size: 0.95rem;
     font-weight: 650;
     color: var(--app-text);
   }
@@ -537,6 +678,20 @@ async function handleLogout(): Promise<void> {
     color: var(--app-text-muted);
     line-height: 1.4;
   }
+}
+
+.profile__pref-card-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 0.65rem;
+  padding-top: 0.15rem;
+  border-top: 1px solid var(--app-border);
+}
+
+.profile__field-label {
+  font-size: 0.8rem;
+  color: var(--app-text-muted);
 }
 
 .profile__seconds-input {

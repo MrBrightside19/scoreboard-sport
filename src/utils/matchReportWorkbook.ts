@@ -1,9 +1,14 @@
 import * as XLSX from 'xlsx'
 import type { MatchReport } from '@/utils/matchReport'
+import { formatTableOfficials } from '@/utils/matchReport'
 import { awardsByCategory, type PlayerStatLine } from '@/utils/playerStats'
 
+function dash(value: string): string {
+  return value.trim() || '—'
+}
+
 function summaryRows(report: MatchReport): (string | number)[][] {
-  const { meta } = report
+  const { meta, officials } = report
   return [
     ['Campo', 'Valor'],
     ['Local', meta.localTeam],
@@ -17,6 +22,11 @@ function summaryRows(report: MatchReport): (string | number)[][] {
     ['Tiros visita', report.shotsMissVisit],
     ['Atajadas local', report.savesLocal],
     ['Atajadas visita', report.savesVisit],
+    ['Árbitro 1', dash(officials.referee1)],
+    ['Árbitro 2', dash(officials.referee2)],
+    ['Mesa 1', dash(officials.tableOfficial1)],
+    ['Mesa 2', dash(officials.tableOfficial2)],
+    ['Mesa 3', dash(officials.tableOfficial3)],
   ]
 }
 
@@ -189,6 +199,9 @@ export function buildTournamentWorkbook(
       'Tiros V',
       'Atajadas L',
       'Atajadas V',
+      'Árbitro 1',
+      'Árbitro 2',
+      'Mesa',
     ],
     ...reports.map((r) => [
       r.meta.localTeam,
@@ -202,6 +215,9 @@ export function buildTournamentWorkbook(
       r.shotsMissVisit,
       r.savesLocal,
       r.savesVisit,
+      dash(r.officials.referee1),
+      dash(r.officials.referee2),
+      formatTableOfficials(r.officials) || '—',
     ]),
   ]
   XLSX.utils.book_append_sheet(

@@ -2,8 +2,18 @@ import type { PlayerRole, RosterPlayer } from '@/types/hockeyScoreboard'
 
 export const MAX_ASSISTANT_CAPTAINS = 2
 
+/** Une partes de nombre (p. ej. nombre + apellido legacy) en un solo texto. */
+export function joinPersonName(
+  ...parts: Array<string | null | undefined>
+): string {
+  return parts
+    .map((part) => (part ?? '').trim())
+    .filter(Boolean)
+    .join(' ')
+}
+
 export function playerLabel(player: RosterPlayer): string {
-  const fullName = `${player.name} ${player.lastName}`.trim()
+  const fullName = player.name.trim()
   if (fullName) return `#${player.number} ${fullName}`
   return `#${player.number}`
 }

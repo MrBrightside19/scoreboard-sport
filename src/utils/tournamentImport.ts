@@ -6,12 +6,13 @@ import type {
 } from '@/types/tournament'
 import { normalizeGameTime } from '@/utils/clock'
 import { parseCsv } from '@/utils/csv'
+import { joinPersonName } from '@/utils/roster'
 
 const MATCH_SHEET = 'Calendario'
 const PLAYER_SHEET = 'Jugadores'
 
 const MATCH_REQUIRED = ['local', 'visita', 'tiempo_juego', 'cancha'] as const
-const PLAYER_REQUIRED = ['equipo', 'numero', 'nombre', 'apellido'] as const
+const PLAYER_REQUIRED = ['equipo', 'numero', 'nombre'] as const
 
 function normalizeHeader(value: string): string {
   return value.trim().toLowerCase()
@@ -193,10 +194,11 @@ function parsePlayerObjects(rows: Record<string, string>[]): CsvPlayerRow[] {
   const seen = new Set<string>()
 
   rows.forEach((row, index) => {
-    if (!row.equipo && !row.numero && !row.nombre && !row.apellido) return
-    if (!row.equipo || !row.numero || !row.nombre || !row.apellido) {
+    const fullName = joinPersonName(row.nombre, row.apellido)
+    if (!row.equipo && !row.numero && !fullName) return
+    if (!row.equipo || !row.numero || !fullName) {
       throw new Error(
-        `Jugadores fila ${index + 2}: equipo, numero, nombre y apellido son obligatorios.`,
+        `Jugadores fila ${index + 2}: equipo, numero y nombre son obligatorios.`,
       )
     }
 
@@ -219,8 +221,7 @@ function parsePlayerObjects(rows: Record<string, string>[]): CsvPlayerRow[] {
       equipo: row.equipo,
       categoria: row.categoria || undefined,
       numero,
-      nombre: row.nombre,
-      apellido: row.apellido,
+      nombre: fullName,
       posicion: row.posicion || undefined,
     })
   })
@@ -244,13 +245,13 @@ export function buildTournamentTemplateWorkbook(): ArrayBuffer {
   XLSX.utils.book_append_sheet(workbook, matchSheet, MATCH_SHEET)
 
   const playerSheet = XLSX.utils.aoa_to_sheet([
-    ['equipo', 'categoria', 'numero', 'nombre', 'apellido', 'posicion'],
-    ['Huracanes', 'Sub-18', '1', 'Ana', 'Porter', 'Arquero'],
-    ['Huracanes', 'Sub-18', '10', 'Luis', 'García', 'Capitán'],
-    ['Thunder', 'Sub-18', '7', 'Sofía', 'Ruiz', 'Jugador'],
-    ['Thunder', 'Sub-18', '19', 'Marco', 'Díaz', 'Asistente Capitán'],
-    ['Leones', 'Sub-21', '3', 'Pedro', 'Salas', 'Jugador'],
-    ['Sharks', 'Sub-21', '11', 'Elena', 'Vargas', 'Arquero'],
+    ['equipo', 'categoria', 'numero', 'nombre', 'posicion'],
+    ['Huracanes', 'Sub-18', '1', 'Ana Porter', 'Arquero'],
+    ['Huracanes', 'Sub-18', '10', 'Luis García', 'Capitán'],
+    ['Thunder', 'Sub-18', '7', 'Sofía Ruiz', 'Jugador'],
+    ['Thunder', 'Sub-18', '19', 'Marco Díaz', 'Asistente Capitán'],
+    ['Leones', 'Sub-21', '3', 'Pedro Salas', 'Jugador'],
+    ['Sharks', 'Sub-21', '11', 'Elena Vargas', 'Arquero'],
   ])
   XLSX.utils.book_append_sheet(workbook, playerSheet, PLAYER_SHEET)
 

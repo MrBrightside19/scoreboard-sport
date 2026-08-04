@@ -52,4 +52,4 @@ create policy "tournament_rosters_write_staff"
   );
 
 comment on table public.tournament_rosters is
-  'Jugadores importados del calendario (equipo, categoría, número, nombre, apellido, posición)';
+  'Jugadores importados del calendario (equipo, categoría, número, nombre completo, posición). last_name es legacy y puede quedar vacío.';

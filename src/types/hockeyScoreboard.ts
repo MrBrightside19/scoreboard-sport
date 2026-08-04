@@ -6,8 +6,8 @@ export type PlayerRole = 'player' | 'goalkeeper' | 'captain' | 'assistant_captai
 export interface RosterPlayer {
   id: string
   number: string
+  /** Nombre completo del jugador. */
   name: string
-  lastName: string
   role: PlayerRole
 }
 
@@ -75,6 +75,13 @@ export interface ScoreboardState {
   intermissionTime: string
   /** Duración configurada del descanso (por defecto 05:00 al crear el partido). */
   intermissionDuration: string
+  /** Árbitros del partido (hasta 2). */
+  referee1: string
+  referee2: string
+  /** Oficiales de mesa (hasta 3). */
+  tableOfficial1: string
+  tableOfficial2: string
+  tableOfficial3: string
   updatedAt: string
 }
 
@@ -113,6 +120,11 @@ export function createDefaultScoreboardState(
     intermissionActive: false,
     intermissionTime: DEFAULT_INTERMISSION_TIME,
     intermissionDuration: DEFAULT_INTERMISSION_TIME,
+    referee1: '',
+    referee2: '',
+    tableOfficial1: '',
+    tableOfficial2: '',
+    tableOfficial3: '',
     updatedAt: new Date().toISOString(),
   }
 }
@@ -120,12 +132,15 @@ export function createDefaultScoreboardState(
 function normalizeRoster(raw: unknown): RosterPlayer[] {
   if (!Array.isArray(raw)) return []
   return raw.map((item) => {
-    const player = item as Partial<RosterPlayer>
+    const player = item as Partial<RosterPlayer> & { lastName?: string }
+    const name = [player.name, player.lastName]
+      .map((part) => String(part ?? '').trim())
+      .filter(Boolean)
+      .join(' ')
     return {
       id: String(player.id ?? generateId()),
       number: String(player.number ?? ''),
-      name: String(player.name ?? ''),
-      lastName: String(player.lastName ?? ''),
+      name,
       role: (player.role as PlayerRole) ?? 'player',
     }
   })
@@ -212,6 +227,11 @@ export function normalizeScoreboardState(raw: unknown): ScoreboardState {
     intermissionDuration: String(
       source.intermissionDuration ?? base.intermissionDuration,
     ),
+    referee1: String(source.referee1 ?? base.referee1),
+    referee2: String(source.referee2 ?? base.referee2),
+    tableOfficial1: String(source.tableOfficial1 ?? base.tableOfficial1),
+    tableOfficial2: String(source.tableOfficial2 ?? base.tableOfficial2),
+    tableOfficial3: String(source.tableOfficial3 ?? base.tableOfficial3),
     updatedAt: (source.updatedAt as string) ?? base.updatedAt,
     rosterLocal: normalizeRoster(source.rosterLocal),
     rosterVisit: normalizeRoster(source.rosterVisit),
