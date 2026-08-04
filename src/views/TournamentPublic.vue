@@ -9,6 +9,8 @@ import {
 import { fetchMatchState } from '@/services/matchSync'
 import { calculateStandings } from '@/utils/standings'
 import { tournamentLivePath } from '@/utils/appUrl'
+import { formatScheduledAt } from '@/utils/datetime'
+import { createMatchesTablePagination } from '@/utils/tablePagination'
 import type { Tournament, TournamentMatch } from '@/types/tournament'
 import MatchReportDrawer from '@/components/MatchReportDrawer.vue'
 import TournamentStatsPanel from '@/components/TournamentStatsPanel.vue'
@@ -28,6 +30,7 @@ const standings = ref(calculateStandings([]))
 const reportOpen = ref(false)
 const reportLoading = ref(false)
 const activeReport = ref<MatchReport | null>(null)
+const matchesPagination = createMatchesTablePagination(10)
 
 const tournamentStatusLabels: Record<Tournament['status'], string> = {
   draft: 'Borrador',
@@ -187,19 +190,24 @@ onMounted(async () => {
         <div class="tournament-public__table-wrap">
           <a-table
             :data-source="matches.map((m) => ({ ...m, key: m.id }))"
-            :pagination="false"
+            :pagination="matchesPagination"
             size="small"
-            :scroll="{ x: 800 }"
             table-layout="fixed"
+            :scroll="{ x: 804 }"
           >
             <a-table-column title="Local" data-index="local_team" :ellipsis="true" :width="140" />
             <a-table-column title="Visita" data-index="visit_team" :ellipsis="true" :width="140" />
-            <a-table-column title="Categoría" :width="100" :ellipsis="true">
+            <a-table-column title="Categoría" :width="110" :ellipsis="true">
               <template #default="{ record }">
                 {{ record.category || '—' }}
               </template>
             </a-table-column>
             <a-table-column title="Cancha" data-index="court" :width="80" :ellipsis="true" />
+            <a-table-column title="Hora" :width="72" align="center">
+              <template #default="{ record }">
+                {{ formatScheduledAt(record.scheduled_at) }}
+              </template>
+            </a-table-column>
             <a-table-column title="Estado" :width="110">
               <template #default="{ record }">
                 <a-tag :color="matchStatusColor(record.status)">
@@ -207,7 +215,7 @@ onMounted(async () => {
                 </a-tag>
               </template>
             </a-table-column>
-            <a-table-column title="Resultado" :width="100">
+            <a-table-column title="Resultado" :width="96" align="center">
               <template #default="{ record }">
                 <span v-if="record.status === 'finished'">
                   {{ record.goal_local }} - {{ record.goal_visit }}
@@ -267,23 +275,43 @@ onMounted(async () => {
 
 <style scoped lang="scss">
 .tournament-public {
-  max-width: min(900px, 100%);
+  max-width: min(1100px, 100%);
   width: 100%;
   margin: 0 auto;
-  padding: 2rem 1.5rem;
+  padding: 1.5rem 0.85rem;
   box-sizing: border-box;
   overflow-x: clip;
+
+  @media (min-width: 640px) {
+    padding: 2rem 1.25rem;
+  }
+
+  @media (min-width: 1024px) {
+    padding: 2rem 1.5rem;
+  }
 }
 
 .tournament-public__table-wrap {
   width: 100%;
   max-width: 100%;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
 }
 
-.tournament-public__table-wrap :deep(.ant-table-cell) {
+.tournament-public__table-wrap :deep(.ant-table-thead > tr > th) {
   white-space: nowrap;
+}
+
+.tournament-public__table-wrap :deep(.ant-table-tbody > tr > td) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tournament-public__table-wrap :deep(.ant-table-cell-fix-right) {
+  background: var(--app-bg-elevated) !important;
+}
+
+.tournament-public__table-wrap :deep(.ant-table-tbody > tr:hover > td.ant-table-cell-fix-right) {
+  background: var(--app-bg-elevated) !important;
 }
 
 .tournament-public__header h1 {

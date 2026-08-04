@@ -16,12 +16,15 @@ import {
   startTournamentMatch,
   syncTournamentTeams,
   updateTournamentMatch,
+  updateTournamentVisibility,
 } from '@/services/tournamentService'
 import {
   buildTournamentTemplateWorkbook,
   parseTournamentImportFile,
 } from '@/utils/tournamentImport'
 import { normalizeGameTime } from '@/utils/clock'
+import { formatScheduledAt } from '@/utils/datetime'
+import { createMatchesTablePagination } from '@/utils/tablePagination'
 import { buildAppUrl, tournamentLivePath, tournamentOverlayPath } from '@/utils/appUrl'
 import { calculateStandings } from '@/utils/standings'
 import { writeMatchIdToStorage } from '@/utils/localSync'
@@ -81,6 +84,8 @@ const matchFormError = ref<string | null>(null)
 const editingMatchId = ref<string | null>(null)
 const deletingMatchId = ref<string | null>(null)
 const startingMatchId = ref<string | null>(null)
+const savingVisibility = ref(false)
+const matchesPagination = createMatchesTablePagination(10)
 const reportOpen = ref(false)
 const reportLoading = ref(false)
 const reportDownloading = ref(false)
@@ -573,6 +578,28 @@ async function removeTournamentCompletely(): Promise<void> {
   })
 }
 
+async function changeVisibility(visibility: Tournament['visibility']): Promise<void> {
+  if (!tournament.value || !isOwner.value) return
+  if (tournament.value.visibility === visibility || savingVisibility.value) return
+
+  savingVisibility.value = true
+  try {
+    tournament.value = await updateTournamentVisibility(tournament.value.id, visibility)
+    message.success(
+      visibility === 'public'
+        ? 'El torneo ahora es público.'
+        : 'El torneo ahora es privado.',
+    )
+  } catch (err) {
+    Modal.error({
+      title: 'No se pudo cambiar la visibilidad',
+      content: err instanceof Error ? err.message : 'Error desconocido',
+    })
+  } finally {
+    savingVisibility.value = false
+  }
+}
+
 async function startMatch(tm: TournamentMatch): Promise<void> {
   if (!auth.profile || startingMatchId.value) return
   if (tournament.value?.status === 'finished') {
@@ -732,22 +759,27 @@ onUnmounted(() => {
             <div v-if="matches.length" class="detail__table-wrap">
               <a-table
                 :data-source="matches.map((m) => ({ ...m, key: m.id }))"
-                :pagination="false"
+                :pagination="matchesPagination"
                 size="small"
-                :scroll="{ x: 880 }"
                 table-layout="fixed"
+                :scroll="{ x: 986 }"
                 :row-class-name="(record: TournamentMatch) =>
                   record.status === 'live' ? 'detail__row--live' : ''"
               >
                 <a-table-column title="Local" data-index="local_team" :ellipsis="true" :width="140" />
                 <a-table-column title="Visita" data-index="visit_team" :ellipsis="true" :width="140" />
-                <a-table-column title="Categoría" :width="100" :ellipsis="true">
+                <a-table-column title="Categoría" :width="110" :ellipsis="true">
                   <template #default="{ record }">
                     {{ record.category || '—' }}
                   </template>
                 </a-table-column>
                 <a-table-column title="Cancha" data-index="court" :width="80" :ellipsis="true" />
-                <a-table-column title="Tiempo" :width="72">
+                <a-table-column title="Hora" :width="72" align="center">
+                  <template #default="{ record }">
+                    {{ formatScheduledAt(record.scheduled_at) }}
+                  </template>
+                </a-table-column>
+                <a-table-column title="Duración" :width="88" align="center">
                   <template #default="{ record }">
                     {{ normalizeGameTime(record.game_time) }}
                   </template>
@@ -759,7 +791,7 @@ onUnmounted(() => {
                     </a-tag>
                   </template>
                 </a-table-column>
-                <a-table-column title="Resultado" :width="90">
+                <a-table-column title="Resultado" :width="96" align="center">
                   <template #default="{ record }">
                     <span v-if="record.status === 'finished'">
                       {{ record.goal_local }} - {{ record.goal_visit }}
@@ -767,7 +799,7 @@ onUnmounted(() => {
                     <span v-else>—</span>
                   </template>
                 </a-table-column>
-                <a-table-column title="Acciones" :width="180" fixed="right">
+                <a-table-column title="Acciones" :width="150" fixed="right">
                   <template #default="{ record }">
                     <div class="detail__match-actions">
                       <a-button
@@ -881,6 +913,33 @@ onUnmounted(() => {
               </p>
             </header>
 
+            <section
+              v-if="isOwner"
+              class="config__panel"
+              aria-labelledby="config-visibilidad"
+            >
+              <div class="config__panel-head">
+                <div>
+                  <h2 id="config-visibilidad">Visibilidad</h2>
+                  <p class="config__desc">
+                    Público aparece en Torneos públicos. Privado solo lo ven el organizador y sus asistentes.
+                  </p>
+                </div>
+                <div class="config__actions">
+                  <a-radio-group
+                    :value="tournament.visibility"
+                    button-style="solid"
+                    :disabled="savingVisibility"
+                    @update:value="(v: Tournament['visibility']) => changeVisibility(v)"
+                  >
+                    <a-radio-button value="public">Público</a-radio-button>
+                    <a-radio-button value="private">Privado</a-radio-button>
+                  </a-radio-group>
+                </div>
+              </div>
+              <p v-if="savingVisibility" class="config__empty">Guardando…</p>
+            </section>
+
             <section class="config__panel" aria-labelledby="config-datos">
               <div class="config__panel-head">
                 <div>
@@ -907,6 +966,10 @@ onUnmounted(() => {
                   Hojas: <strong>Calendario</strong> (partidos) y <strong>Jugadores</strong>
                   (equipo, categoría, número, nombre, posición).
                   El nombre va completo en una sola columna.
+                </li>
+                <li>
+                  En Calendario, <strong>fecha_programada</strong> (ej. 2026-06-15 18:00)
+                  es la hora prevista del partido; se muestra en el calendario.
                 </li>
                 <li>
                   Posición = tipo de jugador (jugador, arquero, capitán o Asistente Capitán).
@@ -1226,27 +1289,47 @@ onUnmounted(() => {
 
 <style scoped lang="scss">
 .detail {
-  max-width: min(1000px, 100%);
+  max-width: min(1180px, 100%);
   width: 100%;
   margin: 0 auto;
-  padding: 1.5rem;
+  padding: 1.25rem 0.85rem;
   box-sizing: border-box;
   overflow-x: clip;
+
+  @media (min-width: 640px) {
+    padding: 1.5rem 1.25rem;
+  }
+
+  @media (min-width: 1100px) {
+    padding: 1.75rem 1.5rem;
+  }
 }
 
 .detail__table-wrap {
   width: 100%;
   max-width: 100%;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
 }
 
-.detail__table-wrap :deep(.ant-table) {
-  min-width: 0;
-}
-
-.detail__table-wrap :deep(.ant-table-cell) {
+.detail__table-wrap :deep(.ant-table-thead > tr > th) {
   white-space: nowrap;
+}
+
+.detail__table-wrap :deep(.ant-table-tbody > tr > td) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail__table-wrap :deep(.ant-table-cell-fix-right) {
+  background: var(--app-bg-elevated) !important;
+}
+
+.detail__table-wrap :deep(.ant-table-tbody > tr:hover > td.ant-table-cell-fix-right) {
+  background: var(--app-bg-elevated) !important;
+}
+
+.detail__table-wrap :deep(.detail__row--live > td.ant-table-cell-fix-right) {
+  background: color-mix(in srgb, var(--app-bg-elevated) 88%, #52c41a) !important;
 }
 
 .detail__header {
@@ -1354,9 +1437,10 @@ onUnmounted(() => {
 
 .detail__match-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
+  flex-wrap: nowrap;
+  gap: 0.3rem;
   align-items: center;
+  justify-content: flex-start;
 }
 
 .detail__more-btn {

@@ -125,6 +125,23 @@ export async function updateTournamentStatus(
   })
 }
 
+export async function updateTournamentVisibility(
+  id: string,
+  visibility: Tournament['visibility'],
+): Promise<Tournament> {
+  const rows = await supabaseRest<Tournament[]>(`tournaments?id=eq.${id}`, {
+    method: 'PATCH',
+    body: { visibility },
+    prefer: 'return=representation',
+  })
+
+  if (!rows[0]) {
+    throw new Error('No se pudo actualizar la visibilidad del torneo.')
+  }
+
+  return rows[0]
+}
+
 /** Cierra partidos en vivo/sin jugar y marca el torneo como finalizado. */
 export async function finishTournament(tournamentId: string): Promise<void> {
   const matches = await fetchTournamentMatches(tournamentId)
