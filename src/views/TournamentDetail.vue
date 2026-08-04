@@ -907,26 +907,31 @@ onUnmounted(() => {
         <a-tab-pane key="configuracion" tab="Configuración">
           <div class="config">
             <header class="config__intro">
-              <p>
-                Configura los datos, el equipo de trabajo y la transmisión del torneo.
-                Las acciones destructivas están al final.
-              </p>
+              <div>
+                <h2 class="config__title">Configuración</h2>
+                <p>
+                  Datos del torneo, equipo de trabajo y transmisión.
+                  Las acciones destructivas están al final.
+                </p>
+              </div>
             </header>
 
-            <section
-              v-if="isOwner"
-              class="config__panel"
-              aria-labelledby="config-visibilidad"
-            >
-              <div class="config__panel-head">
-                <div>
-                  <h2 id="config-visibilidad">Visibilidad</h2>
+            <div class="config__grid">
+              <section
+                v-if="isOwner"
+                class="config__card config__card--wide config__card--split"
+                aria-labelledby="config-visibilidad"
+              >
+                <div class="config__card-top">
+                  <span class="config__eyebrow">Acceso</span>
+                  <h3 id="config-visibilidad">Visibilidad</h3>
                   <p class="config__desc">
                     Público aparece en Torneos públicos. Privado solo lo ven el organizador y sus asistentes.
                   </p>
                 </div>
-                <div class="config__actions">
+                <div class="config__card-body config__card-body--end">
                   <a-radio-group
+                    class="config__visibility"
                     :value="tournament.visibility"
                     button-style="solid"
                     :disabled="savingVisibility"
@@ -935,65 +940,28 @@ onUnmounted(() => {
                     <a-radio-button value="public">Público</a-radio-button>
                     <a-radio-button value="private">Privado</a-radio-button>
                   </a-radio-group>
+                  <p v-if="savingVisibility" class="config__hint">Guardando…</p>
                 </div>
-              </div>
-              <p v-if="savingVisibility" class="config__empty">Guardando…</p>
-            </section>
+              </section>
 
-            <section class="config__panel" aria-labelledby="config-datos">
-              <div class="config__panel-head">
-                <div>
-                  <h2 id="config-datos">Calendario y plantillas</h2>
+              <section
+                class="config__card config__card--wide config__card--split"
+                aria-labelledby="config-informes"
+              >
+                <div class="config__card-top">
+                  <span class="config__eyebrow">Exportar</span>
+                  <h3 id="config-informes">Informes</h3>
                   <p class="config__desc">
-                    Descarga la plantilla Excel, complétala e impórtala para cargar partidos y jugadores.
+                    Excel consolidado con resultados, destacados y estadísticas de partidos finalizados.
                   </p>
                 </div>
-                <div class="config__actions">
-                  <a-button @click="downloadTemplate">Descargar plantilla</a-button>
-                  <a-upload
-                    :show-upload-list="false"
-                    accept=".xlsx,.xls,.csv"
-                    :before-upload="(f: File) => { onCsvUpload(f); return false }"
-                  >
-                    <a-button type="primary" :loading="importing">
-                      Importar Excel
-                    </a-button>
-                  </a-upload>
-                </div>
-              </div>
-              <ul class="config__notes">
-                <li>
-                  Hojas: <strong>Calendario</strong> (partidos) y <strong>Jugadores</strong>
-                  (equipo, categoría, número, nombre, posición).
-                  El nombre va completo en una sola columna.
-                </li>
-                <li>
-                  En Calendario, <strong>fecha_programada</strong> (ej. 2026-06-15 18:00)
-                  es la hora prevista del partido; se muestra en el calendario.
-                </li>
-                <li>
-                  Posición = tipo de jugador (jugador, arquero, capitán o Asistente Capitán).
-                </li>
-                <li>
-                  Al iniciar un partido, el roster se filtra por equipo y categoría.
-                </li>
-              </ul>
-            </section>
-
-            <section class="config__panel" aria-labelledby="config-informes">
-              <div class="config__panel-head">
-                <div>
-                  <h2 id="config-informes">Informes</h2>
-                  <p class="config__desc">
-                    Exporta el Excel consolidado con resultados, destacados y estadísticas de todos los partidos finalizados.
-                  </p>
-                </div>
-                <div class="config__actions">
+                <div class="config__card-body config__card-body--end">
                   <a-button
                     type="primary"
+                    block
                     :loading="tournamentReportDownloading"
                     :disabled="!canDownloadTournamentReport"
-                    class="detail__report-torneo-btn"
+                    class="detail__report-torneo-btn config__export-btn"
                     @click="downloadTournamentReports"
                   >
                     <span class="detail__btn-icon" aria-hidden="true">
@@ -1005,125 +973,173 @@ onUnmounted(() => {
                     </span>
                     Informe torneo
                   </a-button>
+                  <p v-if="!canDownloadTournamentReport" class="config__hint">
+                    Disponible con al menos un partido finalizado con datos.
+                  </p>
                 </div>
-              </div>
-              <p v-if="!canDownloadTournamentReport" class="config__empty">
-                Disponible cuando haya al menos un partido finalizado con datos.
-              </p>
-            </section>
+              </section>
 
-            <section
-              v-if="isOwner"
-              class="config__panel"
-              aria-labelledby="config-asistentes"
-            >
-              <div class="config__panel-head">
-                <div>
-                  <h2 id="config-asistentes">Asistentes</h2>
+              <section class="config__card" aria-labelledby="config-datos">
+                <div class="config__card-top">
+                  <span class="config__eyebrow">Datos</span>
+                  <h3 id="config-datos">Calendario y plantillas</h3>
+                  <p class="config__desc">
+                    Descarga la plantilla Excel, complétala e impórtala para cargar partidos y jugadores.
+                  </p>
+                </div>
+                <div class="config__card-body">
+                  <div class="config__actions">
+                    <a-button @click="downloadTemplate">Descargar plantilla</a-button>
+                    <a-upload
+                      :show-upload-list="false"
+                      accept=".xlsx,.xls,.csv"
+                      :before-upload="(f: File) => { onCsvUpload(f); return false }"
+                    >
+                      <a-button type="primary" :loading="importing">
+                        Importar Excel
+                      </a-button>
+                    </a-upload>
+                  </div>
+                  <ul class="config__notes">
+                    <li>
+                      Hojas <strong>Calendario</strong> y <strong>Jugadores</strong>
+                      (nombre completo en una columna).
+                    </li>
+                    <li>
+                      <strong>fecha_programada</strong> (ej. 2026-06-15 18:00) = hora del partido.
+                    </li>
+                    <li>
+                      Posición = jugador, arquero, capitán o Asistente Capitán.
+                    </li>
+                  </ul>
+                </div>
+              </section>
+
+              <section
+                v-if="isOwner"
+                class="config__card"
+                aria-labelledby="config-asistentes"
+              >
+                <div class="config__card-top">
+                  <span class="config__eyebrow">Equipo</span>
+                  <h3 id="config-asistentes">Asistentes</h3>
                   <p class="config__desc">
                     Hasta {{ MAX_TOURNAMENT_ASSISTANTS }} personas pueden operar calendario y controles
                     ({{ assistants.length }}/{{ MAX_TOURNAMENT_ASSISTANTS }}).
                   </p>
                 </div>
-              </div>
-
-              <div v-if="assistants.length" class="config__list">
-                <div
-                  v-for="item in assistants"
-                  :key="item.user_id"
-                  class="config__row"
-                >
-                  <div class="config__row-main">
-                    <strong>{{ item.email }}</strong>
-                    <span class="config__badge">Asistente</span>
-                  </div>
-                  <a-popconfirm
-                    title="¿Quitar a esta persona como asistente?"
-                    ok-text="Sí, quitar"
-                    cancel-text="Cancelar"
-                    @confirm="removeAssistant(item.user_id)"
-                  >
-                    <a-button
-                      danger
-                      size="small"
-                      :loading="removingAssistantId === item.user_id"
+                <div class="config__card-body">
+                  <div v-if="assistants.length" class="config__list">
+                    <div
+                      v-for="item in assistants"
+                      :key="item.user_id"
+                      class="config__row"
                     >
-                      Quitar
+                      <div class="config__row-main">
+                        <strong>{{ item.email }}</strong>
+                        <span class="config__badge">Asistente</span>
+                      </div>
+                      <a-popconfirm
+                        title="¿Quitar a esta persona como asistente?"
+                        ok-text="Sí, quitar"
+                        cancel-text="Cancelar"
+                        @confirm="removeAssistant(item.user_id)"
+                      >
+                        <a-button
+                          danger
+                          size="small"
+                          :loading="removingAssistantId === item.user_id"
+                        >
+                          Quitar
+                        </a-button>
+                      </a-popconfirm>
+                    </div>
+                  </div>
+                  <p v-else class="config__hint">Aún no hay asistentes asignados.</p>
+
+                  <div v-if="canAddAssistant" class="config__form">
+                    <a-input
+                      v-model:value="assistantEmail"
+                      type="email"
+                      placeholder="correo@ejemplo.com"
+                      :disabled="assigningAssistant"
+                      @press-enter="submitAssistant"
+                    />
+                    <a-button
+                      type="primary"
+                      class="config__form-submit"
+                      :loading="assigningAssistant"
+                      :disabled="!assistantEmail.trim()"
+                      @click="submitAssistant"
+                    >
+                      Agregar
                     </a-button>
-                  </a-popconfirm>
+                  </div>
                 </div>
-              </div>
-              <p v-else class="config__empty">Aún no hay asistentes asignados.</p>
+              </section>
 
-              <div v-if="canAddAssistant" class="config__form">
-                <a-input
-                  v-model:value="assistantEmail"
-                  type="email"
-                  placeholder="correo@ejemplo.com"
-                  :disabled="assigningAssistant"
-                  @press-enter="submitAssistant"
-                />
-                <a-button
-                  type="primary"
-                  class="config__form-submit"
-                  :loading="assigningAssistant"
-                  :disabled="!assistantEmail.trim()"
-                  @click="submitAssistant"
-                >
-                  Agregar
-                </a-button>
-              </div>
-            </section>
-
-            <section class="config__panel" aria-labelledby="config-enlaces">
-              <div class="config__panel-head">
-                <div>
-                  <h2 id="config-enlaces">Enlaces por cancha</h2>
-                  <p class="config__desc">
-                    Enlaces fijos de OBS y Live. No cambian entre partidos de la misma cancha.
+              <section
+                class="config__card config__card--wide"
+                aria-labelledby="config-enlaces"
+              >
+                <div class="config__stream-head">
+                  <div class="config__card-top">
+                    <span class="config__eyebrow">Transmisión</span>
+                    <h3 id="config-enlaces">Enlaces por cancha</h3>
+                    <p class="config__desc">
+                      Enlaces fijos de OBS y Live. No cambian entre partidos de la misma cancha.
+                    </p>
+                  </div>
+                  <p v-if="streamCourts.length" class="config__stream-count">
+                    {{ streamCourts.length }}
+                    {{ streamCourts.length === 1 ? 'cancha' : 'canchas' }}
                   </p>
                 </div>
-              </div>
-
-              <div v-if="streamCourts.length" class="config__list">
-                <div
-                  v-for="court in streamCourts"
-                  :key="court"
-                  class="config__row config__row--links"
-                >
-                  <span class="config__row-main">Cancha {{ court }}</span>
-                  <div class="config__row-actions">
-                    <a-button
-                      size="small"
-                      @click="copyCourtLink(court, 'obs')"
+                <div class="config__card-body">
+                  <div v-if="streamCourts.length" class="config__courts">
+                    <div
+                      v-for="court in streamCourts"
+                      :key="court"
+                      class="config__court"
                     >
-                      {{
-                        copiedLinkKey === `${court}-obs`
-                          ? '¡Copiado!'
-                          : 'Copiar OBS'
-                      }}
-                    </a-button>
-                    <a-button
-                      size="small"
-                      @click="copyCourtLink(court, 'live')"
-                    >
-                      {{
-                        copiedLinkKey === `${court}-live`
-                          ? '¡Copiado!'
-                          : 'Copiar Live'
-                      }}
-                    </a-button>
+                      <span class="config__court-label">Cancha {{ court }}</span>
+                      <div class="config__court-actions">
+                        <a-button
+                          class="config__court-btn"
+                          @click="copyCourtLink(court, 'obs')"
+                        >
+                          {{
+                            copiedLinkKey === `${court}-obs`
+                              ? '¡Copiado!'
+                              : 'Copiar OBS'
+                          }}
+                        </a-button>
+                        <a-button
+                          class="config__court-btn"
+                          type="primary"
+                          ghost
+                          @click="copyCourtLink(court, 'live')"
+                        >
+                          {{
+                            copiedLinkKey === `${court}-live`
+                              ? '¡Copiado!'
+                              : 'Copiar Live'
+                          }}
+                        </a-button>
+                      </div>
+                    </div>
                   </div>
+                  <p v-else class="config__hint">
+                    Importa el calendario o agrega partidos para generar los enlaces por cancha.
+                  </p>
                 </div>
-              </div>
-              <p v-else class="config__empty">
-                Importa el calendario o agrega partidos para generar los enlaces por cancha.
-              </p>
-            </section>
+              </section>
+            </div>
 
             <section class="config__danger" aria-labelledby="config-peligro">
               <div class="config__danger-head">
-                <h2 id="config-peligro">Zona de peligro</h2>
+                <span class="config__eyebrow config__eyebrow--danger">Peligro</span>
+                <h3 id="config-peligro">Zona de peligro</h3>
                 <p class="config__desc">
                   Úsalas solo si estás seguro. Piden confirmación antes de ejecutarse.
                 </p>
@@ -1135,7 +1151,7 @@ onUnmounted(() => {
                   class="config__danger-row"
                 >
                   <div>
-                    <h3>Finalizar torneo</h3>
+                    <h4>Finalizar torneo</h4>
                     <p>
                       Cierra el torneo. Los partidos sin jugar quedan 0-0 y no se podrán iniciar ni abrir controles.
                     </p>
@@ -1151,7 +1167,7 @@ onUnmounted(() => {
 
                 <div class="config__danger-row">
                   <div>
-                    <h3>Limpiar datos</h3>
+                    <h4>Limpiar datos</h4>
                     <p>
                       Quita partidos, plantillas y resultados. El torneo queda en borrador.
                     </p>
@@ -1168,7 +1184,7 @@ onUnmounted(() => {
 
                 <div v-if="isOwner" class="config__danger-row">
                   <div>
-                    <h3>Eliminar torneo</h3>
+                    <h4>Eliminar torneo</h4>
                     <p>
                       Borra el torneo de la base de datos, con asistentes e información.
                     </p>
@@ -1486,69 +1502,155 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  max-width: 40rem;
+  width: 100%;
+  max-width: none;
 }
 
 .config__intro {
+  margin: 0;
+}
+
+.config__title {
   margin: 0 0 0.25rem;
-
-  p {
-    margin: 0;
-    font-size: 0.9rem;
-    line-height: 1.45;
-    color: var(--app-text-muted);
-  }
+  font-size: 1.15rem;
+  font-weight: 650;
+  color: var(--app-text);
 }
 
-.config__panel {
-  padding: 1.15rem 0 1.35rem;
-  border-bottom: 1px solid var(--app-border);
+.config__intro p {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--app-text-muted);
 }
 
-.config__panel-head {
+.config__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.config__card {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 1rem;
-  flex-wrap: wrap;
-  margin-bottom: 0.85rem;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1.1rem 1.15rem 1.2rem;
+  border-radius: 12px;
+  border: 1px solid var(--app-border);
+  background: var(--app-bg-elevated);
+  min-width: 0;
+}
 
-  h2 {
-    margin: 0 0 0.35rem;
-    font-size: 1.2rem;
-    font-weight: 600;
-    letter-spacing: 0.01em;
-    color: var(--app-text);
+.config__card--wide {
+  grid-column: 1 / -1;
+}
+
+.config__card--split {
+  @media (min-width: 640px) {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    padding-block: 1.15rem;
+
+    .config__card-top {
+      flex: 1 1 auto;
+      min-width: 0;
+      max-width: none;
+    }
+
+    .config__card-body {
+      flex: 0 0 18rem;
+      width: 18rem;
+      margin-top: 0;
+    }
   }
+
+  @media (min-width: 960px) {
+    .config__card-body {
+      flex-basis: 22rem;
+      width: 22rem;
+    }
+  }
+}
+
+.config__card-top {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.config__eyebrow {
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--app-primary);
+
+  &--danger {
+    color: var(--app-danger-text);
+  }
+}
+
+.config__card-top h3,
+.config__danger-head h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 650;
+  color: var(--app-text);
 }
 
 .config__desc {
   margin: 0;
-  max-width: 28rem;
-  font-size: 0.85rem;
-  line-height: 1.4;
+  font-size: 0.84rem;
+  line-height: 1.45;
   color: var(--app-text-muted);
+}
+
+.config__card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: auto;
+}
+
+.config__card-body--end {
+  align-items: stretch;
+}
+
+.config__visibility {
+  display: flex !important;
+  width: 100%;
+
+  :deep(.ant-radio-button-wrapper) {
+    flex: 1;
+    text-align: center;
+  }
+}
+
+.config__export-btn {
+  width: 100%;
+  justify-content: center;
 }
 
 .config__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  flex-shrink: 0;
 }
 
 .config__notes {
   margin: 0;
-  padding: 0.75rem 0.9rem 0.75rem 1.35rem;
+  padding: 0.7rem 0.85rem 0.7rem 1.25rem;
   border-radius: 8px;
   background: var(--app-surface);
   border: 1px solid var(--app-border);
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   line-height: 1.45;
   color: var(--app-text-muted);
 
   li + li {
-    margin-top: 0.35rem;
+    margin-top: 0.3rem;
   }
 
   strong {
@@ -1563,12 +1665,54 @@ onUnmounted(() => {
   gap: 0.45rem;
 }
 
-.config__list--grid {
-  @media (min-width: 640px) {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.5rem;
-  }
+.config__stream-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.config__stream-count {
+  margin: 0.15rem 0 0;
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+.config__courts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14.5rem, 1fr));
+  gap: 0.65rem;
+}
+
+.config__court {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.85rem 0.9rem;
+  border-radius: 10px;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  min-width: 0;
+}
+
+.config__court-label {
+  font-size: 0.92rem;
+  font-weight: 650;
+  color: var(--app-text);
+}
+
+.config__court-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+}
+
+.config__court-btn {
+  width: 100%;
 }
 
 .config__row {
@@ -1588,18 +1732,7 @@ onUnmounted(() => {
   flex-wrap: wrap;
   gap: 0.4rem;
   min-width: 0;
-  font-size: 0.92rem;
-}
-
-.config__row--links {
-  flex-wrap: wrap;
-}
-
-.config__row-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  justify-content: flex-end;
+  font-size: 0.9rem;
 }
 
 .config__badge {
@@ -1610,9 +1743,9 @@ onUnmounted(() => {
   color: rgba(179, 127, 235, 0.95);
 }
 
-.config__empty {
+.config__hint {
   margin: 0;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--app-text-muted);
 }
 
@@ -1620,7 +1753,6 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 0.5rem;
-  margin-top: 0.75rem;
 }
 
 :deep(.config__form-submit.ant-btn-primary) {
@@ -1628,57 +1760,59 @@ onUnmounted(() => {
 }
 
 .config__danger {
-  margin-top: 0.5rem;
-  padding: 1.15rem 1rem 1.25rem;
-  border-radius: 10px;
+  padding: 1.15rem 1.15rem 1.25rem;
+  border-radius: 12px;
   border: 1px solid var(--app-danger-border);
   background: var(--app-danger-hover-bg);
 }
 
 .config__danger-head {
-  margin-bottom: 1rem;
+  margin-bottom: 0.85rem;
 
-  h2 {
-    margin: 0 0 0.35rem;
-    font-size: 1.2rem;
-    font-weight: 600;
+  h3 {
     color: var(--app-danger-text);
   }
 }
 
 .config__danger-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
   gap: 0.65rem;
 }
 
 .config__danger-row {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
-  padding: 0.85rem 0;
-  border-top: 1px solid rgba(255, 77, 79, 0.18);
+  gap: 0.85rem;
+  padding: 0.9rem 0.95rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 77, 79, 0.16);
+  background: color-mix(in srgb, var(--app-bg-elevated) 88%, transparent);
 
-  &:first-child {
-    border-top: none;
-    padding-top: 0;
-  }
-
-  h3 {
-    margin: 0 0 0.2rem;
+  h4 {
+    margin: 0 0 0.25rem;
     font-size: 0.92rem;
-    font-weight: 600;
+    font-weight: 650;
     color: var(--app-text);
   }
 
   p {
     margin: 0;
-    max-width: 22rem;
     font-size: 0.8rem;
     line-height: 1.4;
     color: var(--app-text-muted);
+  }
+
+  .ant-btn {
+    align-self: stretch;
+  }
+}
+
+@media (max-width: 860px) {
+  .config__grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1687,12 +1821,8 @@ onUnmounted(() => {
     grid-template-columns: 1fr;
   }
 
-  .config__danger-row {
-    align-items: stretch;
-
-    .ant-btn {
-      width: 100%;
-    }
+  .config__danger-list {
+    grid-template-columns: 1fr;
   }
 }
 </style>
