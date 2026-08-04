@@ -339,6 +339,64 @@ export type TournamentRosterInput = {
   position?: string | null
 }
 
+export type TournamentRosterCreateInput = {
+  team: string
+  number: string
+  name: string
+  category?: string | null
+  position?: string | null
+}
+
+export async function createTournamentRosterPlayer(
+  tournamentId: string,
+  input: TournamentRosterCreateInput,
+): Promise<TournamentRosterPlayer> {
+  const number = input.number.trim()
+  const name = input.name.trim()
+  const team = input.team.trim()
+  if (!tournamentId || !team || !number || !name) {
+    throw new Error('Equipo, dorsal y nombre son obligatorios.')
+  }
+
+  try {
+    const rows = await supabaseRest<TournamentRosterPlayer[]>(
+      'tournament_rosters',
+      {
+        method: 'POST',
+        body: {
+          tournament_id: tournamentId,
+          team,
+          category: input.category?.trim() || null,
+          number,
+          name,
+          last_name: '',
+          position: input.position?.trim() || null,
+        },
+        prefer: 'return=representation',
+      },
+    )
+
+    if (!rows[0]) {
+      throw new Error('No se pudo agregar el jugador.')
+    }
+
+    return rows[0]
+  } catch (err) {
+    const message = err instanceof Error ? err.message : ''
+    if (
+      message.includes('tournament_rosters_unique_idx') ||
+      message.includes('duplicate key')
+    ) {
+      throw new Error(
+        `Ya existe el dorsal #${number} en este equipo` +
+          (input.category?.trim() ? ` (${input.category.trim()})` : '') +
+          '.',
+      )
+    }
+    throw err
+  }
+}
+
 export async function updateTournamentRosterPlayer(
   playerId: string,
   input: TournamentRosterInput,
@@ -352,20 +410,39 @@ export async function updateTournamentRosterPlayer(
   if (input.category !== undefined) body.category = input.category?.trim() || null
   if (input.position !== undefined) body.position = input.position?.trim() || null
 
-  const rows = await supabaseRest<TournamentRosterPlayer[]>(
-    `tournament_rosters?id=eq.${playerId}`,
-    {
-      method: 'PATCH',
-      body,
-      prefer: 'return=representation',
-    },
-  )
+  try {
+    const rows = await supabaseRest<TournamentRosterPlayer[]>(
+      `tournament_rosters?id=eq.${playerId}`,
+      {
+        method: 'PATCH',
+        body,
+        prefer: 'return=representation',
+      },
+    )
 
-  if (!rows[0]) {
-    throw new Error('No se pudo actualizar el jugador.')
+    if (!rows[0]) {
+      throw new Error('No se pudo actualizar el jugador.')
+    }
+
+    return rows[0]
+  } catch (err) {
+    const message = err instanceof Error ? err.message : ''
+    if (
+      message.includes('tournament_rosters_unique_idx') ||
+      message.includes('duplicate key')
+    ) {
+      throw new Error('Ese dorsal ya está usado en esta categoría del equipo.')
+    }
+    throw err
   }
+}
 
-  return rows[0]
+export async function deleteTournamentRosterPlayer(
+  playerId: string,
+): Promise<void> {
+  await supabaseRest(`tournament_rosters?id=eq.${playerId}`, {
+    method: 'DELETE',
+  })
 }
 
 /**

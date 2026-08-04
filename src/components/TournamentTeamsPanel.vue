@@ -3,6 +3,8 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import type { Rule } from 'ant-design-vue/es/form'
 import {
+  createTournamentRosterPlayer,
+  deleteTournamentRosterPlayer,
   fetchTournamentRosters,
   syncTournamentTeams,
   updateTournamentRosterPlayer,
@@ -39,11 +41,17 @@ const teams = ref<TournamentTeam[]>([])
 const rosters = ref<TournamentRosterPlayer[]>([])
 const savingId = ref<string | null>(null)
 const savingPlayerId = ref<string | null>(null)
+const deletingPlayerId = ref<string | null>(null)
 const showPlayerModal = ref(false)
+const playerModalMode = ref<'create' | 'edit'>('edit')
 const editingPlayerId = ref<string | null>(null)
 const playerFormError = ref<string | null>(null)
 const logoPreview = ref<{ url: string; team: string } | null>(null)
 const drafts = reactive<Record<string, { color: string; logo_url: string }>>({})
+
+const selectedTeamId = ref<string | null>(null)
+const teamQuery = ref('')
+const categoryFilter = ref('all')
 
 const playerForm = reactive({
   number: '',
@@ -77,6 +85,59 @@ const teamViews = computed(() =>
         })),
     }
   }),
+)
+
+const filteredTeamViews = computed(() => {
+  const q = teamQuery.value.trim().toLowerCase()
+  if (!q) return teamViews.value
+  return teamViews.value.filter((view) => view.team.team.toLowerCase().includes(q))
+})
+
+const selectedView = computed(
+  () =>
+    teamViews.value.find((view) => view.team.id === selectedTeamId.value) ??
+    filteredTeamViews.value[0] ??
+    null,
+)
+
+const categoryOptions = computed(() => {
+  const view = selectedView.value
+  if (!view) return [{ value: 'all', label: 'Todas' }]
+  return [
+    { value: 'all', label: `Todas (${view.playerCount})` },
+    ...view.categories.map((group) => ({
+      value: group.category,
+      label: `${group.category} (${group.players.length})`,
+    })),
+  ]
+})
+
+const visiblePlayers = computed(() => {
+  const view = selectedView.value
+  if (!view) return [] as Array<TournamentRosterPlayer & { categoryLabel: string }>
+  const groups =
+    categoryFilter.value === 'all'
+      ? view.categories
+      : view.categories.filter((group) => group.category === categoryFilter.value)
+  return groups.flatMap((group) =>
+    group.players.map((player) => ({
+      ...player,
+      categoryLabel: group.category,
+    })),
+  )
+})
+
+const totals = computed(() => ({
+  teams: teams.value.length,
+  players: rosters.value.length,
+}))
+
+const playerModalTitle = computed(() =>
+  playerModalMode.value === 'create' ? 'Agregar jugador' : 'Editar jugador',
+)
+
+const playerSubmitLabel = computed(() =>
+  playerModalMode.value === 'create' ? 'Agregar' : 'Guardar cambios',
 )
 
 function ensureDraft(team: TournamentTeam): void {
@@ -119,6 +180,11 @@ function onNumberPaste(event: ClipboardEvent): void {
   playerForm.number = digitsOnly(text)
 }
 
+function selectTeam(teamId: string): void {
+  selectedTeamId.value = teamId
+  categoryFilter.value = 'all'
+}
+
 async function loadTeams(): Promise<void> {
   loading.value = true
   try {
@@ -134,6 +200,13 @@ async function loadTeams(): Promise<void> {
         logo_url: team.logo_url || '',
       }
     }
+    if (
+      !selectedTeamId.value ||
+      !synced.some((team) => team.id === selectedTeamId.value)
+    ) {
+      selectedTeamId.value = synced[0]?.id ?? null
+    }
+    categoryFilter.value = 'all'
   } catch (err) {
     message.error(
       err instanceof Error ? err.message : 'No se pudieron cargar los equipos.',
@@ -185,15 +258,33 @@ function openLogoPreview(view: { team: TournamentTeam }): void {
 
 function resetPlayerForm(): void {
   editingPlayerId.value = null
+  playerModalMode.value = 'edit'
   playerForm.number = ''
   playerForm.name = ''
-  playerForm.category = ''
+  playerForm.category =
+    categoryFilter.value !== 'all' ? categoryFilter.value : ''
   playerForm.role = 'player'
   playerFormError.value = null
 }
 
+function openCreatePlayer(): void {
+  if (!props.canEdit || !selectedView.value) return
+  playerModalMode.value = 'create'
+  editingPlayerId.value = null
+  playerForm.number = ''
+  playerForm.name = ''
+  playerForm.category =
+    categoryFilter.value !== 'all' && categoryFilter.value !== 'Sin categoría'
+      ? categoryFilter.value
+      : ''
+  playerForm.role = 'player'
+  playerFormError.value = null
+  showPlayerModal.value = true
+}
+
 function openEditPlayer(player: TournamentRosterPlayer): void {
   if (!props.canEdit) return
+  playerModalMode.value = 'edit'
   editingPlayerId.value = player.id
   playerForm.number = player.number
   playerForm.name = playerDisplayName(player)
@@ -204,23 +295,48 @@ function openEditPlayer(player: TournamentRosterPlayer): void {
 }
 
 async function submitPlayer(): Promise<void> {
-  if (!editingPlayerId.value) return
+  if (!props.canEdit) return
 
-  savingPlayerId.value = editingPlayerId.value
+  savingPlayerId.value = editingPlayerId.value ?? 'new'
   playerFormError.value = null
   try {
-    const updated = await updateTournamentRosterPlayer(editingPlayerId.value, {
+    const payload = {
       number: digitsOnly(playerForm.number),
       name: playerForm.name.trim(),
       category: playerForm.category.trim() || null,
       position: roleToPositionText(playerForm.role),
-    })
-    rosters.value = rosters.value.map((item) =>
-      item.id === updated.id ? updated : item,
-    )
+    }
+
+    if (!payload.number || !payload.name) {
+      throw new Error('Dorsal y nombre son obligatorios.')
+    }
+
+    if (playerModalMode.value === 'create') {
+      const teamName = selectedView.value?.team.team
+      if (!teamName) throw new Error('Selecciona un equipo.')
+      const created = await createTournamentRosterPlayer(props.tournamentId, {
+        team: teamName,
+        ...payload,
+      })
+      rosters.value = [...rosters.value, created]
+      if (created.category?.trim()) {
+        categoryFilter.value = created.category.trim()
+      }
+      message.success('Jugador agregado.')
+    } else {
+      if (!editingPlayerId.value) return
+      const updated = await updateTournamentRosterPlayer(
+        editingPlayerId.value,
+        payload,
+      )
+      rosters.value = rosters.value.map((item) =>
+        item.id === updated.id ? updated : item,
+      )
+      message.success('Jugador actualizado.')
+    }
+
     showPlayerModal.value = false
     resetPlayerForm()
-    message.success('Jugador actualizado.')
   } catch (err) {
     playerFormError.value =
       err instanceof Error ? err.message : 'No se pudo guardar el jugador.'
@@ -229,12 +345,37 @@ async function submitPlayer(): Promise<void> {
   }
 }
 
+async function removePlayer(player: TournamentRosterPlayer): Promise<void> {
+  if (!props.canEdit || deletingPlayerId.value) return
+  deletingPlayerId.value = player.id
+  try {
+    await deleteTournamentRosterPlayer(player.id)
+    rosters.value = rosters.value.filter((item) => item.id !== player.id)
+    message.success('Jugador eliminado.')
+  } catch (err) {
+    message.error(
+      err instanceof Error ? err.message : 'No se pudo eliminar el jugador.',
+    )
+  } finally {
+    deletingPlayerId.value = null
+  }
+}
+
 watch(
   () => props.tournamentId,
   () => {
+    selectedTeamId.value = null
     void loadTeams()
   },
 )
+
+watch(filteredTeamViews, (views) => {
+  if (!views.length) return
+  if (!views.some((view) => view.team.id === selectedTeamId.value)) {
+    selectedTeamId.value = views[0]!.team.id
+    categoryFilter.value = 'all'
+  }
+})
 
 onMounted(() => {
   void loadTeams()
@@ -247,10 +388,17 @@ defineExpose({ reload: loadTeams })
   <a-spin :spinning="loading">
     <div class="teams-panel">
       <header class="teams-panel__intro">
-        <p>
-          Revisa las plantillas por equipo y define el color y el logo que se
-          usarán en el overlay al iniciar un partido.
-        </p>
+        <div>
+          <h2 class="teams-panel__title">Equipos</h2>
+          <p>
+            Color y logo para el marcador TV, y nómina por categoría.
+            <template v-if="totals.teams">
+              {{ totals.teams }} {{ totals.teams === 1 ? 'equipo' : 'equipos' }}
+              · {{ totals.players }}
+              {{ totals.players === 1 ? 'jugador' : 'jugadores' }}.
+            </template>
+          </p>
+        </div>
         <a-button size="small" :loading="loading" @click="loadTeams">
           Actualizar
         </a-button>
@@ -261,45 +409,78 @@ defineExpose({ reload: loadTeams })
         description="Aún no hay equipos. Agrega partidos o importa la plantilla."
       />
 
-      <div v-else class="teams-panel__list">
-        <article
-          v-for="view in teamViews"
-          :key="view.team.id"
-          class="teams-panel__card"
-        >
-          <div class="teams-panel__head">
-            <div class="teams-panel__identity">
+      <div v-else class="teams-panel__shell">
+        <aside class="teams-panel__rail" aria-label="Lista de equipos">
+          <a-input
+            v-model:value="teamQuery"
+            allow-clear
+            placeholder="Buscar equipo…"
+            class="teams-panel__search"
+          />
+          <div class="teams-panel__rail-list" role="listbox">
+            <button
+              v-for="view in filteredTeamViews"
+              :key="view.team.id"
+              type="button"
+              role="option"
+              class="teams-panel__rail-item"
+              :class="{ 'teams-panel__rail-item--active': selectedView?.team.id === view.team.id }"
+              :aria-selected="selectedView?.team.id === view.team.id"
+              @click="selectTeam(view.team.id)"
+            >
               <span
                 class="teams-panel__swatch"
                 :style="{ background: drafts[view.team.id]?.color || view.team.color }"
               />
-              <div>
-                <h3>{{ view.team.team }}</h3>
-                <p>
-                  {{ view.playerCount }}
-                  {{ view.playerCount === 1 ? 'jugador' : 'jugadores' }}
-                </p>
-              </div>
+              <span class="teams-panel__rail-name">{{ view.team.team }}</span>
+              <span class="teams-panel__rail-count">{{ view.playerCount }}</span>
+            </button>
+            <p v-if="!filteredTeamViews.length" class="teams-panel__rail-empty">
+              Sin coincidencias
+            </p>
+          </div>
+        </aside>
+
+        <section v-if="selectedView" class="teams-panel__detail">
+          <div class="teams-panel__detail-head">
+            <div class="teams-panel__identity">
               <button
-                v-if="drafts[view.team.id]?.logo_url || view.team.logo_url"
+                v-if="drafts[selectedView.team.id]?.logo_url || selectedView.team.logo_url"
                 type="button"
                 class="teams-panel__logo-btn"
-                :aria-label="`Ver logo de ${view.team.team}`"
-                @click="openLogoPreview(view)"
+                :aria-label="`Ver logo de ${selectedView.team.team}`"
+                @click="openLogoPreview(selectedView)"
               >
                 <img
-                  :src="drafts[view.team.id]?.logo_url || view.team.logo_url"
-                  :alt="view.team.team"
+                  :src="drafts[selectedView.team.id]?.logo_url || selectedView.team.logo_url"
+                  :alt="selectedView.team.team"
                   class="teams-panel__logo-preview"
                 />
               </button>
+              <span
+                v-else
+                class="teams-panel__swatch teams-panel__swatch--lg"
+                :style="{ background: drafts[selectedView.team.id]?.color || selectedView.team.color }"
+              />
+              <div class="teams-panel__identity-text">
+                <h3>{{ selectedView.team.team }}</h3>
+                <p>
+                  {{ selectedView.playerCount }}
+                  {{ selectedView.playerCount === 1 ? 'jugador' : 'jugadores' }}
+                  · {{ selectedView.categories.length }}
+                  {{ selectedView.categories.length === 1 ? 'categoría' : 'categorías' }}
+                </p>
+              </div>
             </div>
 
-            <div v-if="canEdit && drafts[view.team.id]" class="teams-panel__fields">
+            <div
+              v-if="canEdit && drafts[selectedView.team.id]"
+              class="teams-panel__fields"
+            >
               <label class="teams-panel__field">
                 <span>Color</span>
                 <input
-                  v-model="drafts[view.team.id]!.color"
+                  v-model="drafts[selectedView.team.id]!.color"
                   type="color"
                   class="teams-panel__color"
                 />
@@ -307,71 +488,138 @@ defineExpose({ reload: loadTeams })
               <label class="teams-panel__field teams-panel__field--grow">
                 <span>Logo (URL)</span>
                 <a-input
-                  v-model:value="drafts[view.team.id]!.logo_url"
+                  v-model:value="drafts[selectedView.team.id]!.logo_url"
                   placeholder="https://…"
                   allow-clear
+                  size="small"
                 />
               </label>
               <a-button
                 type="primary"
-                :loading="savingId === view.team.id"
-                @click="saveTeam(view.team)"
+                size="small"
+                :loading="savingId === selectedView.team.id"
+                @click="saveTeam(selectedView.team)"
               >
                 Guardar
               </a-button>
             </div>
-            <div v-else class="teams-panel__readonly">
-              <span
-                class="teams-panel__swatch teams-panel__swatch--sm"
-                :style="{ background: view.team.color }"
-              />
-              <span class="teams-panel__muted">
-                {{ view.team.logo_url || 'Sin logo' }}
-              </span>
-            </div>
           </div>
 
-          <div v-if="view.categories.length" class="teams-panel__categories">
-            <div
-              v-for="group in view.categories"
-              :key="group.category"
-              class="teams-panel__category"
+          <div class="teams-panel__filters">
+            <a-segmented
+              v-if="categoryOptions.length > 1"
+              v-model:value="categoryFilter"
+              :options="categoryOptions"
+              size="small"
+            />
+            <span v-else class="teams-panel__muted">Sin categorías</span>
+            <a-button
+              v-if="canEdit"
+              type="primary"
+              size="small"
+              class="teams-panel__add"
+              @click="openCreatePlayer"
             >
-              <h4>{{ group.category }}</h4>
-              <div class="teams-panel__players">
-                <div
-                  v-for="player in group.players"
-                  :key="player.id"
-                  class="teams-panel__player"
-                >
-                  <span class="teams-panel__number">#{{ player.number }}</span>
-                  <span class="teams-panel__name">
-                    {{ playerDisplayName(player) }}
-                  </span>
-                  <span class="teams-panel__role">{{ playerRole(player) }}</span>
-                  <a-button
-                    v-if="canEdit"
-                    type="link"
-                    size="small"
-                    class="teams-panel__edit"
-                    @click="openEditPlayer(player)"
-                  >
-                    Editar
-                  </a-button>
-                </div>
-              </div>
-            </div>
+              + Agregar jugador
+            </a-button>
           </div>
-          <p v-else class="teams-panel__empty-roster">
-            Sin jugadores importados para este equipo.
-          </p>
-        </article>
+
+          <div v-if="visiblePlayers.length" class="teams-panel__table-wrap">
+            <table class="teams-panel__table">
+              <thead>
+                <tr>
+                  <th class="teams-panel__col-num">#</th>
+                  <th>Jugador</th>
+                  <th class="teams-panel__col-cat">Categoría</th>
+                  <th class="teams-panel__col-role">Rol</th>
+                  <th v-if="canEdit" class="teams-panel__col-action" />
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="player in visiblePlayers"
+                  :key="player.id"
+                  class="teams-panel__row"
+                  :class="{ 'teams-panel__row--editable': canEdit }"
+                  @click="canEdit ? openEditPlayer(player) : undefined"
+                >
+                  <td class="teams-panel__col-num">{{ player.number }}</td>
+                  <td class="teams-panel__col-name">{{ playerDisplayName(player) }}</td>
+                  <td class="teams-panel__col-cat">{{ player.categoryLabel }}</td>
+                  <td class="teams-panel__col-role">{{ playerRole(player) }}</td>
+                  <td v-if="canEdit" class="teams-panel__col-action">
+                    <div class="teams-panel__row-actions" @click.stop>
+                      <a-button
+                        type="text"
+                        size="small"
+                        class="teams-panel__icon-btn"
+                        aria-label="Editar jugador"
+                        title="Editar"
+                        @click="openEditPlayer(player)"
+                      >
+                        <span class="teams-panel__icon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 20h9" />
+                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                          </svg>
+                        </span>
+                      </a-button>
+                      <a-popconfirm
+                        title="¿Eliminar este jugador de la nómina del torneo?"
+                        ok-text="Eliminar"
+                        cancel-text="Cancelar"
+                        ok-type="danger"
+                        :disabled="deletingPlayerId === player.id"
+                        @confirm="removePlayer(player)"
+                      >
+                        <a-button
+                          type="text"
+                          size="small"
+                          danger
+                          class="teams-panel__icon-btn"
+                          aria-label="Eliminar jugador"
+                          title="Eliminar"
+                          :loading="deletingPlayerId === player.id"
+                        >
+                          <span class="teams-panel__icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                              <path d="M3 6h18" />
+                              <path d="M8 6V4h8v2" />
+                              <path d="M19 6l-1 14H6L5 6" />
+                              <path d="M10 11v6" />
+                              <path d="M14 11v6" />
+                            </svg>
+                          </span>
+                        </a-button>
+                      </a-popconfirm>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-else class="teams-panel__empty-roster">
+            <p>
+              Sin jugadores
+              {{ categoryFilter === 'all' ? 'importados' : 'en esta categoría' }}
+              para este equipo.
+            </p>
+            <a-button
+              v-if="canEdit"
+              type="primary"
+              size="small"
+              @click="openCreatePlayer"
+            >
+              + Agregar jugador
+            </a-button>
+          </div>
+        </section>
       </div>
     </div>
 
     <a-modal
       v-model:open="showPlayerModal"
-      title="Editar jugador"
+      :title="playerModalTitle"
       :footer="null"
       destroy-on-close
       @cancel="resetPlayerForm"
@@ -447,7 +695,7 @@ defineExpose({ reload: loadTeams })
             html-type="submit"
             :loading="!!savingPlayerId"
           >
-            Guardar cambios
+            {{ playerSubmitLabel }}
           </a-button>
         </div>
       </a-form>
@@ -474,7 +722,8 @@ defineExpose({ reload: loadTeams })
 
 <style scoped lang="scss">
 .teams-panel {
-  max-width: 44rem;
+  width: 100%;
+  max-width: none;
 }
 
 .teams-panel__intro {
@@ -482,45 +731,144 @@ defineExpose({ reload: loadTeams })
   justify-content: space-between;
   align-items: flex-start;
   gap: 1rem;
-  margin-bottom: 1.25rem;
+  margin-bottom: 1rem;
+}
 
-  p {
-    margin: 0;
-    font-size: 0.9rem;
-    line-height: 1.45;
-    color: var(--app-text-muted);
+.teams-panel__title {
+  margin: 0 0 0.25rem;
+  font-size: 1.15rem;
+  font-weight: 650;
+  color: var(--app-text);
+}
+
+.teams-panel__intro p {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--app-text-muted);
+}
+
+.teams-panel__shell {
+  display: grid;
+  grid-template-columns: minmax(13rem, 17rem) minmax(0, 1fr);
+  gap: 0;
+  min-height: 28rem;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--app-bg-elevated);
+}
+
+.teams-panel__rail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.85rem 0.75rem;
+  border-right: 1px solid var(--app-border);
+  background: color-mix(in srgb, var(--app-bg-elevated) 92%, var(--app-text) 8%);
+  min-height: 0;
+}
+
+.teams-panel__search {
+  flex-shrink: 0;
+}
+
+.teams-panel__rail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+  padding-right: 0.15rem;
+}
+
+.teams-panel__rail-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--app-text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+
+  &:hover {
+    background: var(--app-surface-strong);
+  }
+
+  &--active {
+    background: var(--app-surface-strong);
+    border-color: var(--app-border-strong);
   }
 }
 
-.teams-panel__list {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+.teams-panel__rail-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.88rem;
+  font-weight: 550;
 }
 
-.teams-panel__card {
-  padding: 1rem 1.1rem 1.15rem;
-  border-radius: 10px;
-  border: 1px solid var(--app-border);
-  background: var(--app-surface);
+.teams-panel__rail-count {
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-muted);
+  background: var(--app-surface-inset);
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
 }
 
-.teams-panel__head {
+.teams-panel__rail-empty {
+  margin: 0.75rem 0.35rem;
+  font-size: 0.8rem;
+  color: var(--app-text-muted);
+}
+
+.teams-panel__detail {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
+  padding: 1rem 1.1rem 1.15rem;
+  min-width: 0;
+  min-height: 0;
+}
+
+.teams-panel__detail-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--app-border);
 }
 
 .teams-panel__identity {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  min-width: 0;
+}
+
+.teams-panel__identity-text {
+  min-width: 0;
 
   h3 {
     margin: 0;
-    font-size: 1.15rem;
-    font-weight: 600;
+    font-size: 1.25rem;
+    font-weight: 650;
     color: var(--app-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   p {
@@ -531,45 +879,41 @@ defineExpose({ reload: loadTeams })
 }
 
 .teams-panel__swatch {
-  width: 1.35rem;
-  height: 1.35rem;
-  border-radius: 4px;
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 3px;
   border: 1px solid var(--app-border-strong);
   flex-shrink: 0;
 
-  &--sm {
-    width: 1rem;
-    height: 1rem;
+  &--lg {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 8px;
   }
 }
 
 .teams-panel__logo-btn {
-  margin-left: auto;
   padding: 0;
   border: none;
   background: none;
   cursor: zoom-in;
   line-height: 0;
-  border-radius: 6px;
+  border-radius: 8px;
+  flex-shrink: 0;
 
   &:focus-visible {
-    outline: 2px solid #00b4d8;
+    outline: 2px solid var(--app-primary);
     outline-offset: 2px;
   }
 }
 
 .teams-panel__logo-preview {
-  width: 40px;
-  height: 40px;
+  width: 2.5rem;
+  height: 2.5rem;
   object-fit: contain;
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--app-surface-strong);
   border: 1px solid var(--app-border);
-  transition: transform 0.15s ease;
-
-  .teams-panel__logo-btn:hover & {
-    transform: scale(1.08);
-  }
 }
 
 .logo-preview {
@@ -589,25 +933,25 @@ defineExpose({ reload: loadTeams })
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 0.65rem;
+  gap: 0.55rem;
 }
 
 .teams-panel__field {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
-  font-size: 0.75rem;
+  gap: 0.25rem;
+  font-size: 0.72rem;
   color: var(--app-text-muted);
 
   &--grow {
     flex: 1;
-    min-width: 12rem;
+    min-width: 10rem;
   }
 }
 
 .teams-panel__color {
-  width: 3rem;
-  height: 2rem;
+  width: 2.75rem;
+  height: 1.85rem;
   padding: 0;
   border: 1px solid var(--app-border-strong);
   border-radius: 6px;
@@ -615,83 +959,143 @@ defineExpose({ reload: loadTeams })
   cursor: pointer;
 }
 
-.teams-panel__readonly {
+.teams-panel__filters {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
   gap: 0.5rem;
+  align-items: center;
+
+  :deep(.ant-segmented) {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}
+
+.teams-panel__add {
+  margin-left: auto;
 }
 
 .teams-panel__muted {
   font-size: 0.8rem;
   color: var(--app-text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.teams-panel__categories {
-  margin-top: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
+.teams-panel__table-wrap {
+  overflow: auto;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  min-height: 0;
+  flex: 1;
 }
 
-.teams-panel__category {
-  h4 {
-    margin: 0 0 0.45rem;
-    font-size: 0.78rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
+.teams-panel__table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+
+  th,
+  td {
+    padding: 0.55rem 0.7rem;
+    text-align: left;
+    border-bottom: 1px solid var(--app-border);
+    font-size: 0.85rem;
+  }
+
+  th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--app-bg-elevated);
+    color: var(--app-text-muted);
+    font-size: 0.72rem;
+    font-weight: 650;
+    letter-spacing: 0.03em;
     text-transform: uppercase;
-    color: var(--app-primary);
+  }
+
+  tbody tr:last-child td {
+    border-bottom: none;
   }
 }
 
-.teams-panel__players {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
+.teams-panel__row {
+  &--editable {
+    cursor: pointer;
+
+    &:hover td {
+      background: var(--app-surface-strong);
+    }
+  }
 }
 
-.teams-panel__player {
-  display: grid;
-  grid-template-columns: 3rem 1fr auto auto;
-  gap: 0.5rem;
-  align-items: center;
-  padding: 0.4rem 0.55rem;
-  border-radius: 6px;
-  background: var(--app-surface);
-  font-size: 0.85rem;
-}
-
-.teams-panel__number {
-  font-weight: 600;
+.teams-panel__col-num {
+  width: 3.25rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
   color: var(--app-text-soft);
 }
 
-.teams-panel__name {
+.teams-panel__col-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--app-text);
-  min-width: 0;
+}
+
+.teams-panel__col-cat {
+  width: 8.5rem;
+  color: var(--app-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.teams-panel__role {
-  font-size: 0.72rem;
+.teams-panel__col-role {
+  width: 8rem;
   color: var(--app-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.teams-panel__edit {
-  padding: 0 0.25rem;
-  height: auto;
-  font-size: 0.78rem;
+.teams-panel__col-action {
+  width: 5.5rem;
+  text-align: right;
+}
+
+.teams-panel__row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.1rem;
+}
+
+.teams-panel__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  padding: 0;
+}
+
+.teams-panel__icon {
+  display: inline-flex;
+  line-height: 0;
 }
 
 .teams-panel__empty-roster {
-  margin: 0.85rem 0 0;
-  font-size: 0.82rem;
-  color: var(--app-text-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin: 0.5rem 0 0;
+
+  p {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--app-text-muted);
+  }
 }
 
 .player-form__grid {
@@ -711,21 +1115,37 @@ defineExpose({ reload: loadTeams })
   margin-top: 0.25rem;
 }
 
+@media (max-width: 860px) {
+  .teams-panel__shell {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .teams-panel__rail {
+    border-right: none;
+    border-bottom: 1px solid var(--app-border);
+    max-height: 14rem;
+  }
+
+  .teams-panel__col-cat {
+    width: 6.5rem;
+  }
+
+  .teams-panel__col-role {
+    width: 6.5rem;
+  }
+}
+
 @media (max-width: 560px) {
   .teams-panel__intro {
     flex-direction: column;
   }
 
-  .teams-panel__player {
-    grid-template-columns: 2.5rem 1fr auto;
-    grid-template-areas:
-      'num name edit'
-      'role role role';
+  .teams-panel__table {
+    th.teams-panel__col-cat,
+    td.teams-panel__col-cat {
+      display: none;
+    }
   }
-
-  .teams-panel__number { grid-area: num; }
-  .teams-panel__name { grid-area: name; }
-  .teams-panel__role { grid-area: role; }
-  .teams-panel__edit { grid-area: edit; }
 }
 </style>
