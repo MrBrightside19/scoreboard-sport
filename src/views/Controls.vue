@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { Modal } from 'ant-design-vue'
 import { useScoreboardStore } from '@/stores/scoreboard'
@@ -64,10 +64,53 @@ const skipLeaveGuard = ref(false)
 const activeTab = ref('match')
 const clockDraft = ref(store.state.timeGame)
 const clockEditing = ref(false)
+const clockSectionEl = ref<HTMLElement | null>(null)
+const clockInView = ref(true)
+let clockObserver: IntersectionObserver | null = null
 let lastCountdownBeepSecond: number | null = null
 /** Evita repetir el aviso de últimos minutos en el mismo periodo/umbral. */
 let lateGameWarningKey: string | null = null
 let prevLateGameSeconds: number | null = null
+
+const showDockClock = computed(
+  () => Boolean(matchId.value) && !clockInView.value,
+)
+
+const dockClockTime = computed(() =>
+  store.state.intermissionActive
+    ? store.state.intermissionTime
+    : store.state.timeGame,
+)
+
+const dockClockLabel = computed(() => {
+  if (store.state.intermissionActive) {
+    return store.state.isPaused ? 'Descanso · pausa' : 'Descanso'
+  }
+  return store.state.isPaused
+    ? `P${store.state.gamePeriod} · pausa`
+    : `Periodo ${store.state.gamePeriod}`
+})
+
+function scrollToClock(): void {
+  clockSectionEl.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+
+function setupClockObserver(): void {
+  clockObserver?.disconnect()
+  clockObserver = null
+  const el = clockSectionEl.value
+  if (!el || typeof IntersectionObserver === 'undefined') {
+    clockInView.value = true
+    return
+  }
+  clockObserver = new IntersectionObserver(
+    ([entry]) => {
+      clockInView.value = entry?.isIntersecting ?? true
+    },
+    { root: null, threshold: 0.2, rootMargin: '-12px 0px' },
+  )
+  clockObserver.observe(el)
+}
 
 const pendingGoalsCount = computed(
   () => store.state.goals.filter((goal) => isGoalPending(goal)).length,
@@ -675,6 +718,15 @@ onMounted(() => {
       if (hydrated.value) void publish()
     }, pollMs)
   }
+  void nextTick(setupClockObserver)
+})
+
+watch(activeTab, () => {
+  void nextTick(setupClockObserver)
+})
+
+watch(matchId, () => {
+  void nextTick(setupClockObserver)
 })
 
 onBeforeRouteLeave((_to, _from, next) => {
@@ -713,6 +765,8 @@ onBeforeRouteLeave((_to, _from, next) => {
 onUnmounted(() => {
   window.removeEventListener('beforeunload', onBeforeUnload)
   window.removeEventListener('scoreboard:prefs-change', onPrefsChange)
+  clockObserver?.disconnect()
+  clockObserver = null
   if (!skipLeaveGuard.value) {
     void finalizeOnExit()
   }
@@ -1037,137 +1091,142 @@ onUnmounted(() => {
               </div>
             </a-card>
 
-            <a-card title="Reloj y periodo" class="controls__card controls__card--wide controls__card--clock">
-              <div class="controls__clock">
-                <div class="controls__clock-main">
-                  <div class="controls__clock-display">
-                    {{
-                      store.state.intermissionActive
-                        ? store.state.intermissionTime
-                        : store.state.timeGame
-                    }}
-                  </div>
-                  <p class="controls__clock-status">
-                    <template v-if="store.state.intermissionActive">
-                      {{ store.state.isPaused ? 'Descanso en pausa' : 'Descanso' }}
-                    </template>
-                    <template v-else>
-                      {{ store.state.isPaused ? 'En pausa' : 'En juego' }}
-                    </template>
-                  </p>
-                  <a-button
-                    class="controls__clock-toggle"
-                    size="large"
-                    :type="store.state.isPaused ? 'primary' : 'default'"
-                    @click="store.togglePause()"
-                  >
-                    {{ store.state.isPaused ? 'Reanudar' : 'Pausar' }}
-                  </a-button>
-                </div>
-
-                <div class="controls__clock-panels">
-                  <div class="controls__clock-field controls__clock-field--time">
-                    <div class="controls__clock-field-head">
-                      <label for="controls-game-time">Ajustar tiempo</label>
-                      <TimeInput
-                        id="controls-game-time"
-                        compact
-                        :value="clockDraft"
-                        :disabled="!store.state.isPaused || store.state.intermissionActive"
-                        @update:value="onClockDraftUpdate"
-                        @focus="onClockFocus"
-                        @blur="commitClockDraft"
-                        @enter="commitClockDraft"
-                      />
-                    </div>
-                    <span class="controls__clock-hint">
+            <div ref="clockSectionEl" class="controls__clock-section">
+              <a-card
+                title="Reloj y periodo"
+                class="controls__card controls__card--wide controls__card--clock"
+              >
+                <div class="controls__clock">
+                  <div class="controls__clock-main">
+                    <div class="controls__clock-display">
                       {{
                         store.state.intermissionActive
-                          ? 'Durante el descanso usa el campo de abajo.'
-                          : store.state.isPaused
-                            ? 'Escribe minutos y segundos (solo números). Tab o flechas cambian de campo.'
-                            : 'Pausa el reloj para ajustarlo.'
+                          ? store.state.intermissionTime
+                          : store.state.timeGame
                       }}
-                      <template v-if="lateGameWarningEnabled && !store.state.intermissionActive">
-                        Aviso a los {{ lateGameWarningMinutes }} min
-                        (Perfil).
-                      </template>
-                    </span>
-                  </div>
-
-                  <div class="controls__clock-field controls__clock-field--period">
-                    <label>Periodo</label>
-                    <div class="controls__clock-period">
-                      <a-button @click="store.setPeriod(store.state.gamePeriod - 1)">−</a-button>
-                      <span class="controls__clock-period-label">
-                        {{ store.state.gamePeriod }} / {{ MAX_PERIODS }}
-                      </span>
-                      <a-button @click="store.setPeriod(store.state.gamePeriod + 1)">+</a-button>
                     </div>
-                    <a-button
-                      block
-                      class="controls__next-period"
-                      :disabled="!canAdvancePeriod"
-                      @click="goToNextPeriod"
-                    >
-                      Siguiente periodo
-                    </a-button>
-                    <span class="controls__clock-hint">
-                      Las faltas con tiempo restante continúan en el siguiente periodo.
-                    </span>
-                  </div>
-                </div>
-
-                <div
-                  v-if="showIntermissionControls"
-                  class="controls__intermission"
-                >
-                  <div class="controls__clock-field controls__clock-field--time">
-                    <div class="controls__clock-field-head">
-                      <label for="controls-intermission-time">Descanso</label>
-                      <TimeInput
-                        id="controls-intermission-time"
-                        compact
-                        :value="intermissionDraft"
-                        :disabled="store.state.intermissionActive && !store.state.isPaused"
-                        @update:value="onIntermissionDraftUpdate"
-                        @blur="commitIntermissionDraft"
-                        @enter="commitIntermissionDraft"
-                      />
-                    </div>
-                  </div>
-                  <div class="controls__intermission-actions">
-                    <a-button
-                      type="primary"
-                      @click="startOrToggleIntermission"
-                    >
-                      <template v-if="!store.state.intermissionActive">
-                        Iniciar descanso
-                      </template>
-                      <template v-else-if="store.state.isPaused">
-                        Reanudar descanso
+                    <p class="controls__clock-status">
+                      <template v-if="store.state.intermissionActive">
+                        {{ store.state.isPaused ? 'Descanso en pausa' : 'Descanso' }}
                       </template>
                       <template v-else>
-                        Pausar descanso
+                        {{ store.state.isPaused ? 'En pausa' : 'En juego' }}
                       </template>
-                    </a-button>
+                    </p>
                     <a-button
-                      v-if="store.state.intermissionActive"
-                      @click="stopIntermission"
+                      class="controls__clock-toggle"
+                      size="large"
+                      :type="store.state.isPaused ? 'primary' : 'default'"
+                      @click="store.togglePause()"
                     >
-                      Terminar descanso
+                      {{ store.state.isPaused ? 'Reanudar' : 'Pausar' }}
                     </a-button>
                   </div>
-                  <span class="controls__clock-hint">
-                    El marcador TV muestra la cuenta de descanso.
-                    Beep en los últimos {{ countdownBeepSeconds }} s
-                    (configurable en Perfil).
-                    Al terminar (o al pulsar Terminar descanso), pasa solo al siguiente periodo
-                    (salvo el último). Las faltas pendientes no corren hasta entonces.
-                  </span>
+
+                  <div class="controls__clock-panels">
+                    <div class="controls__clock-field controls__clock-field--time">
+                      <div class="controls__clock-field-head">
+                        <label for="controls-game-time">Ajustar tiempo</label>
+                        <TimeInput
+                          id="controls-game-time"
+                          compact
+                          :value="clockDraft"
+                          :disabled="!store.state.isPaused || store.state.intermissionActive"
+                          @update:value="onClockDraftUpdate"
+                          @focus="onClockFocus"
+                          @blur="commitClockDraft"
+                          @enter="commitClockDraft"
+                        />
+                      </div>
+                      <span class="controls__clock-hint">
+                        {{
+                          store.state.intermissionActive
+                            ? 'Durante el descanso usa el campo de abajo.'
+                            : store.state.isPaused
+                              ? 'Escribe minutos y segundos (solo números). Tab o flechas cambian de campo.'
+                              : 'Pausa el reloj para ajustarlo.'
+                        }}
+                        <template v-if="lateGameWarningEnabled && !store.state.intermissionActive">
+                          Aviso a los {{ lateGameWarningMinutes }} min
+                          (Perfil).
+                        </template>
+                      </span>
+                    </div>
+
+                    <div class="controls__clock-field controls__clock-field--period">
+                      <label>Periodo</label>
+                      <div class="controls__clock-period">
+                        <a-button @click="store.setPeriod(store.state.gamePeriod - 1)">−</a-button>
+                        <span class="controls__clock-period-label">
+                          {{ store.state.gamePeriod }} / {{ MAX_PERIODS }}
+                        </span>
+                        <a-button @click="store.setPeriod(store.state.gamePeriod + 1)">+</a-button>
+                      </div>
+                      <a-button
+                        block
+                        class="controls__next-period"
+                        :disabled="!canAdvancePeriod"
+                        @click="goToNextPeriod"
+                      >
+                        Siguiente periodo
+                      </a-button>
+                      <span class="controls__clock-hint">
+                        Las faltas con tiempo restante continúan en el siguiente periodo.
+                      </span>
+                    </div>
+                  </div>
+
+                  <div
+                    v-if="showIntermissionControls"
+                    class="controls__intermission"
+                  >
+                    <div class="controls__clock-field controls__clock-field--time">
+                      <div class="controls__clock-field-head">
+                        <label for="controls-intermission-time">Descanso</label>
+                        <TimeInput
+                          id="controls-intermission-time"
+                          compact
+                          :value="intermissionDraft"
+                          :disabled="store.state.intermissionActive && !store.state.isPaused"
+                          @update:value="onIntermissionDraftUpdate"
+                          @blur="commitIntermissionDraft"
+                          @enter="commitIntermissionDraft"
+                        />
+                      </div>
+                    </div>
+                    <div class="controls__intermission-actions">
+                      <a-button
+                        type="primary"
+                        @click="startOrToggleIntermission"
+                      >
+                        <template v-if="!store.state.intermissionActive">
+                          Iniciar descanso
+                        </template>
+                        <template v-else-if="store.state.isPaused">
+                          Reanudar descanso
+                        </template>
+                        <template v-else>
+                          Pausar descanso
+                        </template>
+                      </a-button>
+                      <a-button
+                        v-if="store.state.intermissionActive"
+                        @click="stopIntermission"
+                      >
+                        Terminar descanso
+                      </a-button>
+                    </div>
+                    <span class="controls__clock-hint">
+                      El marcador TV muestra la cuenta de descanso.
+                      Beep en los últimos {{ countdownBeepSeconds }} s
+                      (configurable en Perfil).
+                      Al terminar (o al pulsar Terminar descanso), pasa solo al siguiente periodo
+                      (salvo el último). Las faltas pendientes no corren hasta entonces.
+                    </span>
+                  </div>
                 </div>
-              </div>
-            </a-card>
+              </a-card>
+            </div>
 
             <a-card
               v-if="!tournamentContext"
@@ -1310,6 +1369,26 @@ onUnmounted(() => {
         </a-radio>
       </a-radio-group>
     </a-modal>
+
+    <Transition name="controls-dock">
+      <aside
+        v-if="showDockClock"
+        class="controls__dock-clock"
+        :class="{
+          'controls__dock-clock--paused': store.state.isPaused,
+          'controls__dock-clock--intermission': store.state.intermissionActive,
+        }"
+        role="status"
+        aria-live="polite"
+        title="Ir al reloj"
+        @click="scrollToClock"
+        @keydown.enter="scrollToClock"
+        tabindex="0"
+      >
+        <span class="controls__dock-clock-label">{{ dockClockLabel }}</span>
+        <span class="controls__dock-clock-time">{{ dockClockTime }}</span>
+      </aside>
+    </Transition>
   </div>
 </template>
 
@@ -1318,6 +1397,101 @@ onUnmounted(() => {
   max-width: 1100px;
   margin: 0 auto;
   padding: 1.5rem;
+}
+
+.controls__clock-section {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+/* Mini reloj fijo en el margen derecho (fuera de la columna centrada). */
+.controls__dock-clock {
+  --dock-width: 6.4rem;
+
+  position: fixed;
+  z-index: 220;
+  top: 50%;
+  transform: translateY(-50%);
+  right: max(
+    0.75rem,
+    calc((100vw - 1100px) / 2 - var(--dock-width) - 0.85rem)
+  );
+  box-sizing: border-box;
+  width: var(--dock-width);
+  padding: 0.7rem 0.55rem 0.75rem;
+  border-radius: 12px;
+  border: 1px solid var(--app-border);
+  background: var(--app-bg-elevated);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+
+  &:hover {
+    border-color: color-mix(in srgb, var(--app-link) 45%, var(--app-border));
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--app-link);
+    outline-offset: 2px;
+  }
+
+  &--paused .controls__dock-clock-time {
+    opacity: 0.72;
+  }
+
+  &--intermission .controls__dock-clock-time {
+    color: #c9a227;
+  }
+}
+
+.controls__dock-clock-label {
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+  line-height: 1.2;
+  margin-bottom: 0.35rem;
+}
+
+.controls__dock-clock-time {
+  display: block;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.85rem;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text);
+}
+
+.controls-dock-enter-active,
+.controls-dock-leave-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
+.controls-dock-enter-from,
+.controls-dock-leave-to {
+  opacity: 0;
+  transform: translateY(-50%) translateX(0.6rem);
+}
+
+@media (max-width: 1280px) {
+  /* Sin margen lateral suficiente: esquina inferior derecha. */
+  .controls__dock-clock {
+    top: auto;
+    bottom: max(1rem, env(safe-area-inset-bottom));
+    right: max(0.75rem, env(safe-area-inset-right));
+    transform: none;
+  }
+
+  .controls-dock-enter-from,
+  .controls-dock-leave-to {
+    transform: translateY(0.6rem);
+  }
 }
 
 .controls__header {
