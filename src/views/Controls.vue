@@ -65,16 +65,14 @@ const activeTab = ref('match')
 const clockDraft = ref(store.state.timeGame)
 const clockEditing = ref(false)
 const clockSectionEl = ref<HTMLElement | null>(null)
-const clockInView = ref(true)
+const clockDisplayEl = ref<HTMLElement | null>(null)
+/** Empieza en false: en pantallas chicas el reloj suele estar fuera de vista al cargar. */
+const clockInView = ref(false)
 let clockObserver: IntersectionObserver | null = null
 let lastCountdownBeepSecond: number | null = null
 /** Evita repetir el aviso de últimos minutos en el mismo periodo/umbral. */
 let lateGameWarningKey: string | null = null
 let prevLateGameSeconds: number | null = null
-
-const showDockClock = computed(
-  () => Boolean(matchId.value) && !clockInView.value,
-)
 
 const dockClockTime = computed(() =>
   store.state.intermissionActive
@@ -91,25 +89,127 @@ const dockClockLabel = computed(() => {
     : `Periodo ${store.state.gamePeriod}`
 })
 
+const dockPenaltyTeams = computed(() => {
+  const teams = [
+    {
+      key: 'local' as const,
+      name: store.state.localTeam,
+      penalties: store.state.penaltiesLocal,
+    },
+    {
+      key: 'visit' as const,
+      name: store.state.visitTeam,
+      penalties: store.state.penaltiesVisit,
+    },
+  ]
+  return teams
+    .map((team) => ({
+      ...team,
+      items: team.penalties.map((penalty) => ({
+        id: penalty.id,
+        player: dockPenaltyPlayer(team.key, penalty),
+        time: penalty.time.trim() || '0:00',
+      })),
+    }))
+    .filter((team) => team.items.length > 0)
+})
+
+const showDockClock = computed(
+  () => Boolean(matchId.value) && !clockInView.value,
+)
+
+const showDockPenalties = computed(
+  () =>
+    Boolean(matchId.value) &&
+    dockPenaltyTeams.value.length > 0 &&
+    activeTab.value !== 'penalties',
+)
+
+const showDock = computed(() => showDockClock.value || showDockPenalties.value)
+
+function dockPenaltyPlayer(
+  team: 'local' | 'visit',
+  penalty: TeamPenalty,
+): string {
+  const roster = team === 'local' ? store.state.rosterLocal : store.state.rosterVisit
+  const player =
+    findPlayerById(roster, penalty.playerId) ??
+    findPlayerByNumber(roster, penalty.player)
+  const number = (penalty.player.trim() || player?.number.trim() || '').replace(/\D/g, '')
+  if (number) return `#${number.slice(0, 2)}`
+  if (player) return playerLabel(player).slice(0, 8)
+  return '—'
+}
+
 function scrollToClock(): void {
+  if (activeTab.value !== 'match') {
+    activeTab.value = 'match'
+    void nextTick(() => {
+      clockSectionEl.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+    return
+  }
   clockSectionEl.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+
+function openPenaltiesTab(): void {
+  activeTab.value = 'penalties'
+}
+
+/** Espacio superior ocupado por navbar + tabs (no cuenta como “visible”). */
+function clockViewportTopInset(): number {
+  const nav = document.querySelector('.app-nav')
+  const tabs = document.querySelector('.controls__tabs .ant-tabs-nav')
+  const navBottom = nav?.getBoundingClientRect().bottom ?? 0
+  const tabsBottom = tabs?.getBoundingClientRect().bottom ?? 0
+  return Math.max(navBottom, tabsBottom, 0) + 8
+}
+
+/**
+ * El tiempo es visible solo si el centro del display está dentro del área
+ * útil de la pantalla (debajo del navbar/tabs). Así no basta con que asome
+ * el borde del card.
+ */
+function measureClockDisplayInView(): boolean {
+  const el = clockDisplayEl.value
+  if (!el) return false
+  const rect = el.getBoundingClientRect()
+  if (rect.width <= 0 || rect.height <= 0) return false
+  const top = clockViewportTopInset()
+  const bottom = (window.innerHeight || document.documentElement.clientHeight) - 8
+  const midY = rect.top + rect.height / 2
+  return midY >= top && midY <= bottom
+}
+
+function syncClockInView(): void {
+  clockInView.value = measureClockDisplayInView()
 }
 
 function setupClockObserver(): void {
   clockObserver?.disconnect()
   clockObserver = null
-  const el = clockSectionEl.value
+  const el = clockDisplayEl.value
   if (!el || typeof IntersectionObserver === 'undefined') {
-    clockInView.value = true
+    syncClockInView()
     return
   }
+
+  const topInset = clockViewportTopInset()
   clockObserver = new IntersectionObserver(
-    ([entry]) => {
-      clockInView.value = entry?.isIntersecting ?? true
+    () => {
+      syncClockInView()
     },
-    { root: null, threshold: 0.2, rootMargin: '-12px 0px' },
+    {
+      root: null,
+      threshold: [0, 0.25, 0.5, 0.75, 1],
+      rootMargin: `-${Math.round(topInset)}px 0px -8px 0px`,
+    },
   )
   clockObserver.observe(el)
+  syncClockInView()
+  requestAnimationFrame(() => {
+    requestAnimationFrame(syncClockInView)
+  })
 }
 
 const pendingGoalsCount = computed(
@@ -712,6 +812,8 @@ watch(
 onMounted(() => {
   window.addEventListener('beforeunload', onBeforeUnload)
   window.addEventListener('scoreboard:prefs-change', onPrefsChange)
+  window.addEventListener('resize', syncClockInView, { passive: true })
+  window.addEventListener('scroll', syncClockInView, { passive: true, capture: true })
   if (matchId.value) {
     const pollMs = getLiveClockUpdateMs()
     publishTimer = window.setInterval(() => {
@@ -727,6 +829,10 @@ watch(activeTab, () => {
 
 watch(matchId, () => {
   void nextTick(setupClockObserver)
+})
+
+watch(hydrated, (ready) => {
+  if (ready) void nextTick(setupClockObserver)
 })
 
 onBeforeRouteLeave((_to, _from, next) => {
@@ -765,6 +871,8 @@ onBeforeRouteLeave((_to, _from, next) => {
 onUnmounted(() => {
   window.removeEventListener('beforeunload', onBeforeUnload)
   window.removeEventListener('scoreboard:prefs-change', onPrefsChange)
+  window.removeEventListener('resize', syncClockInView)
+  window.removeEventListener('scroll', syncClockInView)
   clockObserver?.disconnect()
   clockObserver = null
   if (!skipLeaveGuard.value) {
@@ -1098,7 +1206,7 @@ onUnmounted(() => {
               >
                 <div class="controls__clock">
                   <div class="controls__clock-main">
-                    <div class="controls__clock-display">
+                    <div ref="clockDisplayEl" class="controls__clock-display">
                       {{
                         store.state.intermissionActive
                           ? store.state.intermissionTime
@@ -1371,23 +1479,62 @@ onUnmounted(() => {
     </a-modal>
 
     <Transition name="controls-dock">
-      <aside
-        v-if="showDockClock"
-        class="controls__dock-clock"
-        :class="{
-          'controls__dock-clock--paused': store.state.isPaused,
-          'controls__dock-clock--intermission': store.state.intermissionActive,
-        }"
-        role="status"
-        aria-live="polite"
-        title="Ir al reloj"
-        @click="scrollToClock"
-        @keydown.enter="scrollToClock"
-        tabindex="0"
+      <div
+        v-if="showDock"
+        class="controls__dock"
+        :class="{ 'controls__dock--with-penalties': showDockPenalties }"
       >
-        <span class="controls__dock-clock-label">{{ dockClockLabel }}</span>
-        <span class="controls__dock-clock-time">{{ dockClockTime }}</span>
-      </aside>
+        <aside
+          v-if="showDockClock"
+          class="controls__dock-clock"
+          :class="{
+            'controls__dock-clock--paused': store.state.isPaused,
+            'controls__dock-clock--intermission': store.state.intermissionActive,
+          }"
+          role="status"
+          aria-live="polite"
+          title="Ir al reloj"
+          tabindex="0"
+          @click="scrollToClock"
+          @keydown.enter="scrollToClock"
+        >
+          <span class="controls__dock-clock-label">{{ dockClockLabel }}</span>
+          <span class="controls__dock-clock-time">{{ dockClockTime }}</span>
+        </aside>
+
+        <aside
+          v-if="showDockPenalties"
+          class="controls__dock-penalties"
+          aria-label="Penalidades activas"
+        >
+          <header class="controls__dock-penalties-head">
+            <span>Faltas</span>
+            <button
+              type="button"
+              class="controls__dock-penalties-link"
+              @click="openPenaltiesTab"
+            >
+              Ver
+            </button>
+          </header>
+          <div
+            v-for="team in dockPenaltyTeams"
+            :key="team.key"
+            class="controls__dock-penalties-team"
+            :class="`controls__dock-penalties-team--${team.key}`"
+          >
+            <span class="controls__dock-penalties-side" :title="team.name">
+              {{ team.name }}
+            </span>
+            <ul class="controls__dock-penalties-list">
+              <li v-for="item in team.items" :key="item.id">
+                <span class="controls__dock-penalties-player">{{ item.player }}</span>
+                <span class="controls__dock-penalties-time">{{ item.time }}</span>
+              </li>
+            </ul>
+          </div>
+        </aside>
+      </div>
     </Transition>
   </div>
 </template>
@@ -1404,8 +1551,8 @@ onUnmounted(() => {
   min-width: 0;
 }
 
-/* Mini reloj fijo en el margen derecho (fuera de la columna centrada). */
-.controls__dock-clock {
+/* Dock fijo en el margen derecho (reloj + faltas). */
+.controls__dock {
   --dock-width: 6.4rem;
 
   position: fixed;
@@ -1416,8 +1563,20 @@ onUnmounted(() => {
     0.75rem,
     calc((100vw - 1100px) / 2 - var(--dock-width) - 0.85rem)
   );
-  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
   width: var(--dock-width);
+  max-height: min(70vh, 28rem);
+
+  &--with-penalties {
+    --dock-width: 9rem;
+  }
+}
+
+.controls__dock-clock {
+  box-sizing: border-box;
+  width: 100%;
   padding: 0.7rem 0.55rem 0.75rem;
   border-radius: 12px;
   border: 1px solid var(--app-border);
@@ -1466,6 +1625,116 @@ onUnmounted(() => {
   color: var(--app-text);
 }
 
+.controls__dock-penalties {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.55rem 0.5rem 0.6rem;
+  border-radius: 12px;
+  border: 1px solid var(--app-border);
+  background: var(--app-bg-elevated);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+}
+
+.controls__dock-penalties-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  margin-bottom: 0.45rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+.controls__dock-penalties-link {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--app-link);
+  font: inherit;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.controls__dock-penalties-team {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+
+  & + & {
+    margin-top: 0.45rem;
+    padding-top: 0.45rem;
+    border-top: 1px solid var(--app-border);
+  }
+
+  &--local .controls__dock-penalties-side {
+    color: #3da5ff;
+  }
+
+  &--visit .controls__dock-penalties-side {
+    color: #ff5a36;
+  }
+}
+
+.controls__dock-penalties-side {
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.controls__dock-penalties-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+
+  li {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.3rem;
+    min-width: 0;
+  }
+}
+
+.controls__dock-penalties-player {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  font-weight: 650;
+  color: var(--app-text);
+}
+
+.controls__dock-penalties-time {
+  flex-shrink: 0;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 0.95rem;
+  line-height: 1;
+  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
+  color: #ff4d5e;
+}
+
 .controls-dock-enter-active,
 .controls-dock-leave-active {
   transition:
@@ -1480,12 +1749,12 @@ onUnmounted(() => {
 }
 
 @media (max-width: 1280px) {
-  /* Sin margen lateral suficiente: esquina inferior derecha. */
-  .controls__dock-clock {
+  .controls__dock {
     top: auto;
     bottom: max(1rem, env(safe-area-inset-bottom));
     right: max(0.75rem, env(safe-area-inset-right));
     transform: none;
+    max-height: min(55vh, 24rem);
   }
 
   .controls-dock-enter-from,
