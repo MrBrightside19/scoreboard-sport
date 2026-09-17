@@ -1,11 +1,22 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
-import type { GoalEvent, ScoreboardState, TeamPenalty } from '@/types/hockeyScoreboard'
-import { isGoalPending, MAX_PERIODS } from '@/types/hockeyScoreboard'
+import type { GoalEvent, ScoreboardState, TeamPenalty } from '@/sports/scoreboardState'
+import { isGoalPending } from '@/sports/scoreboardState'
+import { getSportModule } from '@/sports/registry'
 import { penaltyTypeLabel } from '@/data/penaltyCatalog'
 import { findPlayerById, findPlayerByNumber, playerLabel } from '@/utils/roster'
 import type { OverlayScoreboardStyle } from '@/config/scoreboardStyles'
 import { DEFAULT_OVERLAY_SCOREBOARD_STYLE } from '@/config/scoreboardStyles'
+import { cardCount } from '@/sports/football/actions'
+import {
+  accumulatedFoulsInPeriod,
+  activeExclusions,
+  isInDoublePenalty,
+  timeoutsUsedInPeriod,
+} from '@/sports/futsal/actions'
+import { FUTSAL_ACCUMULATED_FOUL_LIMIT } from '@/sports/futsal/types'
+import { isInBonus, teamFoulsInPeriod } from '@/sports/basketball/actions'
+import { basketballPointsLabel } from '@/sports/basketball/types'
 
 const props = withDefaults(
   defineProps<{
@@ -46,9 +57,11 @@ const clock = computed(() => {
   return props.displayTime ?? props.state.timeGame
 })
 
+const sport = computed(() => getSportModule(props.state.sport))
+
 const centerLabel = computed(() => {
   if (props.state.intermissionActive) return 'DESCANSO'
-  return `Periodo ${props.state.gamePeriod}`
+  return sport.value.periodLabel(props.state.gamePeriod)
 })
 
 const liveStatus = computed(() => {
@@ -65,17 +78,29 @@ const visitPenalties = computed(
   () => props.displayPenaltiesVisit ?? props.state.penaltiesVisit,
 )
 
-const periodLabel = computed(() => {
-  const period = props.state.gamePeriod
-  if (period > MAX_PERIODS) return 'OT'
-  return `${period}º`
-})
+const periodLabel = computed(() => sport.value.periodLabel(props.state.gamePeriod))
 
 const localGoals = computed(() =>
   props.state.goals.filter((goal) => goal.team === 'local'),
 )
 const visitGoals = computed(() =>
   props.state.goals.filter((goal) => goal.team === 'visit'),
+)
+
+const localBasketScores = computed(() =>
+  (props.state.basketballScores ?? []).filter((item) => item.team === 'local'),
+)
+const visitBasketScores = computed(() =>
+  (props.state.basketballScores ?? []).filter((item) => item.team === 'visit'),
+)
+
+const showGoalList = computed(() => sport.value.scoringUnit === 'goal')
+const showBasketScores = computed(() => sport.value.scoringUnit === 'point')
+const showFootballCards = computed(() => sport.value.id === 'football')
+const showFutsalMeta = computed(() => sport.value.id === 'futsal')
+const showBasketFouls = computed(() => sport.value.id === 'basketball')
+const scoringTitle = computed(() =>
+  sport.value.scoringUnit === 'point' ? 'Anotaciones' : 'Goles',
 )
 
 function shotTotals(team: 'local' | 'visit'): { misses: number; saves: number } {
@@ -98,8 +123,7 @@ function truncateTeamName(name: string): string {
 }
 
 function formatGoalPeriod(period: number): string {
-  if (period > MAX_PERIODS) return 'OT'
-  return `${period}'`
+  return sport.value.periodLabel(period)
 }
 
 function formatGoalEntry(goal: GoalEvent, team: 'local' | 'visit'): string {
@@ -113,6 +137,40 @@ function formatGoalEntry(goal: GoalEvent, team: 'local' | 'visit'): string {
   const name = scorer?.name.trim()
   const who = name ? `#${number} ${name}` : `#${number}`
   return `${who} · ${goal.gameMinute} · ${period}`
+}
+
+function formatBasketScoreEntry(
+  item: { scorerPlayerId: string; points: 1 | 2 | 3; gameMinute: string; period: number },
+  team: 'local' | 'visit',
+): string {
+  const roster = team === 'local' ? props.state.rosterLocal : props.state.rosterVisit
+  const scorer = findPlayerById(roster, item.scorerPlayerId)
+  const who = scorer
+    ? playerLabel(scorer)
+    : item.scorerPlayerId
+      ? `#${item.scorerPlayerId}`
+      : '—'
+  return `${who} · ${basketballPointsLabel(item.points)} · ${item.gameMinute} · ${formatGoalPeriod(item.period)}`
+}
+
+function sportMetaLine(team: 'local' | 'visit'): string {
+  if (showFootballCards.value) {
+    return `A ${cardCount(props.state, team, 'yellow')} · R ${cardCount(props.state, team, 'red')}`
+  }
+  if (showFutsalMeta.value) {
+    const fa = accumulatedFoulsInPeriod(props.state, team)
+    const parts = [`FA ${fa}/${FUTSAL_ACCUMULATED_FOUL_LIMIT}`]
+    if (isInDoublePenalty(props.state, team)) parts.push('DP')
+    if (timeoutsUsedInPeriod(props.state, team)) parts.push('TM')
+    const excl = activeExclusions(props.state, team).length
+    if (excl) parts.push(`2′×${excl}`)
+    return parts.join(' · ')
+  }
+  if (showBasketFouls.value) {
+    const fouls = teamFoulsInPeriod(props.state, team)
+    return isInBonus(props.state, team) ? `Faltas ${fouls} · BONUS` : `Faltas ${fouls}`
+  }
+  return ''
 }
 
 const confirmedGoalIds = computed(() =>
@@ -464,7 +522,7 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
         <template v-if="eventTitle">
           {{ eventTitle }}<template v-if="eventDate"> · {{ eventDate }}</template>
         </template>
-        <template v-else>Hockey en línea</template>
+        <template v-else>{{ sport.label }}</template>
       </span>
       <span class="scoreboard__period-pill">{{ centerLabel }}</span>
       <span v-if="state.matchCategory" class="scoreboard__category-pill">
@@ -498,8 +556,8 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
         </div>
 
         <div class="scoreboard__team-details">
-          <div class="scoreboard__detail-block">
-            <span class="scoreboard__detail-title">Goles</span>
+          <div v-if="showGoalList" class="scoreboard__detail-block">
+            <span class="scoreboard__detail-title">{{ scoringTitle }}</span>
             <div v-if="localGoals.length" class="scoreboard__goals">
               <div
                 v-for="goal in localGoals"
@@ -513,14 +571,44 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
             <span v-else class="scoreboard__detail-empty">Sin goles</span>
           </div>
 
-          <div class="scoreboard__detail-block">
+          <div v-if="showBasketScores" class="scoreboard__detail-block">
+            <span class="scoreboard__detail-title">{{ scoringTitle }}</span>
+            <div v-if="localBasketScores.length" class="scoreboard__goals">
+              <div
+                v-for="item in localBasketScores"
+                :key="item.id"
+                class="scoreboard__goal-entry"
+              >
+                {{ formatBasketScoreEntry(item, 'local') }}
+              </div>
+            </div>
+            <span v-else class="scoreboard__detail-empty">Sin anotaciones</span>
+          </div>
+
+          <div
+            v-if="sportMetaLine('local')"
+            class="scoreboard__detail-block"
+          >
+            <span class="scoreboard__detail-title">
+              {{
+                showFootballCards
+                  ? 'Tarjetas'
+                  : showFutsalMeta
+                    ? 'Faltas / TM'
+                    : 'Faltas'
+              }}
+            </span>
+            <p class="scoreboard__shot-line">{{ sportMetaLine('local') }}</p>
+          </div>
+
+          <div v-if="sport.features.shots" class="scoreboard__detail-block">
             <span class="scoreboard__detail-title">Tiros</span>
             <p class="scoreboard__shot-line">
               Tiros {{ localShotTotals.misses }} · Atajadas {{ localShotTotals.saves }}
             </p>
           </div>
 
-          <div class="scoreboard__detail-block">
+          <div v-if="sport.features.penalties" class="scoreboard__detail-block">
             <span class="scoreboard__detail-title">Penalidades</span>
             <div v-if="localPenalties.length" class="scoreboard__penalties scoreboard__penalties--live">
               <div
@@ -570,8 +658,8 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
         </div>
 
         <div class="scoreboard__team-details">
-          <div class="scoreboard__detail-block">
-            <span class="scoreboard__detail-title">Goles</span>
+          <div v-if="showGoalList" class="scoreboard__detail-block">
+            <span class="scoreboard__detail-title">{{ scoringTitle }}</span>
             <div v-if="visitGoals.length" class="scoreboard__goals">
               <div
                 v-for="goal in visitGoals"
@@ -585,14 +673,44 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
             <span v-else class="scoreboard__detail-empty">Sin goles</span>
           </div>
 
-          <div class="scoreboard__detail-block">
+          <div v-if="showBasketScores" class="scoreboard__detail-block">
+            <span class="scoreboard__detail-title">{{ scoringTitle }}</span>
+            <div v-if="visitBasketScores.length" class="scoreboard__goals">
+              <div
+                v-for="item in visitBasketScores"
+                :key="item.id"
+                class="scoreboard__goal-entry"
+              >
+                {{ formatBasketScoreEntry(item, 'visit') }}
+              </div>
+            </div>
+            <span v-else class="scoreboard__detail-empty">Sin anotaciones</span>
+          </div>
+
+          <div
+            v-if="sportMetaLine('visit')"
+            class="scoreboard__detail-block"
+          >
+            <span class="scoreboard__detail-title">
+              {{
+                showFootballCards
+                  ? 'Tarjetas'
+                  : showFutsalMeta
+                    ? 'Faltas / TM'
+                    : 'Faltas'
+              }}
+            </span>
+            <p class="scoreboard__shot-line">{{ sportMetaLine('visit') }}</p>
+          </div>
+
+          <div v-if="sport.features.shots" class="scoreboard__detail-block">
             <span class="scoreboard__detail-title">Tiros</span>
             <p class="scoreboard__shot-line">
               Tiros {{ visitShotTotals.misses }} · Atajadas {{ visitShotTotals.saves }}
             </p>
           </div>
 
-          <div class="scoreboard__detail-block">
+          <div v-if="sport.features.penalties" class="scoreboard__detail-block">
             <span class="scoreboard__detail-title">Penalidades</span>
             <div v-if="visitPenalties.length" class="scoreboard__penalties scoreboard__penalties--live">
               <div

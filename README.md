@@ -1,6 +1,6 @@
-# Marcador Hockey
+# ScoreDesk
 
-Aplicación web de marcadores en vivo para **hockey en línea**. Permite operar partidos desde una mesa de control, mostrarlos en pantalla o en OBS, y compartir enlaces públicos para espectadores y torneos.
+Aplicación web de marcadores en vivo. Hockey en línea, futsal y básquetbol de entrada; la mesa, el TV y el live público son el mismo producto. Ver un partido es gratis y no requiere cuenta. Organizar (mesa, torneos) usa un plan Free o de pago.
 
 **App en producción (GitHub Pages):** [https://mrbrightside19.github.io/scoreboard-sport/](https://mrbrightside19.github.io/scoreboard-sport/)
 
@@ -15,6 +15,8 @@ Aplicación web de marcadores en vivo para **hockey en línea**. Permite operar 
 - **Torneos**: creación y gestión de torneos, calendario, canchas, resultados y tabla de posiciones; vistas públicas para seguimiento.
 
 Los marcadores públicos y el overlay se pueden consultar sin iniciar sesión. Las pantallas de operación requieren cuenta de personal autorizado.
+
+TV, live, overlay y mesa viven por deporte en `src/sports/<deporte>/` (`*Controls`, `*ScoreBoard`, `*TvBoard`, `*OverlayBoard`, `state.ts`). El núcleo compartido está en `src/types/scoreboard.ts` y se compone en `src/sports/scoreboardState.ts`. Las rutas solo eligen el módulo.
 
 ---
 
@@ -62,6 +64,7 @@ cp .env.example .env
 | `VITE_LIVE_CLOCK_UPDATE_MS` | Intervalo (ms) de actualización del reloj en vivo. Mínimo `1000`. Por defecto `5000` |
 | `VITE_POLL_INTERVAL_MS` | Alias heredado; solo se usa si no defines `VITE_LIVE_CLOCK_UPDATE_MS` |
 | `VITE_TOURNAMENT_TABLE_REFRESH_MS` | Intervalo (ms) de refresco de tablas de torneo. Por defecto `60000` |
+| `VITE_STRIPE_PUBLISHABLE_KEY` | Clave pública de Stripe (opcional; el cobro real está en Edge Functions) |
 
 No subas el archivo `.env` al repositorio; ya está en `.gitignore`.
 
@@ -70,6 +73,8 @@ No subas el archivo `.env` al repositorio; ya está en `.gitignore`.
 En la carpeta `supabase/` hay scripts SQL para crear y actualizar el esquema. Ejecútalos en el SQL Editor de Supabase en el orden que indique tu entorno (empezando por el esquema base y luego los scripts de torneos / extensiones según necesites).
 
 Para plantillas de jugadores del calendario, ejecuta también `supabase/tournament-rosters.sql`.
+
+Para planes Free/Pro y RLS de escritura, ejecuta `supabase/entitlements.sql`. El cobro (Stripe) vive en `supabase/functions/` (`create-checkout-session`, `create-portal-session`, `stripe-webhook`).
 
 La **plantilla del torneo** (Excel `.xlsx`) incluye dos hojas:
 - **Calendario**: partidos (`local`, `visita`, `categoria`, `tiempo_juego`, `cancha`, `fecha_programada`). `fecha_programada` es la hora prevista (ej. `2026-06-15 18:00`) y se muestra en el calendario del torneo.

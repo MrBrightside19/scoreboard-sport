@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { useAuthStore } from '@/stores/auth'
 import {
+  getTvScoreboardStyle,
   getUserPreferences,
+  setTvScoreboardStyle,
   setUserPreferences,
   type AppTheme,
   type UserPreferences,
@@ -13,6 +15,8 @@ import {
   MIN_LATE_GAME_WARNING_MINUTES,
   MAX_LATE_GAME_WARNING_MINUTES,
 } from '@/utils/userPreferences'
+import { listAvailableSports } from '@/sports/registry'
+import { DEFAULT_SPORT, type SportId } from '@/types/sport'
 import { playLateGameWarning } from '@/utils/lateGameWarningBeep'
 import { playCountdownBeep } from '@/utils/countdownBeep'
 import type {
@@ -20,6 +24,9 @@ import type {
   TvScoreboardStyle,
 } from '@/config/scoreboardStyles'
 import ScoreboardStylePicker from '@/components/ScoreboardStylePicker.vue'
+import { fetchEntitlement, resolvePlan } from '@/services/entitlementsService'
+import { getPlanDefinition } from '@/config/plans'
+import type { Entitlement } from '@/types/billing'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -43,6 +50,12 @@ const passwordForm = reactive({
 const prefs = reactive<UserPreferences>({
   ...getUserPreferences(),
 })
+const boardSport = ref<SportId>(DEFAULT_SPORT)
+const sports = listAvailableSports()
+const currentTvStyle = computed(() => getTvScoreboardStyle(boardSport.value))
+
+const entitlement = ref<Entitlement | null>(null)
+const currentPlan = computed(() => getPlanDefinition(resolvePlan(entitlement.value)))
 
 const roleLabel = computed(() => {
   if (auth.isOrganizer) return 'Organizador'
@@ -57,7 +70,7 @@ const roleHint = computed(() => {
   if (auth.isAssistant) {
     return 'Puedes operar calendario y controles de los torneos donde te asignaron.'
   }
-  return 'Puedes ver torneos públicos y marcadores en vivo. Para organizar, crea una cuenta de organizador.'
+  return 'Puedes ver torneos públicos y marcadores en vivo. Entra a la app para organizar con el plan Free.'
 })
 
 const displayNameDirty = computed(() => {
@@ -82,7 +95,12 @@ watch(
 
 onMounted(() => {
   if (!auth.loading && !auth.isAuthenticated) {
-    void router.replace({ name: 'home', query: { auth: '1' } })
+    void router.replace({ name: 'access', query: { redirect: '/perfil' } })
+  }
+  if (auth.profile) {
+    void fetchEntitlement(auth.profile.id).then((row) => {
+      entitlement.value = row
+    })
   }
 })
 
@@ -90,7 +108,7 @@ watch(
   () => auth.loading,
   (loading) => {
     if (!loading && !auth.isAuthenticated) {
-      void router.replace({ name: 'home', query: { auth: '1' } })
+      void router.replace({ name: 'access', query: { redirect: '/perfil' } })
     }
   },
 )
@@ -197,9 +215,9 @@ function setTheme(theme: AppTheme): void {
 
 function onTvStyleChange(style: TvScoreboardStyle | OverlayScoreboardStyle): void {
   const next = style as TvScoreboardStyle
-  if (prefs.tvScoreboardStyle === next) return
-  prefs.tvScoreboardStyle = next
-  setUserPreferences({ tvScoreboardStyle: next })
+  if (currentTvStyle.value === next) return
+  const updated = setTvScoreboardStyle(boardSport.value, next)
+  Object.assign(prefs, updated)
   message.success('Estilo de marcador TV actualizado')
 }
 
@@ -215,7 +233,7 @@ async function handleLogout(): Promise<void> {
   loggingOut.value = true
   try {
     await auth.logout()
-    await router.push({ name: 'home' })
+    await router.push({ name: 'landing' })
   } finally {
     loggingOut.value = false
   }
@@ -281,6 +299,20 @@ async function handleLogout(): Promise<void> {
               </a-button>
             </div>
           </a-form>
+        </section>
+
+        <section class="profile__panel" aria-labelledby="profile-plan">
+          <div class="profile__panel-head">
+            <div>
+              <h2 id="profile-plan">Plan</h2>
+              <p class="profile__desc">
+                Ahora mismo: {{ currentPlan.name }}. El live público no consume plan.
+              </p>
+            </div>
+            <RouterLink :to="{ name: 'plans' }">
+              <a-button type="primary">Ver planes</a-button>
+            </RouterLink>
+          </div>
         </section>
 
         <section class="profile__panel" aria-labelledby="profile-password">
@@ -464,18 +496,30 @@ async function handleLogout(): Promise<void> {
               <header class="profile__pref-group-head">
                 <h3 id="profile-boards">Marcadores</h3>
                 <p>
-                  Estilos visuales para la pantalla de cancha y la transmisión OBS.
+                  Cada deporte tiene su propio marcador TV y overlay. Elige el deporte y luego el estilo.
                 </p>
               </header>
+
+              <div class="profile__theme-toggle" role="tablist" aria-label="Deporte del marcador">
+                <a-button
+                  v-for="sport in sports"
+                  :key="sport.id"
+                  :type="boardSport === sport.id ? 'primary' : 'default'"
+                  @click="boardSport = sport.id"
+                >
+                  {{ sport.shortLabel }}
+                </a-button>
+              </div>
 
               <div class="profile__pref-card profile__pref-card--stack">
                 <div class="profile__pref-card-copy">
                   <h4>Marcador TV</h4>
-                  <p>Diseño de la pantalla grande de cancha.</p>
+                  <p>Pantalla grande de cancha para {{ sports.find((item) => item.id === boardSport)?.label }}.</p>
                 </div>
                 <ScoreboardStylePicker
                   mode="tv"
-                  :model-value="prefs.tvScoreboardStyle"
+                  :sport="boardSport"
+                  :model-value="currentTvStyle"
                   @update:model-value="onTvStyleChange"
                 />
               </div>
@@ -483,10 +527,11 @@ async function handleLogout(): Promise<void> {
               <div class="profile__pref-card profile__pref-card--stack">
                 <div class="profile__pref-card-copy">
                   <h4>Overlay OBS</h4>
-                  <p>Diseño del marcador transparente para transmisión.</p>
+                  <p>Barra transparente de transmisión de este deporte.</p>
                 </div>
                 <ScoreboardStylePicker
                   mode="overlay"
+                  :sport="boardSport"
                   :model-value="prefs.overlayScoreboardStyle"
                   @update:model-value="onOverlayStyleChange"
                 />
@@ -702,5 +747,9 @@ async function handleLogout(): Promise<void> {
   display: flex;
   gap: 0.45rem;
   flex-wrap: wrap;
+}
+
+.profile__pref-group .profile__theme-toggle {
+  margin-bottom: 0.85rem;
 }
 </style>

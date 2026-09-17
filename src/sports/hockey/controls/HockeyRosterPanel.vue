@@ -3,7 +3,7 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { useScoreboardStore } from '@/stores/scoreboard'
 import { syncBothMatchRostersToTournament } from '@/services/tournamentService'
 import { playerLabel, roleLabel } from '@/utils/roster'
-import type { PlayerRole } from '@/types/hockeyScoreboard'
+import type { PlayerRole } from '@/sports/scoreboardState'
 
 const props = withDefaults(
   defineProps<{

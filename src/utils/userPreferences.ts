@@ -1,11 +1,13 @@
 import {
   normalizeOverlayScoreboardStyle,
   normalizeTvScoreboardStyle,
+  resolveTvStyleForSport,
   type OverlayScoreboardStyle,
   type TvScoreboardStyle,
   DEFAULT_OVERLAY_SCOREBOARD_STYLE,
   DEFAULT_TV_SCOREBOARD_STYLE,
 } from '@/config/scoreboardStyles'
+import { parseSportId, type SportId } from '@/types/sport'
 
 const PREFS_KEY = 'scoreboard:userPreferences'
 
@@ -22,8 +24,10 @@ export interface UserPreferences {
   lateGameWarningMinutes: number
   /** Tema de la interfaz (páginas de app; TV/overlay siguen oscuros). */
   theme: AppTheme
-  /** Estilo del marcador TV / cancha. */
+  /** Estilo TV legacy (hockey). Se conserva para no perder la preferencia guardada. */
   tvScoreboardStyle: TvScoreboardStyle
+  /** Estilo TV por deporte. */
+  tvScoreboardStyles: Partial<Record<SportId, TvScoreboardStyle>>
   /** Estilo del overlay OBS. */
   overlayScoreboardStyle: OverlayScoreboardStyle
 }
@@ -43,6 +47,7 @@ const DEFAULTS: UserPreferences = {
   lateGameWarningMinutes: DEFAULT_LATE_GAME_WARNING_MINUTES,
   theme: 'dark',
   tvScoreboardStyle: DEFAULT_TV_SCOREBOARD_STYLE,
+  tvScoreboardStyles: {},
   overlayScoreboardStyle: DEFAULT_OVERLAY_SCOREBOARD_STYLE,
 }
 
@@ -99,10 +104,23 @@ export function getUserPreferences(): UserPreferences {
     tvScoreboardStyle: normalizeTvScoreboardStyle(
       stored.tvScoreboardStyle ?? DEFAULTS.tvScoreboardStyle,
     ),
+    tvScoreboardStyles: normalizeTvStylesBySport(stored.tvScoreboardStyles),
     overlayScoreboardStyle: normalizeOverlayScoreboardStyle(
       stored.overlayScoreboardStyle ?? DEFAULTS.overlayScoreboardStyle,
     ),
   }
+}
+
+function normalizeTvStylesBySport(
+  raw: unknown,
+): Partial<Record<SportId, TvScoreboardStyle>> {
+  if (!raw || typeof raw !== 'object') return {}
+  const source = raw as Partial<Record<string, unknown>>
+  const next: Partial<Record<SportId, TvScoreboardStyle>> = {}
+  for (const key of ['hockey', 'futsal', 'basketball', 'football'] as SportId[]) {
+    if (source[key] != null) next[key] = resolveTvStyleForSport(source[key], key)
+  }
+  return next
 }
 
 export function setUserPreferences(partial: Partial<UserPreferences>): UserPreferences {
@@ -126,6 +144,10 @@ export function setUserPreferences(partial: Partial<UserPreferences>): UserPrefe
     tvScoreboardStyle: normalizeTvScoreboardStyle(
       partial.tvScoreboardStyle ?? current.tvScoreboardStyle,
     ),
+    tvScoreboardStyles: {
+      ...current.tvScoreboardStyles,
+      ...normalizeTvStylesBySport(partial.tvScoreboardStyles),
+    },
     overlayScoreboardStyle: normalizeOverlayScoreboardStyle(
       partial.overlayScoreboardStyle ?? current.overlayScoreboardStyle,
     ),
@@ -159,8 +181,22 @@ export function getAppTheme(): AppTheme {
   return getUserPreferences().theme
 }
 
-export function getTvScoreboardStyle(): TvScoreboardStyle {
-  return getUserPreferences().tvScoreboardStyle
+export function getTvScoreboardStyle(sport?: string | null): TvScoreboardStyle {
+  const prefs = getUserPreferences()
+  const id = parseSportId(sport)
+  const stored = prefs.tvScoreboardStyles[id] ?? (id === 'hockey' ? prefs.tvScoreboardStyle : undefined)
+  return resolveTvStyleForSport(stored, id)
+}
+
+export function setTvScoreboardStyle(
+  sport: SportId,
+  style: TvScoreboardStyle,
+): UserPreferences {
+  const resolved = resolveTvStyleForSport(style, sport)
+  return setUserPreferences({
+    tvScoreboardStyles: { [sport]: resolved },
+    ...(sport === 'hockey' ? { tvScoreboardStyle: resolved } : {}),
+  })
 }
 
 export function getOverlayScoreboardStyle(): OverlayScoreboardStyle {

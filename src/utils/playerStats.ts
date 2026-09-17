@@ -1,5 +1,5 @@
-import type { ScoreboardState } from '@/types/hockeyScoreboard'
-import { isGoalPending } from '@/types/hockeyScoreboard'
+import type { ScoreboardState } from '@/sports/scoreboardState'
+import { isGoalPending } from '@/types/scoreboard'
 import { findPlayerById, playerLabel } from '@/utils/roster'
 
 export interface PlayerStatLine {
@@ -86,6 +86,15 @@ export function playerStatsFromState(
     if (scorer) scorer.goals += 1
     if (goal.assistPlayerId) {
       const assist = touch(goal.team, goal.assistPlayerId)
+      if (assist) assist.assists += 1
+    }
+  }
+
+  for (const event of state.basketballScores ?? []) {
+    const scorer = touch(event.team, event.scorerPlayerId)
+    if (scorer) scorer.goals += event.points
+    if (event.assistPlayerId) {
+      const assist = touch(event.team, event.assistPlayerId)
       if (assist) assist.assists += 1
     }
   }

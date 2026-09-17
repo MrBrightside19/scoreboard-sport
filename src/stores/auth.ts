@@ -59,7 +59,6 @@ export const useAuthStore = defineStore('auth', () => {
     email: string,
     password: string,
     displayName: string,
-    asOrganizer = false,
   ): Promise<boolean> {
     error.value = null
     info.value = null
@@ -68,7 +67,7 @@ export const useAuthStore = defineStore('auth', () => {
         email,
         password,
         displayName,
-        asOrganizer ? 'organizer' : 'spectator',
+        'organizer',
       )
 
       if (result.needsEmailConfirmation) {

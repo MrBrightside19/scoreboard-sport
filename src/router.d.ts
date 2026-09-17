@@ -9,5 +9,6 @@ declare module 'vue-router' {
     hideNav?: boolean
     requiresStaff?: boolean
     requiresAuth?: boolean
+    nav?: 'marketing' | 'app'
   }
 }

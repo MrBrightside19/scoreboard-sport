@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { ScoreboardState, TeamPenalty } from '@/types/hockeyScoreboard'
-import { MAX_PENALTIES_PER_TEAM, MAX_PERIODS } from '@/types/hockeyScoreboard'
+import type { ScoreboardState, TeamPenalty } from '@/sports/scoreboardState'
+import { MAX_PENALTIES_PER_TEAM } from '@/sports/scoreboardState'
+import { getSportModule } from '@/sports/registry'
 import { findPlayerById, findPlayerByNumber } from '@/utils/roster'
 
 const props = defineProps<{
@@ -30,7 +31,8 @@ const arenaClock = computed(() => {
 
 const periodDigit = computed(() => {
   if (props.state.intermissionActive) return '-'
-  if (props.state.gamePeriod > MAX_PERIODS) return '4'
+  const max = getSportModule(props.state.sport).clock.periods
+  if (props.state.gamePeriod > max) return String(max + 1)
   return String(Math.max(0, Math.min(9, props.state.gamePeriod)))
 })
 

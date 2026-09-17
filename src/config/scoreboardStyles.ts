@@ -1,5 +1,7 @@
 /** Catálogo de estilos de marcador TV y overlay. Ampliar aquí al añadir variantes. */
 
+import { parseSportId, type SportId } from '@/types/sport'
+
 export type TvScoreboardStyle = 'classic' | 'classic-light' | 'arena'
 export type OverlayScoreboardStyle = 'bug'
 
@@ -60,4 +62,32 @@ export function isArenaTvStyle(style: TvScoreboardStyle): boolean {
 
 export function isClassicLightTvStyle(style: TvScoreboardStyle): boolean {
   return style === 'classic-light'
+}
+
+/** Estilos TV que cada deporte sabe renderizar. Arena LED es solo hockey. */
+export const TV_STYLES_BY_SPORT: Record<SportId, TvScoreboardStyle[]> = {
+  hockey: ['classic', 'classic-light', 'arena'],
+  futsal: ['classic', 'classic-light'],
+  basketball: ['classic', 'classic-light'],
+  football: ['classic', 'classic-light'],
+}
+
+export function tvStylesForSport(sport?: string | null): TvScoreboardStyle[] {
+  return TV_STYLES_BY_SPORT[parseSportId(sport)]
+}
+
+export function resolveTvStyleForSport(
+  style: unknown,
+  sport?: string | null,
+): TvScoreboardStyle {
+  const allowed = tvStylesForSport(sport)
+  if (isTvScoreboardStyle(style) && allowed.includes(style)) return style
+  return allowed[0] ?? DEFAULT_TV_SCOREBOARD_STYLE
+}
+
+export function tvStyleOptionsForSport(
+  sport?: string | null,
+): ScoreboardStyleOption<TvScoreboardStyle>[] {
+  const allowed = new Set(tvStylesForSport(sport))
+  return TV_SCOREBOARD_STYLES.filter((option) => allowed.has(option.id))
 }

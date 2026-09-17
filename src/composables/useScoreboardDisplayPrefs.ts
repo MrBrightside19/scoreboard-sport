@@ -1,4 +1,4 @@
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref, toValue, watch, type MaybeRefOrGetter } from 'vue'
 import {
   getOverlayScoreboardStyle,
   getTvScoreboardStyle,
@@ -8,15 +8,19 @@ import type {
   TvScoreboardStyle,
 } from '@/config/scoreboardStyles'
 
-/** Preferencias de estilo de marcador TV/overlay, reactivas a cambios locales. */
-export function useScoreboardDisplayPrefs() {
-  const tvStyle = ref<TvScoreboardStyle>(getTvScoreboardStyle())
+/** Preferencias de estilo TV/overlay, filtradas por deporte. */
+export function useScoreboardDisplayPrefs(
+  sport?: MaybeRefOrGetter<string | null | undefined>,
+) {
+  const tvStyle = ref<TvScoreboardStyle>(getTvScoreboardStyle(toValue(sport)))
   const overlayStyle = ref<OverlayScoreboardStyle>(getOverlayScoreboardStyle())
 
   function sync(): void {
-    tvStyle.value = getTvScoreboardStyle()
+    tvStyle.value = getTvScoreboardStyle(toValue(sport))
     overlayStyle.value = getOverlayScoreboardStyle()
   }
+
+  watch(() => toValue(sport), sync)
 
   onMounted(() => {
     sync()

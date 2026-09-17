@@ -4,7 +4,9 @@ import { RouterLink, useRoute, useRouter, type RouteLocationRaw } from 'vue-rout
 import { useAuthStore } from '@/stores/auth'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
 import { createMatch, fetchActiveFreeMatch } from '@/services/matchSync'
-import { createDefaultScoreboardState } from '@/types/hockeyScoreboard'
+import { getSportModule } from '@/sports/registry'
+import { EntitlementError } from '@/types/billing'
+import { message } from 'ant-design-vue'
 import { generateMatchId } from '@/utils/matchId'
 import {
   getStorageKey,
@@ -48,14 +50,36 @@ const createButtonLabel = computed(() => {
   return activeFreeMatchId.value ? 'Continuar partido' : 'Crear partido'
 })
 
+const isMarketingNav = computed(() => route.meta.nav === 'marketing')
+
 const navLinks = computed(() => {
-  const links: { name: string; label: string; to: RouteLocationRaw }[] = [
+  const links: { name: string; label: string; to: RouteLocationRaw }[] = []
+
+  if (isMarketingNav.value) {
+    links.push(
+      { name: 'features', label: 'Capacidades', to: { name: 'landing', hash: '#caracteristicas' } },
+      { name: 'live-now', label: 'En vivo', to: { name: 'live-now' } },
+      { name: 'plans-anchor', label: 'Planes', to: { name: 'landing', hash: '#planes' } },
+    )
+    return links
+  }
+
+  links.push(
+    { name: 'live-now', label: 'En vivo', to: { name: 'live-now' } },
     {
       name: 'public-tournaments',
       label: 'Torneos públicos',
       to: { name: 'public-tournaments' },
     },
-  ]
+  )
+
+  if (auth.isAuthenticated) {
+    links.push({
+      name: 'app-home',
+      label: 'App',
+      to: { name: 'app-home' },
+    })
+  }
 
   if (auth.isStaff) {
     links.push({
@@ -99,7 +123,10 @@ function closeMobile(): void {
 
 function openAuth(): void {
   closeMobile()
-  showAuth.value = true
+  void router.push({
+    name: 'access',
+    query: { redirect: route.fullPath },
+  })
 }
 
 async function handleLogout(): Promise<void> {
@@ -130,7 +157,7 @@ async function refreshActiveFreeMatch(): Promise<void> {
 }
 
 async function createMatchFlow(): Promise<void> {
-  if (!auth.isStaff && isSupabaseConfigured) {
+  if (!auth.isAuthenticated && isSupabaseConfigured) {
     openAuth()
     return
   }
@@ -147,10 +174,10 @@ async function createMatchFlow(): Promise<void> {
     let matchId = activeFreeMatchId.value
     if (!matchId) {
       matchId = generateMatchId()
-      const state = createDefaultScoreboardState()
+      const state = getSportModule('hockey').createDefaultState()
 
       if (isSupabaseConfigured) {
-        await createMatch(matchId, state, auth.profile?.id)
+        await createMatch(matchId, state, auth.profile?.id, state.sport)
       } else {
         localStorage.setItem(getStorageKey(matchId), JSON.stringify(state))
       }
@@ -171,6 +198,11 @@ async function createMatchFlow(): Promise<void> {
   } catch (err) {
     boardWin?.close()
     controlsWin?.close()
+    if (err instanceof EntitlementError) {
+      message.warning(err.message)
+      void router.push({ name: 'plans' })
+      return
+    }
     throw err
   } finally {
     creating.value = false
@@ -213,7 +245,15 @@ watch(
       </RouterLink>
 
       <nav class="app-nav__links app-nav__links--desktop">
+        <RouterLink
+          v-if="isMarketingNav"
+          :to="auth.isAuthenticated ? { name: 'app-home' } : { name: 'access', query: { mode: 'register' } }"
+          class="app-nav__link"
+        >
+          {{ auth.isAuthenticated ? 'Ir a la app' : 'Empezar gratis' }}
+        </RouterLink>
         <a-button
+          v-else
           type="primary"
           size="small"
           class="app-nav__create"
@@ -324,7 +364,16 @@ watch(
       :class="{ 'app-nav__mobile--open': mobileOpen }"
       aria-label="Menú móvil"
     >
+      <RouterLink
+        v-if="isMarketingNav"
+        :to="auth.isAuthenticated ? { name: 'app-home' } : { name: 'access', query: { mode: 'register' } }"
+        class="app-nav__link"
+        @click="closeMobile"
+      >
+        {{ auth.isAuthenticated ? 'Ir a la app' : 'Empezar gratis' }}
+      </RouterLink>
       <button
+        v-else
         type="button"
         class="app-nav__mobile-create"
         :disabled="creating"

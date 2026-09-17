@@ -37,7 +37,7 @@ begin
     new.id,
     new.email,
     coalesce(new.raw_user_meta_data->>'display_name', split_part(new.email, '@', 1)),
-    coalesce((new.raw_user_meta_data->>'role')::public.user_role, 'spectator')
+    coalesce((new.raw_user_meta_data->>'role')::public.user_role, 'organizer')
   );
   return new;
 end;
@@ -59,11 +59,16 @@ create policy "profiles_update_own"
 create policy "matches_select_public"
   on public.matches for select using (true);
 
-create policy "matches_insert_all"
-  on public.matches for insert with check (true);
+create policy "matches_insert_operator"
+  on public.matches for insert with check (
+    auth.uid() is not null
+    and organizer_id = auth.uid()
+  );
 
-create policy "matches_update_all"
-  on public.matches for update using (true);
+create policy "matches_update_operator"
+  on public.matches for update using (
+    organizer_id = auth.uid()
+  );
 
 create policy "matches_delete_organizer"
   on public.matches for delete using (

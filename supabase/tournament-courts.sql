@@ -12,5 +12,9 @@ alter table public.tournament_court_streams enable row level security;
 create policy "court_streams_select_public"
   on public.tournament_court_streams for select using (true);
 
-create policy "court_streams_write_all"
-  on public.tournament_court_streams for all using (true);
+create policy "court_streams_write_staff"
+  on public.tournament_court_streams for all using (
+    public.is_tournament_staff(tournament_id)
+  ) with check (
+    public.is_tournament_staff(tournament_id)
+  );

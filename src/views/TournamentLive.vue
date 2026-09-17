@@ -1,27 +1,26 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import ScoreBoard from '@/components/ScoreBoard.vue'
-import { useRemoteHockeyBoardCore } from '@/composables/useRemoteHockeyBoardCore'
+import { useRemoteScoreboard } from '@/composables/useRemoteScoreboard'
+import { getSportUi } from '@/sports/ui'
 import { fetchCourtStream } from '@/services/tournamentCourtStream'
 import { getLiveClockUpdateMs } from '@/config/poll'
-import { createDefaultScoreboardState } from '@/types/hockeyScoreboard'
+import { createDefaultScoreboardState } from '@/sports/scoreboardState'
 import { loadLiveEventMeta } from '@/utils/liveEventMeta'
-import { useScoreboardDisplayPrefs } from '@/composables/useScoreboardDisplayPrefs'
+import ScoreboardBrandMark from '@/components/ScoreboardBrandMark.vue'
 
 const route = useRoute()
 const tournamentId = computed(() => route.params.tournamentId as string)
 const court = computed(() => route.params.court as string)
 const isOverlay = computed(() => route.name === 'tournament-overlay')
 const activeMatchId = ref<string | null>(null)
-const { overlayStyle } = useScoreboardDisplayPrefs()
-
 const { remoteState, displayTime, displayIntermissionTime, displayPenaltiesLocal, displayPenaltiesVisit, refresh } =
-  useRemoteHockeyBoardCore(() => activeMatchId.value)
+  useRemoteScoreboard(() => activeMatchId.value)
 
 const displayState = computed(
   () => remoteState.value ?? createDefaultScoreboardState(),
 )
+const sportUi = computed(() => getSportUi(displayState.value.sport))
 
 const eventTitle = ref<string | null>(null)
 const eventDate = ref<string | null>(null)
@@ -61,10 +60,9 @@ onUnmounted(() => {
 
 <template>
   <div :class="{ 'overlay-root': isOverlay }">
-    <ScoreBoard
+    <component
+      :is="isOverlay ? sportUi.Overlay : sportUi.Live"
       v-if="activeMatchId"
-      :overlay="isOverlay"
-      :overlay-style="overlayStyle"
       :state="displayState"
       :display-time="displayTime"
       :display-intermission-time="displayIntermissionTime"
@@ -73,11 +71,16 @@ onUnmounted(() => {
       :event-title="isOverlay ? null : eventTitle"
       :event-date="isOverlay ? null : eventDate"
     />
+    <ScoreboardBrandMark
+      v-if="displayState.showBranding"
+      :compact="isOverlay"
+    />
   </div>
 </template>
 
 <style scoped>
 .overlay-root {
+  position: relative;
   min-height: 100vh;
   background: transparent;
 }
