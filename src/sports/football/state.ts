@@ -29,6 +29,7 @@ function normalizeFootballCards(raw: unknown): FootballCardEvent[] {
       period: typeof event.period === 'number' ? event.period : 1,
       gameMinute: String(event.gameMinute ?? ''),
       createdAt: String(event.createdAt ?? new Date().toISOString()),
+      fromSecondYellow: Boolean(event.fromSecondYellow),
     }
   })
 }

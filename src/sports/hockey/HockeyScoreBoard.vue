@@ -7,7 +7,6 @@ import { penaltyTypeLabel } from '@/data/penaltyCatalog'
 import { findPlayerById, findPlayerByNumber, playerLabel } from '@/utils/roster'
 import type { OverlayScoreboardStyle } from '@/config/scoreboardStyles'
 import { DEFAULT_OVERLAY_SCOREBOARD_STYLE } from '@/config/scoreboardStyles'
-import { cardCount } from '@/sports/football/actions'
 import {
   accumulatedFoulsInPeriod,
   activeExclusions,
@@ -45,10 +44,13 @@ const props = withDefaults(
 
 const GOAL_BANNER_MS = 12_000
 const PENALTY_BANNER_MS = 12_000
+const CARD_BANNER_MS = 12_000
 const activeGoalId = ref<string | null>(null)
 const activePenaltyKey = ref<string | null>(null)
+const activeCardId = ref<string | null>(null)
 let goalHideTimer: number | null = null
 let penaltyHideTimer: number | null = null
+let cardHideTimer: number | null = null
 
 const clock = computed(() => {
   if (props.state.intermissionActive) {
@@ -154,9 +156,6 @@ function formatBasketScoreEntry(
 }
 
 function sportMetaLine(team: 'local' | 'visit'): string {
-  if (showFootballCards.value) {
-    return `A ${cardCount(props.state, team, 'yellow')} · R ${cardCount(props.state, team, 'red')}`
-  }
   if (showFutsalMeta.value) {
     const fa = accumulatedFoulsInPeriod(props.state, team)
     const parts = [`FA ${fa}/${FUTSAL_ACCUMULATED_FOUL_LIMIT}`]
@@ -173,6 +172,40 @@ function sportMetaLine(team: 'local' | 'visit'): string {
   return ''
 }
 
+const localFootballCards = computed(() =>
+  footballCardsForLive('local'),
+)
+const visitFootballCards = computed(() =>
+  footballCardsForLive('visit'),
+)
+
+/** En Live: la 2.ª amarilla no se lista; se muestra solo la roja automática. */
+function footballCardsForLive(team: 'local' | 'visit') {
+  const cards = (props.state.footballCards ?? []).filter((card) => card.team === team)
+  return cards.filter((card, index) => {
+    if (card.kind !== 'yellow') return true
+    const next = cards[index + 1]
+    return !(
+      next &&
+      next.kind === 'red' &&
+      next.fromSecondYellow &&
+      next.playerId === card.playerId
+    )
+  })
+}
+
+function footballCardPlayerLabel(
+  card: {
+    playerId: string
+    player: string
+  },
+  team: 'local' | 'visit',
+): string {
+  const roster = team === 'local' ? props.state.rosterLocal : props.state.rosterVisit
+  const player = findPlayerById(roster, card.playerId)
+  return player ? playerLabel(player) : card.player.trim() || '—'
+}
+
 const confirmedGoalIds = computed(() =>
   props.state.goals
     .filter((goal) => !isGoalPending(goal) && goal.scorerPlayerId)
@@ -185,6 +218,10 @@ const penaltyIdsSignature = computed(() => {
   const visit = visitPenalties.value.map((penalty) => `visit:${penalty.id}`).join(',')
   return `${local}|${visit}`
 })
+
+const footballCardIdsSignature = computed(() =>
+  (props.state.footballCards ?? []).map((card) => card.id).join(','),
+)
 
 watch(
   confirmedGoalIds,
@@ -201,6 +238,7 @@ watch(
     if (!newest) return
 
     activeGoalId.value = newest.id
+    activeCardId.value = null
     if (goalHideTimer) window.clearTimeout(goalHideTimer)
     goalHideTimer = window.setTimeout(() => {
       activeGoalId.value = null
@@ -231,6 +269,7 @@ watch(
     if (!newest) return
 
     activePenaltyKey.value = `${newest.team}:${newest.penalty.id}`
+    activeCardId.value = null
     if (penaltyHideTimer) window.clearTimeout(penaltyHideTimer)
     penaltyHideTimer = window.setTimeout(() => {
       activePenaltyKey.value = null
@@ -239,9 +278,38 @@ watch(
   },
 )
 
+watch(
+  footballCardIdsSignature,
+  (_next, prev) => {
+    if (!props.overlay || !showFootballCards.value) return
+    if (prev === undefined) return
+
+    const prevIds = new Set(prev.split(',').filter(Boolean))
+    const cards = props.state.footballCards ?? []
+    const added = cards.filter((card) => !prevIds.has(card.id))
+    if (!added.length) return
+
+    const newest =
+      [...added].reverse().find((card) => card.kind === 'red') ??
+      added[added.length - 1] ??
+      null
+    if (!newest) return
+
+    activeCardId.value = newest.id
+    activeGoalId.value = null
+    activePenaltyKey.value = null
+    if (cardHideTimer) window.clearTimeout(cardHideTimer)
+    cardHideTimer = window.setTimeout(() => {
+      activeCardId.value = null
+      cardHideTimer = null
+    }, CARD_BANNER_MS)
+  },
+)
+
 onUnmounted(() => {
   if (goalHideTimer) window.clearTimeout(goalHideTimer)
   if (penaltyHideTimer) window.clearTimeout(penaltyHideTimer)
+  if (cardHideTimer) window.clearTimeout(cardHideTimer)
 })
 
 const goalBanner = computed(() => {
@@ -292,6 +360,34 @@ const penaltyBanner = computed(() => {
     type: penaltyTypeLabel(penalty.penaltyTypeId),
     duration: penalty.time,
     infraction: penalty.infraction.trim() || null,
+  }
+})
+
+const cardBanner = computed(() => {
+  if (!activeCardId.value) return null
+  const card = (props.state.footballCards ?? []).find(
+    (item) => item.id === activeCardId.value,
+  )
+  if (!card) return null
+
+  const roster = card.team === 'local' ? props.state.rosterLocal : props.state.rosterVisit
+  const teamName = card.team === 'local' ? props.state.localTeam : props.state.visitTeam
+  const player = findPlayerById(roster, card.playerId)
+  const number = player?.number.trim()
+  const name = player?.name.trim() || card.player.trim()
+  const who = number
+    ? name
+      ? `#${number} ${name}`
+      : `#${number}`
+    : name || 'Jugador'
+
+  return {
+    team: card.team,
+    kind: card.kind,
+    fromSecondYellow: Boolean(card.fromSecondYellow),
+    teamName: truncateTeamName(teamName),
+    player: who,
+    minute: card.gameMinute,
   }
 })
 
@@ -428,6 +524,36 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
         <span v-if="penaltyBanner.infraction" class="nhl-bug__goal-assist">
           · {{ penaltyBanner.infraction }}
         </span>
+      </div>
+    </Transition>
+
+    <Transition name="nhl-goal">
+      <div
+        v-if="cardBanner"
+        class="nhl-bug__goal nhl-bug__goal--card"
+        :class="`nhl-bug__goal--${cardBanner.team}`"
+      >
+        <span
+          v-if="cardBanner.fromSecondYellow"
+          class="nhl-bug__card-icons"
+          aria-label="Doble amarilla"
+        >
+          <span class="nhl-bug__card-icon nhl-bug__card-icon--yellow" />
+          <span class="nhl-bug__card-icon nhl-bug__card-icon--yellow" />
+        </span>
+        <span
+          v-else
+          class="nhl-bug__card-icon"
+          :class="
+            cardBanner.kind === 'red'
+              ? 'nhl-bug__card-icon--red'
+              : 'nhl-bug__card-icon--yellow'
+          "
+          aria-hidden="true"
+        />
+        <span class="nhl-bug__goal-team">{{ cardBanner.teamName }}</span>
+        <span class="nhl-bug__goal-scorer">{{ cardBanner.player }}</span>
+        <span class="nhl-bug__goal-minute">{{ cardBanner.minute }}</span>
       </div>
     </Transition>
   </div>
@@ -585,18 +711,48 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
             <span v-else class="scoreboard__detail-empty">Sin anotaciones</span>
           </div>
 
+          <div v-if="showFootballCards" class="scoreboard__detail-block">
+            <span class="scoreboard__detail-title">Tarjetas</span>
+            <div v-if="localFootballCards.length" class="scoreboard__goals">
+              <div
+                v-for="card in localFootballCards"
+                :key="card.id"
+                class="scoreboard__goal-entry scoreboard__goal-entry--with-card"
+              >
+                <span
+                  v-if="card.fromSecondYellow"
+                  class="scoreboard__card-icons"
+                  aria-label="Doble amarilla"
+                >
+                  <span class="scoreboard__card-icon scoreboard__card-icon--yellow" />
+                  <span class="scoreboard__card-icon scoreboard__card-icon--yellow" />
+                </span>
+                <span
+                  v-else
+                  class="scoreboard__card-icon"
+                  :class="
+                    card.kind === 'red'
+                      ? 'scoreboard__card-icon--red'
+                      : 'scoreboard__card-icon--yellow'
+                  "
+                  aria-hidden="true"
+                />
+                <span class="scoreboard__card-text">
+                  {{ footballCardPlayerLabel(card, 'local') }}
+                  · {{ card.gameMinute }}
+                  · {{ formatGoalPeriod(card.period) }}
+                </span>
+              </div>
+            </div>
+            <span v-else class="scoreboard__detail-empty">Sin tarjetas</span>
+          </div>
+
           <div
             v-if="sportMetaLine('local')"
             class="scoreboard__detail-block"
           >
             <span class="scoreboard__detail-title">
-              {{
-                showFootballCards
-                  ? 'Tarjetas'
-                  : showFutsalMeta
-                    ? 'Faltas / TM'
-                    : 'Faltas'
-              }}
+              {{ showFutsalMeta ? 'Faltas / TM' : 'Faltas' }}
             </span>
             <p class="scoreboard__shot-line">{{ sportMetaLine('local') }}</p>
           </div>
@@ -687,18 +843,48 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
             <span v-else class="scoreboard__detail-empty">Sin anotaciones</span>
           </div>
 
+          <div v-if="showFootballCards" class="scoreboard__detail-block">
+            <span class="scoreboard__detail-title">Tarjetas</span>
+            <div v-if="visitFootballCards.length" class="scoreboard__goals">
+              <div
+                v-for="card in visitFootballCards"
+                :key="card.id"
+                class="scoreboard__goal-entry scoreboard__goal-entry--with-card"
+              >
+                <span
+                  v-if="card.fromSecondYellow"
+                  class="scoreboard__card-icons"
+                  aria-label="Doble amarilla"
+                >
+                  <span class="scoreboard__card-icon scoreboard__card-icon--yellow" />
+                  <span class="scoreboard__card-icon scoreboard__card-icon--yellow" />
+                </span>
+                <span
+                  v-else
+                  class="scoreboard__card-icon"
+                  :class="
+                    card.kind === 'red'
+                      ? 'scoreboard__card-icon--red'
+                      : 'scoreboard__card-icon--yellow'
+                  "
+                  aria-hidden="true"
+                />
+                <span class="scoreboard__card-text">
+                  {{ footballCardPlayerLabel(card, 'visit') }}
+                  · {{ card.gameMinute }}
+                  · {{ formatGoalPeriod(card.period) }}
+                </span>
+              </div>
+            </div>
+            <span v-else class="scoreboard__detail-empty">Sin tarjetas</span>
+          </div>
+
           <div
             v-if="sportMetaLine('visit')"
             class="scoreboard__detail-block"
           >
             <span class="scoreboard__detail-title">
-              {{
-                showFootballCards
-                  ? 'Tarjetas'
-                  : showFutsalMeta
-                    ? 'Faltas / TM'
-                    : 'Faltas'
-              }}
+              {{ showFutsalMeta ? 'Faltas / TM' : 'Faltas' }}
             </span>
             <p class="scoreboard__shot-line">{{ sportMetaLine('visit') }}</p>
           </div>
@@ -1003,6 +1189,30 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   &--penalty {
     color: #fff;
     background: #ff3b4e;
+  }
+}
+
+.nhl-bug__card-icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.16rem;
+  flex-shrink: 0;
+}
+
+.nhl-bug__card-icon {
+  flex-shrink: 0;
+  width: 0.72rem;
+  height: 1.05rem;
+  border-radius: 0.14rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+
+  &--yellow {
+    background: linear-gradient(160deg, #ffe566 0%, #f0c419 100%);
+  }
+
+  &--red {
+    background: linear-gradient(160deg, #ff5a5f 0%, #c1121f 100%);
   }
 }
 
@@ -1414,6 +1624,43 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   &--pending {
     opacity: 0.55;
   }
+
+  &--with-card {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+}
+
+.scoreboard__card-icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.18rem;
+  flex-shrink: 0;
+}
+
+.scoreboard__card-icon {
+  flex-shrink: 0;
+  width: 0.62rem;
+  height: 0.92rem;
+  border-radius: 0.14rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+
+  &--yellow {
+    background: linear-gradient(160deg, #ffe566 0%, #f0c419 100%);
+  }
+
+  &--red {
+    background: linear-gradient(160deg, #ff5a5f 0%, #c1121f 100%);
+  }
+}
+
+.scoreboard__card-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .scoreboard__penalties--live {

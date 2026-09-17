@@ -13,6 +13,8 @@ import HockeyGoalsPanel from '@/sports/hockey/controls/HockeyGoalsPanel.vue'
 import {
   addFootballCard,
   cardCount,
+  isPlayerExpelled,
+  playerYellowCount,
   undoLastFootballCard,
 } from '@/sports/football/actions'
 import {
@@ -21,9 +23,10 @@ import {
   FOOTBALL_PERIODS,
   type FootballCardKind,
 } from '@/sports/football/types'
-import { DEFAULT_INTERMISSION_TIME, isGoalPending } from '@/sports/scoreboardState'
+import { isGoalPending } from '@/sports/scoreboardState'
 import { parseTimeToSeconds } from '@/utils/clock'
 import { findPlayerById, playerLabel } from '@/utils/roster'
+import { message } from 'ant-design-vue'
 
 const {
   route,
@@ -52,7 +55,8 @@ const {
   scrollToClock,
   setupClockObserver,
 } = useControlsClockDock({ activeTab, matchId, clockSectionEl, clockDisplayEl })
-const { lateGameWarningMinutes, lateGameWarningEnabled } = useMatchClockAlerts()
+const { countdownBeepSeconds, lateGameWarningMinutes, lateGameWarningEnabled } =
+  useMatchClockAlerts()
 
 const clockDraft = ref(store.state.timeGame)
 const clockEditing = ref(false)
@@ -74,6 +78,11 @@ const canAdvancePeriod = computed(
     parseTimeToSeconds(store.state.timeGame) <= 0,
 )
 
+const showIntermissionControls = computed(
+  () =>
+    store.state.intermissionActive || parseTimeToSeconds(store.state.timeGame) <= 0,
+)
+
 watch(
   () => store.state.timeGame,
   (time) => {
@@ -82,10 +91,22 @@ watch(
 )
 
 watch(
-  () => store.state.intermissionDuration,
-  (value) => {
-    if (!store.state.intermissionActive) {
-      intermissionDraft.value = value || sport.value.clock.intermissionDefault
+  () => store.state.intermissionActive,
+  (active) => {
+    if (!active) {
+      intermissionDraft.value =
+        store.state.intermissionDuration || sport.value.clock.intermissionDefault
+    }
+  },
+)
+
+watch(
+  () => [store.state.intermissionTime, store.state.intermissionDuration] as const,
+  ([time, duration]) => {
+    if (store.state.intermissionActive) {
+      intermissionDraft.value = time
+    } else {
+      intermissionDraft.value = duration || sport.value.clock.intermissionDefault
     }
   },
 )
@@ -113,25 +134,6 @@ function commitClockDraft(): void {
   clockDraft.value = store.state.timeGame
 }
 
-function onIntermissionDraftUpdate(value: string): void {
-  intermissionDraft.value = value
-}
-
-function commitIntermissionDraft(): void {
-  const next = intermissionDraft.value || DEFAULT_INTERMISSION_TIME
-  if (store.state.intermissionActive) {
-    if (store.state.isPaused) store.setIntermissionTime(next)
-  } else {
-    store.patch({
-      intermissionDuration: next,
-      intermissionTime: next,
-    })
-  }
-  intermissionDraft.value = store.state.intermissionActive
-    ? store.state.intermissionTime
-    : store.state.intermissionDuration || next
-}
-
 function nextPeriod(): void {
   if (!canAdvancePeriod.value) return
   const nextLength =
@@ -140,27 +142,66 @@ function nextPeriod(): void {
       : sport.value.clock.defaultPeriodTime
   store.advanceToNextPeriod(nextLength)
   clockDraft.value = store.state.timeGame
+  intermissionDraft.value =
+    store.state.intermissionDuration || sport.value.clock.intermissionDefault
 }
 
 function startOrToggleIntermission(): void {
-  if (!store.state.intermissionActive) {
-    store.startIntermission(
-      intermissionDraft.value ||
-        store.state.intermissionDuration ||
-        sport.value.clock.intermissionDefault,
-    )
+  if (store.state.intermissionActive) {
+    store.togglePause()
     return
   }
-  store.togglePause()
+  const duration =
+    intermissionDraft.value.trim() ||
+    store.state.intermissionDuration ||
+    sport.value.clock.intermissionDefault
+  intermissionDraft.value = duration
+  store.startIntermission(duration)
+}
+
+function onIntermissionDraftUpdate(value: string): void {
+  intermissionDraft.value = value
+}
+
+function commitIntermissionDraft(): void {
+  const normalized =
+    intermissionDraft.value.trim() ||
+    store.state.intermissionDuration ||
+    sport.value.clock.intermissionDefault
+  store.setIntermissionTime(normalized)
+  intermissionDraft.value = store.state.intermissionActive
+    ? store.state.intermissionTime
+    : store.state.intermissionDuration || normalized
+}
+
+function stopIntermission(): void {
+  store.stopIntermission()
+  clockDraft.value = store.state.timeGame
+  intermissionDraft.value =
+    store.state.intermissionDuration || sport.value.clock.intermissionDefault
 }
 
 function markGoal(team: 'local' | 'visit'): void {
   store.markGoal(team)
-  activeTab.value = 'goals'
 }
 
 function addCard(team: 'local' | 'visit', kind: FootballCardKind): void {
-  store.patch(addFootballCard(store.state, team, kind, selectedCardPlayer.value[team]))
+  const playerId = selectedCardPlayer.value[team]
+  const result = addFootballCard(store.state, team, kind, playerId)
+  if (result.blockedReason === 'player_required') {
+    message.warning('Selecciona un jugador para la amarilla (necesario para doble amarilla).')
+    return
+  }
+  if (result.blockedReason === 'already_expelled') {
+    message.warning('Ese jugador ya está expulsado.')
+    return
+  }
+  if (!result.patch.footballCards) return
+  store.patch(result.patch)
+  if (result.secondYellowExpulsion) {
+    const who = playerName(team, playerId)
+    message.error(`Doble amarilla: ${who || 'jugador'} expulsado (roja automática).`)
+  }
 }
 
 function undoCard(team: 'local' | 'visit'): void {
@@ -171,6 +212,11 @@ function undoCard(team: 'local' | 'visit'): void {
 function playerName(team: 'local' | 'visit', playerId: string): string {
   const player = findPlayerById(rosterFor(team), playerId)
   return player ? playerLabel(player) : 'Sin asignar'
+}
+
+function cardLabel(item: { kind: FootballCardKind; fromSecondYellow?: boolean }): string {
+  if (item.kind === 'red' && item.fromSecondYellow) return 'Roja (doble amarilla)'
+  return FOOTBALL_CARD_LABELS[item.kind]
 }
 
 const cardKinds = Object.entries(FOOTBALL_CARD_LABELS) as Array<[FootballCardKind, string]>
@@ -306,7 +352,7 @@ const recentCards = computed(() =>
             </div>
             <p class="controls__score-hint">
               El botón <strong>+</strong> marca el gol y captura el minuto del reloj.
-              Completa autor y asistencia en <strong>Goles</strong>.
+              Cuando quieras, completa autor y asistencia en la pestaña <strong>Goles</strong>.
             </p>
           </a-card>
 
@@ -394,7 +440,10 @@ const recentCards = computed(() =>
                   </div>
                 </div>
 
-                <div class="controls__intermission">
+                <div
+                  v-if="showIntermissionControls"
+                  class="controls__intermission"
+                >
                   <div class="controls__clock-field controls__clock-field--time">
                     <div class="controls__clock-field-head">
                       <label>Descanso</label>
@@ -422,11 +471,18 @@ const recentCards = computed(() =>
                     </a-button>
                     <a-button
                       v-if="store.state.intermissionActive"
-                      @click="store.stopIntermission()"
+                      @click="stopIntermission"
                     >
                       Terminar descanso
                     </a-button>
                   </div>
+                  <span class="controls__clock-hint">
+                    El marcador TV muestra la cuenta de descanso.
+                    Beep en los últimos {{ countdownBeepSeconds() }} s
+                    (configurable en Perfil).
+                    Al terminar (o al pulsar Terminar descanso), pasa solo al siguiente tiempo
+                    (salvo el último).
+                  </span>
                 </div>
               </div>
             </a-card>
@@ -516,7 +572,7 @@ const recentCards = computed(() =>
           type="info"
           show-icon
           style="margin-bottom: 0.85rem"
-          message="FIFA campo: amarilla (amonestación) y roja (expulsión)."
+          message="FIFA: amarilla (amonestación) y roja (expulsión). La segunda amarilla al mismo jugador genera roja automática."
         />
         <div class="controls__split">
           <a-card
@@ -531,7 +587,7 @@ const recentCards = computed(() =>
             <a-select
               :value="selectedCardPlayer[side]"
               allow-clear
-              placeholder="Jugador"
+              placeholder="Jugador (obligatorio en amarilla)"
               style="width: 100%; margin-bottom: 0.75rem"
               @update:value="(v: string) => (selectedCardPlayer[side] = v ?? '')"
             >
@@ -539,16 +595,33 @@ const recentCards = computed(() =>
                 v-for="player in rosterFor(side)"
                 :key="player.id"
                 :value="player.id"
+                :disabled="isPlayerExpelled(store.state, side, player.id)"
               >
                 {{ playerLabel(player) }}
+                <template v-if="playerYellowCount(store.state, side, player.id) > 0">
+                  · A{{ playerYellowCount(store.state, side, player.id) }}
+                </template>
+                <template v-if="isPlayerExpelled(store.state, side, player.id)">
+                  · Expulsado
+                </template>
               </a-select-option>
             </a-select>
             <div class="controls__foul-actions">
               <a-button
                 v-for="[kind, label] in cardKinds"
                 :key="kind"
+                class="controls__card-btn"
                 @click="addCard(side, kind)"
               >
+                <span
+                  class="controls__card-icon"
+                  :class="
+                    kind === 'red'
+                      ? 'controls__card-icon--red'
+                      : 'controls__card-icon--yellow'
+                  "
+                  aria-hidden="true"
+                />
                 {{ label }}
               </a-button>
               <a-button danger @click="undoCard(side)">Deshacer</a-button>
@@ -560,7 +633,7 @@ const recentCards = computed(() =>
           <ul v-if="recentCards.length" class="controls__log">
             <li v-for="item in recentCards" :key="item.id">
               <strong>{{ item.team === 'local' ? store.state.localTeam : store.state.visitTeam }}</strong>
-              · {{ FOOTBALL_CARD_LABELS[item.kind] }}
+              · {{ cardLabel(item) }}
               · {{ item.player || playerName(item.team, item.playerId) }}
               · {{ sport.periodLabel(item.period) }} {{ item.gameMinute }}
             </li>

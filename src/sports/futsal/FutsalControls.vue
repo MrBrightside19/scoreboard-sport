@@ -649,8 +649,18 @@ const exclusions = computed(() => activeExclusions(store.state))
               <a-button
                 v-for="[kind, label] in cardKinds"
                 :key="kind"
+                class="controls__card-btn"
                 @click="addCard(team.key, kind)"
               >
+                <span
+                  class="controls__card-icon"
+                  :class="
+                    kind === 'red'
+                      ? 'controls__card-icon--red'
+                      : 'controls__card-icon--yellow'
+                  "
+                  aria-hidden="true"
+                />
                 {{ label }}
               </a-button>
               <a-button danger @click="undoCard(team.key)">Deshacer</a-button>
