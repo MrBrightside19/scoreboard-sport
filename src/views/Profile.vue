@@ -4,8 +4,12 @@ import { RouterLink, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { useAuthStore } from '@/stores/auth'
 import {
+  getSharedTvScoreboardStyle,
   getTvScoreboardStyle,
   getUserPreferences,
+  isUsingSportSpecificTvStyle,
+  clearSportTvStyleOverride,
+  setSharedTvScoreboardStyle,
   setTvScoreboardStyle,
   setUserPreferences,
   type AppTheme,
@@ -22,6 +26,10 @@ import { playCountdownBeep } from '@/utils/countdownBeep'
 import type {
   OverlayScoreboardStyle,
   TvScoreboardStyle,
+} from '@/config/scoreboardStyles'
+import {
+  isSharedTvStyle,
+  sportSpecificTvStyles,
 } from '@/config/scoreboardStyles'
 import ScoreboardStylePicker from '@/components/ScoreboardStylePicker.vue'
 import { fetchEntitlement, resolvePlan } from '@/services/entitlementsService'
@@ -51,8 +59,16 @@ const prefs = reactive<UserPreferences>({
   ...getUserPreferences(),
 })
 const boardSport = ref<SportId>(DEFAULT_SPORT)
+const designSport = ref<SportId>('hockey')
 const sports = listAvailableSports()
-const currentTvStyle = computed(() => getTvScoreboardStyle(boardSport.value))
+const sharedTvStyle = computed(() => getSharedTvScoreboardStyle())
+const currentTvStyle = computed(() => getTvScoreboardStyle(designSport.value))
+const designSportHasSpecific = computed(
+  () => sportSpecificTvStyles(designSport.value).length > 0,
+)
+const designSportUsesSpecific = computed(() =>
+  isUsingSportSpecificTvStyle(designSport.value),
+)
 
 const entitlement = ref<Entitlement | null>(null)
 const currentPlan = computed(() => getPlanDefinition(resolvePlan(entitlement.value)))
@@ -213,16 +229,27 @@ function setTheme(theme: AppTheme): void {
   message.success(theme === 'light' ? 'Tema claro activado' : 'Tema oscuro activado')
 }
 
-function onTvStyleChange(style: TvScoreboardStyle | OverlayScoreboardStyle): void {
+function onSharedTvStyleChange(style: TvScoreboardStyle | OverlayScoreboardStyle): void {
   const next = style as TvScoreboardStyle
-  if (currentTvStyle.value === next) return
-  const updated = setTvScoreboardStyle(boardSport.value, next)
+  if (!isSharedTvStyle(next) || sharedTvStyle.value === next) return
+  const updated = setSharedTvScoreboardStyle(next)
   Object.assign(prefs, updated)
-  message.success(
-    next === 'arena'
-      ? 'Estilo Arena LED aplicado a hockey'
-      : 'Tema de marcador TV aplicado a todos los deportes',
-  )
+  message.success('Tema TV aplicado a todos los deportes')
+}
+
+function onSportTvStyleChange(style: TvScoreboardStyle | OverlayScoreboardStyle): void {
+  const next = style as TvScoreboardStyle
+  if (isSharedTvStyle(next) || currentTvStyle.value === next) return
+  const updated = setTvScoreboardStyle(designSport.value, next)
+  Object.assign(prefs, updated)
+  message.success('Diseño exclusivo de marcador actualizado')
+}
+
+function useSharedThemeForSport(): void {
+  if (!designSportUsesSpecific.value) return
+  const updated = clearSportTvStyleOverride(designSport.value)
+  Object.assign(prefs, updated)
+  message.success('Marcador vuelve al tema compartido')
 }
 
 function onOverlayStyleChange(style: TvScoreboardStyle | OverlayScoreboardStyle): void {
@@ -500,43 +527,87 @@ async function handleLogout(): Promise<void> {
               <header class="profile__pref-group-head">
                 <h3 id="profile-boards">Marcadores</h3>
                 <p>
-                  Clásico y Clásico claro son el tema de color de todos los marcadores TV.
-                  Elige un deporte solo para previsualizar; Arena LED es exclusivo de hockey.
+                  El tema de color es compartido. Los diseños exclusivos (como Arena LED)
+                  se eligen por deporte.
                 </p>
               </header>
 
-              <div class="profile__theme-toggle" role="tablist" aria-label="Deporte del marcador">
-                <a-button
-                  v-for="sport in sports"
-                  :key="sport.id"
-                  :type="boardSport === sport.id ? 'primary' : 'default'"
-                  @click="boardSport = sport.id"
-                >
-                  {{ sport.shortLabel }}
-                </a-button>
-              </div>
-
               <div class="profile__pref-card profile__pref-card--stack">
                 <div class="profile__pref-card-copy">
-                  <h4>Marcador TV</h4>
+                  <h4>Tema TV (todos los deportes)</h4>
                   <p>
-                    Vista previa con
-                    {{ sports.find((item) => item.id === boardSport)?.label }}.
-                    Clásico / Clásico claro se guardan para todos los deportes.
+                    Clásico u claro para salas oscuras o iluminadas. Afecta fútbol, futsal,
+                    básquet y hockey (si no usan un diseño exclusivo).
                   </p>
+                </div>
+                <div class="profile__theme-toggle" role="tablist" aria-label="Deporte de vista previa">
+                  <a-button
+                    v-for="sport in sports"
+                    :key="sport.id"
+                    size="small"
+                    :type="boardSport === sport.id ? 'primary' : 'default'"
+                    @click="boardSport = sport.id"
+                  >
+                    {{ sport.shortLabel }}
+                  </a-button>
                 </div>
                 <ScoreboardStylePicker
                   mode="tv"
+                  filter="shared"
                   :sport="boardSport"
-                  :model-value="currentTvStyle"
-                  @update:model-value="onTvStyleChange"
+                  :model-value="sharedTvStyle"
+                  @update:model-value="onSharedTvStyleChange"
                 />
               </div>
 
               <div class="profile__pref-card profile__pref-card--stack">
                 <div class="profile__pref-card-copy">
+                  <h4>Diseños por deporte</h4>
+                  <p>
+                    Variantes con layout propio. Hoy solo hockey tiene Arena LED; el resto
+                    usa el tema compartido.
+                  </p>
+                </div>
+                <div class="profile__theme-toggle" role="tablist" aria-label="Deporte del diseño">
+                  <a-button
+                    v-for="sport in sports"
+                    :key="sport.id"
+                    :type="designSport === sport.id ? 'primary' : 'default'"
+                    @click="designSport = sport.id"
+                  >
+                    {{ sport.shortLabel }}
+                  </a-button>
+                </div>
+
+                <template v-if="designSportHasSpecific">
+                  <div class="profile__design-shared">
+                    <a-button
+                      block
+                      :type="designSportUsesSpecific ? 'default' : 'primary'"
+                      @click="useSharedThemeForSport"
+                    >
+                      Usar tema compartido
+                      <template v-if="!designSportUsesSpecific"> (activo)</template>
+                    </a-button>
+                  </div>
+                  <ScoreboardStylePicker
+                    mode="tv"
+                    filter="sport-specific"
+                    :sport="designSport"
+                    :model-value="currentTvStyle"
+                    @update:model-value="onSportTvStyleChange"
+                  />
+                </template>
+                <p v-else class="profile__design-empty">
+                  {{ sports.find((item) => item.id === designSport)?.label }}
+                  todavía no tiene un diseño exclusivo. Usa el tema TV compartido de arriba.
+                </p>
+              </div>
+
+              <div class="profile__pref-card profile__pref-card--stack">
+                <div class="profile__pref-card-copy">
                   <h4>Overlay OBS</h4>
-                  <p>Barra transparente de transmisión de este deporte.</p>
+                  <p>Barra transparente de transmisión (compartida entre deportes).</p>
                 </div>
                 <ScoreboardStylePicker
                   mode="overlay"
@@ -760,5 +831,16 @@ async function handleLogout(): Promise<void> {
 
 .profile__pref-group .profile__theme-toggle {
   margin-bottom: 0.85rem;
+}
+
+.profile__design-shared {
+  margin-top: 0.15rem;
+}
+
+.profile__design-empty {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--app-text-muted);
 }
 </style>

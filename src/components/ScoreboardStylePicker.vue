@@ -19,8 +19,10 @@ const props = withDefaults(
     mode: 'tv' | 'overlay'
     modelValue: TvScoreboardStyle | OverlayScoreboardStyle
     sport?: SportId
+    /** TV: tema compartido, diseños por deporte, o todos. */
+    filter?: 'all' | 'shared' | 'sport-specific'
   }>(),
-  { sport: DEFAULT_SPORT },
+  { sport: DEFAULT_SPORT, filter: 'all' },
 )
 
 const emit = defineEmits<{
@@ -29,7 +31,9 @@ const emit = defineEmits<{
 
 const sportUi = computed(() => getSportUi(props.sport))
 const options = computed(() =>
-  props.mode === 'tv' ? tvStyleOptionsForSport(props.sport) : OVERLAY_SCOREBOARD_STYLES,
+  props.mode === 'tv'
+    ? tvStyleOptionsForSport(props.sport, props.filter)
+    : OVERLAY_SCOREBOARD_STYLES,
 )
 
 const previewState = computed(() => {
