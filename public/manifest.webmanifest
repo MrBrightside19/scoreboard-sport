@@ -1,0 +1,19 @@
+{
+  "name": "ScoreDesk Mesa",
+  "short_name": "Mesa",
+  "description": "Mesa de control de ScoreDesk para operar el partido desde el teléfono.",
+  "start_url": "./app/mesa",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

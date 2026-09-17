@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { isMobileMesaViewport } from '@/utils/mobileMesa'
+import { readMatchIdFromStorage } from '@/utils/localSync'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -20,7 +22,17 @@ const router = createRouter({
       path: '/app',
       name: 'app-home',
       component: () => import('@/views/AppHome.vue'),
-      meta: { title: 'App', requiresAuth: true },
+      meta: { title: 'App', requiresAuth: true, desktopOnly: true },
+    },
+    {
+      path: '/app/mesa',
+      name: 'mobile-mesa',
+      component: () => import('@/views/MobileMesa.vue'),
+      meta: {
+        title: 'Mesa móvil',
+        hideNav: true,
+        mobileOnly: true,
+      },
     },
     {
       path: '/app/acceso',
@@ -120,6 +132,21 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   if (to.meta.title) {
     document.title = `${to.meta.title} · ScoreDesk`
+  }
+
+  if (to.meta.mobileOnly && !isMobileMesaViewport()) {
+    return { name: 'app-home' }
+  }
+
+  if (to.meta.desktopOnly && isMobileMesaViewport()) {
+    return { name: 'mobile-mesa' }
+  }
+
+  if (to.name === 'controls' && isMobileMesaViewport()) {
+    const queryId = typeof to.query.matchId === 'string' ? to.query.matchId.trim() : ''
+    if (!queryId && !readMatchIdFromStorage()) {
+      return { name: 'mobile-mesa' }
+    }
   }
 
   const needsAuth = Boolean(to.meta.requiresAuth || to.meta.requiresStaff)

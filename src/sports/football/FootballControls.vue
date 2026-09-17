@@ -4,6 +4,7 @@ import TimeInput from '@/components/controls/TimeInput.vue'
 import ControlsShell from '@/components/controls/ControlsShell.vue'
 import ControlsClockDock from '@/components/controls/ControlsClockDock.vue'
 import ControlsMatchEndCard from '@/components/controls/ControlsMatchEndCard.vue'
+import ControlsOperatorLinks from '@/components/controls/ControlsOperatorLinks.vue'
 import { getSportModule } from '@/sports/registry'
 import { useMatchOperatorSession } from '@/composables/useMatchOperatorSession'
 import { useControlsClockDock } from '@/composables/useControlsClockDock'
@@ -32,7 +33,6 @@ import { findPlayerById, playerLabel } from '@/utils/roster'
 import { message } from 'ant-design-vue'
 
 const {
-  route,
   store,
   matchId,
   copied,
@@ -258,48 +258,12 @@ const recentCards = computed(() =>
     :loading="Boolean(matchId) && !hydrated"
   >
     <template #links>
-      <router-link
-        v-if="tournamentContext"
-        :to="{
-          name: 'tournament-board',
-          params: {
-            tournamentId: tournamentContext.tournamentId,
-            court: tournamentContext.court,
-          },
-          query: { matchId },
-        }"
-        target="_blank"
-      >
-        <a-button type="primary">Abrir TV local</a-button>
-      </router-link>
-      <router-link
-        v-else
-        :to="{
-          name: 'board',
-          query: {
-            matchId,
-            local: route.query.local,
-            visit: route.query.visit,
-            time: route.query.time,
-          },
-        }"
-        target="_blank"
-      >
-        <a-button>Abrir TV local</a-button>
-      </router-link>
-      <template v-if="tournamentContext">
-        <a-button @click="copyLink('live')">
-          {{ copied === 'live' ? '¡Copiado!' : 'Copiar Live' }}
-        </a-button>
-      </template>
-      <template v-else>
-        <a-button @click="copyLink('live')">
-          {{ copied === 'live' ? '¡Copiado!' : 'Copiar Live' }}
-        </a-button>
-        <a-button @click="copyLink('overlay')">
-          {{ copied === 'overlay' ? '¡Copiado!' : 'Copiar OBS' }}
-        </a-button>
-      </template>
+      <ControlsOperatorLinks
+        :match-id="matchId || undefined"
+        :copied="copied"
+        :tournament-context="tournamentContext"
+        @copy="copyLink"
+      />
     </template>
 
     <a-tabs v-model:active-key="activeTab" class="controls__tabs">
@@ -734,7 +698,8 @@ const recentCards = computed(() =>
             class="controls__card controls__card--wide football-config__links-card"
           >
             <p class="football-config__hint">
-              Live es el marcador público. Overlay es para OBS. TV abre el marcador a pantalla completa.
+              Live es el marcador público. Overlay es para OBS. Copiá TV para
+              pegarlo en otra pantalla; no lo abras en este teléfono.
             </p>
             <div class="football-config__links">
               <a-button :disabled="!matchId" @click="copyLink('live')">
@@ -744,41 +709,15 @@ const recentCards = computed(() =>
                 {{ copied === 'overlay' ? '¡Copiado!' : 'Copiar overlay' }}
               </a-button>
               <a-button
-                v-if="tournamentContext"
                 :disabled="!matchId"
-                @click="copyLink('board-torneo')"
+                @click="copyLink(tournamentContext ? 'board-torneo' : 'board')"
               >
-                {{ copied === 'board-torneo' ? '¡Copiado!' : 'Copiar TV remoto' }}
+                {{
+                  copied === 'board' || copied === 'board-torneo'
+                    ? '¡Copiado!'
+                    : 'Copiar TV'
+                }}
               </a-button>
-              <router-link
-                v-if="tournamentContext"
-                :to="{
-                  name: 'tournament-board',
-                  params: {
-                    tournamentId: tournamentContext.tournamentId,
-                    court: tournamentContext.court,
-                  },
-                  query: { matchId },
-                }"
-                target="_blank"
-              >
-                <a-button type="primary">Abrir TV local</a-button>
-              </router-link>
-              <router-link
-                v-else
-                :to="{
-                  name: 'board',
-                  query: {
-                    matchId,
-                    local: route.query.local,
-                    visit: route.query.visit,
-                    time: route.query.time,
-                  },
-                }"
-                target="_blank"
-              >
-                <a-button type="primary">Abrir TV local</a-button>
-              </router-link>
             </div>
           </a-card>
 

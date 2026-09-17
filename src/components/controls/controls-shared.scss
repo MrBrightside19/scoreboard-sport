@@ -44,6 +44,26 @@
   justify-content: flex-end;
 }
 
+.controls__link-switch-match {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .controls__link-tv-open {
+    display: none !important;
+  }
+
+  .controls__link-switch-match {
+    display: inline-flex;
+  }
+}
+
+@media (min-width: 901px) {
+  .controls__link-tv-copy:not(.controls__link-tv-copy--desktop) {
+    display: none !important;
+  }
+}
+
 .controls__body {
   min-width: 0;
 }

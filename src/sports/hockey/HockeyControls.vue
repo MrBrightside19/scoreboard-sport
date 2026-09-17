@@ -23,6 +23,7 @@ import {
   isLateGameWarningEnabled,
 } from '@/utils/userPreferences'
 import { buildAppUrl, tournamentBoardPath } from '@/utils/appUrl'
+import { operatorHomeRouteName } from '@/utils/mobileMesa'
 import { getLiveClockUpdateMs } from '@/config/poll'
 import { isGoalPending, DEFAULT_INTERMISSION_TIME } from '@/sports/scoreboardState'
 import { getSportModule } from '@/sports/registry'
@@ -32,6 +33,7 @@ import { findPlayerById, findPlayerByNumber, playerLabel } from '@/utils/roster'
 import TimeInput from '@/components/controls/TimeInput.vue'
 import ControlsShell from '@/components/controls/ControlsShell.vue'
 import ControlsMatchEndCard from '@/components/controls/ControlsMatchEndCard.vue'
+import ControlsOperatorLinks from '@/components/controls/ControlsOperatorLinks.vue'
 import ControlsRosterPanel from '@/sports/hockey/controls/HockeyRosterPanel.vue'
 import ControlsGoalsPanel from '@/sports/hockey/controls/HockeyGoalsPanel.vue'
 import ControlsPenaltiesPanel from '@/sports/hockey/controls/HockeyPenaltiesPanel.vue'
@@ -731,7 +733,7 @@ async function finishCurrentMatch(): Promise<void> {
     if (tournamentId) {
       await router.replace({ name: 'tournament-detail', params: { id: tournamentId } })
     } else {
-      await router.replace({ name: 'app-home' })
+      await router.replace({ name: operatorHomeRouteName() })
     }
   } catch (err) {
     advanceError.value = err instanceof Error ? err.message : 'Error al finalizar el partido'
@@ -765,7 +767,7 @@ async function publish(): Promise<void> {
   }
 }
 
-type LinkType = 'live' | 'overlay' | 'board-torneo'
+type LinkType = 'live' | 'overlay' | 'board' | 'board-torneo'
 
 function copyLink(type: LinkType): void {
   let path = ''
@@ -773,6 +775,8 @@ function copyLink(type: LinkType): void {
   if (type === 'board-torneo' && tournamentContext.value) {
     const { tournamentId, court } = tournamentContext.value
     path = tournamentBoardPath(tournamentId, court)
+  } else if (type === 'board') {
+    path = `/board?matchId=${encodeURIComponent(matchId.value)}`
   } else if (type === 'live') {
     path = `/live/${matchId.value}`
   } else {
@@ -894,48 +898,12 @@ onUnmounted(() => {
     :loading="Boolean(matchId) && !hydrated"
   >
     <template #links>
-        <router-link
-          v-if="tournamentContext"
-          :to="{
-            name: 'tournament-board',
-            params: {
-              tournamentId: tournamentContext.tournamentId,
-              court: tournamentContext.court,
-            },
-            query: { matchId },
-          }"
-          target="_blank"
-        >
-          <a-button type="primary">Abrir TV local</a-button>
-        </router-link>
-        <router-link
-          v-else
-          :to="{
-            name: 'board',
-            query: {
-              matchId,
-              local: route.query.local,
-              visit: route.query.visit,
-              time: route.query.time,
-            },
-          }"
-          target="_blank"
-        >
-          <a-button>Abrir TV local</a-button>
-        </router-link>
-        <template v-if="tournamentContext">
-          <a-button @click="copyLink('board-torneo')">
-            {{ copied === 'board-torneo' ? '¡Copiado!' : 'Copiar TV remoto' }}
-          </a-button>
-        </template>
-        <template v-else>
-          <a-button @click="copyLink('live')">
-            {{ copied === 'live' ? '¡Copiado!' : 'Copiar Live' }}
-          </a-button>
-          <a-button @click="copyLink('overlay')">
-            {{ copied === 'overlay' ? '¡Copiado!' : 'Copiar OBS' }}
-          </a-button>
-        </template>
+      <ControlsOperatorLinks
+        :match-id="matchId || undefined"
+        :copied="copied"
+        :tournament-context="tournamentContext"
+        @copy="copyLink"
+      />
     </template>
 
       <a-tabs v-model:active-key="activeTab" class="controls__tabs">

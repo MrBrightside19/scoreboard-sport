@@ -20,6 +20,7 @@ import {
 import { normalizeGameTime } from '@/utils/clock'
 import { getLiveClockUpdateMs } from '@/config/poll'
 import { buildAppUrl, tournamentBoardPath } from '@/utils/appUrl'
+import { operatorHomeRouteName } from '@/utils/mobileMesa'
 
 export function useMatchOperatorSession() {
   const route = useRoute()
@@ -228,7 +229,7 @@ export function useMatchOperatorSession() {
       if (tournamentId) {
         await router.replace({ name: 'tournament-detail', params: { id: tournamentId } })
       } else {
-        await router.replace({ name: 'app-home' })
+        await router.replace({ name: operatorHomeRouteName() })
       }
     } catch (err) {
       advanceError.value =
@@ -240,13 +241,15 @@ export function useMatchOperatorSession() {
     }
   }
 
-  function copyLink(type: 'live' | 'overlay' | 'board-torneo'): void {
+  function copyLink(type: 'live' | 'overlay' | 'board' | 'board-torneo'): void {
     let path = ''
     if (type === 'board-torneo' && tournamentContext.value) {
       path = tournamentBoardPath(
         tournamentContext.value.tournamentId,
         tournamentContext.value.court,
       )
+    } else if (type === 'board') {
+      path = `/board?matchId=${encodeURIComponent(matchId.value)}`
     } else if (type === 'live') {
       path = `/live/${matchId.value}`
     } else {

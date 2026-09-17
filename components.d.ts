@@ -50,6 +50,7 @@ declare module 'vue' {
     ControlsClockDock: typeof import('./src/components/controls/ControlsClockDock.vue')['default']
     ControlsGoalsPanel: typeof import('./src/components/controls/ControlsGoalsPanel.vue')['default']
     ControlsMatchEndCard: typeof import('./src/components/controls/ControlsMatchEndCard.vue')['default']
+    ControlsOperatorLinks: typeof import('./src/components/controls/ControlsOperatorLinks.vue')['default']
     ControlsPenaltiesPanel: typeof import('./src/components/controls/ControlsPenaltiesPanel.vue')['default']
     ControlsRosterPanel: typeof import('./src/components/controls/ControlsRosterPanel.vue')['default']
     ControlsShell: typeof import('./src/components/controls/ControlsShell.vue')['default']

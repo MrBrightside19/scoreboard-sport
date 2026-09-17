@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AuthModal from '@/components/AuthModal.vue'
+import { isMobileMesaViewport } from '@/utils/mobileMesa'
 
 const route = useRoute()
 const router = useRouter()
@@ -28,7 +29,7 @@ function onSuccess(): void {
     void router.replace(redirect)
     return
   }
-  void router.replace({ name: 'app-home' })
+  void router.replace({ name: isMobileMesaViewport() ? 'mobile-mesa' : 'app-home' })
 }
 </script>
 

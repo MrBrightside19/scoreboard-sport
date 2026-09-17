@@ -4,6 +4,7 @@ import TimeInput from '@/components/controls/TimeInput.vue'
 import ControlsShell from '@/components/controls/ControlsShell.vue'
 import ControlsClockDock from '@/components/controls/ControlsClockDock.vue'
 import ControlsMatchEndCard from '@/components/controls/ControlsMatchEndCard.vue'
+import ControlsOperatorLinks from '@/components/controls/ControlsOperatorLinks.vue'
 import { getSportModule } from '@/sports/registry'
 import { useMatchOperatorSession } from '@/composables/useMatchOperatorSession'
 import { useControlsClockDock } from '@/composables/useControlsClockDock'
@@ -36,7 +37,6 @@ import { parseTimeToSeconds } from '@/utils/clock'
 import { findPlayerById, playerLabel } from '@/utils/roster'
 
 const {
-  route,
   store,
   matchId,
   copied,
@@ -223,48 +223,12 @@ const foulKinds = Object.entries(BASKETBALL_FOUL_LABELS) as Array<
     :loading="Boolean(matchId) && !hydrated"
   >
     <template #links>
-      <router-link
-        v-if="tournamentContext"
-        :to="{
-          name: 'tournament-board',
-          params: {
-            tournamentId: tournamentContext.tournamentId,
-            court: tournamentContext.court,
-          },
-          query: { matchId },
-        }"
-        target="_blank"
-      >
-        <a-button type="primary">Abrir TV local</a-button>
-      </router-link>
-      <router-link
-        v-else
-        :to="{
-          name: 'board',
-          query: {
-            matchId,
-            local: route.query.local,
-            visit: route.query.visit,
-            time: route.query.time,
-          },
-        }"
-        target="_blank"
-      >
-        <a-button>Abrir TV local</a-button>
-      </router-link>
-      <template v-if="tournamentContext">
-        <a-button @click="copyLink('live')">
-          {{ copied === 'live' ? '¡Copiado!' : 'Copiar Live' }}
-        </a-button>
-      </template>
-      <template v-else>
-        <a-button @click="copyLink('live')">
-          {{ copied === 'live' ? '¡Copiado!' : 'Copiar Live' }}
-        </a-button>
-        <a-button @click="copyLink('overlay')">
-          {{ copied === 'overlay' ? '¡Copiado!' : 'Copiar OBS' }}
-        </a-button>
-      </template>
+      <ControlsOperatorLinks
+        :match-id="matchId || undefined"
+        :copied="copied"
+        :tournament-context="tournamentContext"
+        @copy="copyLink"
+      />
     </template>
 
     <a-tabs v-model:active-key="activeTab" class="controls__tabs">
