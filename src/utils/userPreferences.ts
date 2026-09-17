@@ -184,14 +184,33 @@ export function getAppTheme(): AppTheme {
 export function getTvScoreboardStyle(sport?: string | null): TvScoreboardStyle {
   const prefs = getUserPreferences()
   const id = parseSportId(sport)
-  const stored = prefs.tvScoreboardStyles[id] ?? (id === 'hockey' ? prefs.tvScoreboardStyle : undefined)
+  // Preferencia por deporte → estilo global legacy (antes solo leía hockey).
+  const stored = prefs.tvScoreboardStyles[id] ?? prefs.tvScoreboardStyle
   return resolveTvStyleForSport(stored, id)
 }
 
+/**
+ * Guarda el estilo TV.
+ * Clásico / Clásico claro se aplican a todos los deportes (tema de color compartido).
+ * Arena LED solo afecta a hockey.
+ */
 export function setTvScoreboardStyle(
   sport: SportId,
   style: TvScoreboardStyle,
 ): UserPreferences {
+  const sports: SportId[] = ['hockey', 'futsal', 'basketball', 'football']
+
+  if (style === 'classic' || style === 'classic-light') {
+    const bySport: Partial<Record<SportId, TvScoreboardStyle>> = {}
+    for (const id of sports) {
+      bySport[id] = resolveTvStyleForSport(style, id)
+    }
+    return setUserPreferences({
+      tvScoreboardStyles: bySport,
+      tvScoreboardStyle: resolveTvStyleForSport(style, 'hockey'),
+    })
+  }
+
   const resolved = resolveTvStyleForSport(style, sport)
   return setUserPreferences({
     tvScoreboardStyles: { [sport]: resolved },

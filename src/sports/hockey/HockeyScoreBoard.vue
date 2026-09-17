@@ -17,6 +17,8 @@ import { FUTSAL_ACCUMULATED_FOUL_LIMIT } from '@/sports/futsal/types'
 import { isInBonus, teamFoulsInPeriod } from '@/sports/basketball/actions'
 import { basketballPointsLabel } from '@/sports/basketball/types'
 
+defineOptions({ inheritAttrs: false })
+
 const props = withDefaults(
   defineProps<{
     state: ScoreboardState
@@ -31,6 +33,10 @@ const props = withDefaults(
     tv?: boolean
     /** Variante clara del marcador TV clásico. */
     tvLight?: boolean
+    /** Mostrar periodo / DESCANSO bajo el reloj (fútbol campo: no). */
+    tvShowPeriod?: boolean
+    /** Mostrar badges de penalizaciones (solo hockey suele usarlas). */
+    tvShowPenalties?: boolean
     compact?: boolean
     /** Nombre del torneo (reemplaza “Hockey en línea” en el live). */
     eventTitle?: string | null
@@ -39,6 +45,8 @@ const props = withDefaults(
   }>(),
   {
     overlayStyle: DEFAULT_OVERLAY_SCOREBOARD_STYLE,
+    tvShowPeriod: undefined,
+    tvShowPenalties: undefined,
   },
 )
 
@@ -103,6 +111,28 @@ const showFutsalMeta = computed(() => sport.value.id === 'futsal')
 const showBasketFouls = computed(() => sport.value.id === 'basketball')
 const scoringTitle = computed(() =>
   sport.value.scoringUnit === 'point' ? 'Anotaciones' : 'Goles',
+)
+
+/** TV: info por deporte; fútbol campo solo nombres + goles + reloj. */
+const tvPeriodVisible = computed(() =>
+  props.tvShowPeriod ?? sport.value.id !== 'football',
+)
+const tvPenaltiesVisible = computed(() =>
+  props.tvShowPenalties ?? sport.value.id === 'hockey',
+)
+const tvFutsalMetaVisible = computed(() => sport.value.id === 'futsal')
+const tvBasketFoulsVisible = computed(() => sport.value.id === 'basketball')
+
+const tvTeamColors = computed(() => ({
+  '--local-color': props.state.localColor || '#00d4ff',
+  '--visit-color': props.state.visitColor || '#ff6b35',
+}))
+
+const localFutsalExclusions = computed(() =>
+  showFutsalMeta.value ? activeExclusions(props.state, 'local') : [],
+)
+const visitFutsalExclusions = computed(() =>
+  showFutsalMeta.value ? activeExclusions(props.state, 'visit') : [],
 )
 
 function shotTotals(team: 'local' | 'visit'): { misses: number; saves: number } {
@@ -414,6 +444,7 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   <div
     v-if="overlay && overlayStyle === 'bug'"
     class="nhl-bug"
+    v-bind="$attrs"
     :style="{
       '--local': state.localColor || '#3da5ff',
       '--visit': state.visitColor || '#ff5a36',
@@ -566,6 +597,8 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
       'scoreboard--compact': compact,
       'scoreboard--tv-light': tvLight,
     }"
+    v-bind="$attrs"
+    :style="tvTeamColors"
   >
     <div class="scoreboard__glow" />
 
@@ -575,18 +608,42 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
           <h2 class="scoreboard__team-name">{{ state.localTeam }}</h2>
           <div
             class="scoreboard__score"
-            :class="{ 'scoreboard__score--penalty': localPenalties.length > 0 }"
+            :class="{
+              'scoreboard__score--penalty':
+                tvPenaltiesVisible && localPenalties.length > 0,
+            }"
           >
             {{ state.goalLocal }}
           </div>
+          <p
+            v-if="tvFutsalMetaVisible || tvBasketFoulsVisible"
+            class="scoreboard__tv-meta"
+          >
+            {{ sportMetaLine('local') }}
+          </p>
         </section>
-        <div v-if="localPenalties.length" class="scoreboard__penalties">
+        <div
+          v-if="tvPenaltiesVisible && localPenalties.length"
+          class="scoreboard__penalties"
+        >
           <div
             v-for="(penalty, index) in localPenalties"
             :key="`local-${index}`"
             class="scoreboard__penalty-badge"
           >
             {{ formatPenaltyShort(penalty, 'local') }}
+          </div>
+        </div>
+        <div
+          v-else-if="tvFutsalMetaVisible && localFutsalExclusions.length"
+          class="scoreboard__penalties"
+        >
+          <div
+            v-for="item in localFutsalExclusions"
+            :key="item.id"
+            class="scoreboard__penalty-badge"
+          >
+            {{ item.player || '#' }} · {{ item.time }}
           </div>
         </div>
       </div>
@@ -602,6 +659,7 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
           {{ clock }}
         </div>
         <div
+          v-if="tvPeriodVisible"
           class="scoreboard__period"
           :class="{ 'scoreboard__period--intermission': state.intermissionActive }"
         >
@@ -614,18 +672,42 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
           <h2 class="scoreboard__team-name">{{ state.visitTeam }}</h2>
           <div
             class="scoreboard__score"
-            :class="{ 'scoreboard__score--penalty': visitPenalties.length > 0 }"
+            :class="{
+              'scoreboard__score--penalty':
+                tvPenaltiesVisible && visitPenalties.length > 0,
+            }"
           >
             {{ state.goalVisit }}
           </div>
+          <p
+            v-if="tvFutsalMetaVisible || tvBasketFoulsVisible"
+            class="scoreboard__tv-meta"
+          >
+            {{ sportMetaLine('visit') }}
+          </p>
         </section>
-        <div v-if="visitPenalties.length" class="scoreboard__penalties">
+        <div
+          v-if="tvPenaltiesVisible && visitPenalties.length"
+          class="scoreboard__penalties"
+        >
           <div
             v-for="(penalty, index) in visitPenalties"
             :key="`visit-${index}`"
             class="scoreboard__penalty-badge"
           >
             {{ formatPenaltyShort(penalty, 'visit') }}
+          </div>
+        </div>
+        <div
+          v-else-if="tvFutsalMetaVisible && visitFutsalExclusions.length"
+          class="scoreboard__penalties"
+        >
+          <div
+            v-for="item in visitFutsalExclusions"
+            :key="item.id"
+            class="scoreboard__penalty-badge"
+          >
+            {{ item.player || '#' }} · {{ item.time }}
           </div>
         </div>
       </div>
@@ -637,6 +719,7 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
     v-else
     class="scoreboard scoreboard--live"
     :class="{ 'scoreboard--compact': compact }"
+    v-bind="$attrs"
   >
     <div class="scoreboard__glow" />
 
@@ -1329,13 +1412,13 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
 }
 
 .scoreboard__team--local {
-  border-color: rgba(0, 212, 255, 0.2);
-  box-shadow: inset 0 0 40px rgba(0, 212, 255, 0.05);
+  border-color: color-mix(in srgb, var(--local-color) 35%, transparent);
+  box-shadow: inset 0 0 40px color-mix(in srgb, var(--local-color) 12%, transparent);
 }
 
 .scoreboard__team--visit {
-  border-color: rgba(255, 107, 53, 0.2);
-  box-shadow: inset 0 0 40px rgba(255, 107, 53, 0.05);
+  border-color: color-mix(in srgb, var(--visit-color) 35%, transparent);
+  box-shadow: inset 0 0 40px color-mix(in srgb, var(--visit-color) 12%, transparent);
 }
 
 .scoreboard__team-name {
@@ -1789,14 +1872,23 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   min-width: 9.5rem;
 }
 
+.scoreboard--tv .scoreboard__tv-meta {
+  margin: 0;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(1.6rem, 3.5vw, 2.6rem);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.15;
+}
+
 /* ——— TV clásico tema claro ——— */
 .scoreboard--tv-light {
   --bg: #e9eef5;
   --panel: rgba(255, 255, 255, 0.92);
   --text: #121820;
   --muted: rgba(18, 24, 32, 0.55);
-  --local-color: #007aa8;
-  --visit-color: #d4531f;
 
   background:
     radial-gradient(ellipse 80% 50% at 50% 0%, rgba(0, 122, 168, 0.1), transparent),
@@ -1824,17 +1916,17 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
 }
 
 .scoreboard--tv-light .scoreboard__team--local {
-  border-color: rgba(0, 122, 168, 0.28);
+  border-color: color-mix(in srgb, var(--local-color) 40%, transparent);
   box-shadow:
     0 10px 28px rgba(18, 24, 32, 0.08),
-    inset 0 0 36px rgba(0, 122, 168, 0.05);
+    inset 0 0 36px color-mix(in srgb, var(--local-color) 12%, transparent);
 }
 
 .scoreboard--tv-light .scoreboard__team--visit {
-  border-color: rgba(212, 83, 31, 0.28);
+  border-color: color-mix(in srgb, var(--visit-color) 40%, transparent);
   box-shadow:
     0 10px 28px rgba(18, 24, 32, 0.08),
-    inset 0 0 36px rgba(212, 83, 31, 0.05);
+    inset 0 0 36px color-mix(in srgb, var(--visit-color) 12%, transparent);
 }
 
 .scoreboard--tv-light .scoreboard__score {
@@ -1862,9 +1954,8 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   color: #a67c1a;
 }
 
-.scoreboard--tv-light .scoreboard__penalty-badge {
-  color: #fff;
-  background: rgba(217, 38, 58, 0.92);
+.scoreboard--tv-light .scoreboard__tv-meta {
+  color: var(--muted);
 }
 
 @keyframes pulse {

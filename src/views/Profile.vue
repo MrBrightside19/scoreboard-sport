@@ -218,7 +218,11 @@ function onTvStyleChange(style: TvScoreboardStyle | OverlayScoreboardStyle): voi
   if (currentTvStyle.value === next) return
   const updated = setTvScoreboardStyle(boardSport.value, next)
   Object.assign(prefs, updated)
-  message.success('Estilo de marcador TV actualizado')
+  message.success(
+    next === 'arena'
+      ? 'Estilo Arena LED aplicado a hockey'
+      : 'Tema de marcador TV aplicado a todos los deportes',
+  )
 }
 
 function onOverlayStyleChange(style: TvScoreboardStyle | OverlayScoreboardStyle): void {
@@ -496,7 +500,8 @@ async function handleLogout(): Promise<void> {
               <header class="profile__pref-group-head">
                 <h3 id="profile-boards">Marcadores</h3>
                 <p>
-                  Cada deporte tiene su propio marcador TV y overlay. Elige el deporte y luego el estilo.
+                  Clásico y Clásico claro son el tema de color de todos los marcadores TV.
+                  Elige un deporte solo para previsualizar; Arena LED es exclusivo de hockey.
                 </p>
               </header>
 
@@ -514,7 +519,11 @@ async function handleLogout(): Promise<void> {
               <div class="profile__pref-card profile__pref-card--stack">
                 <div class="profile__pref-card-copy">
                   <h4>Marcador TV</h4>
-                  <p>Pantalla grande de cancha para {{ sports.find((item) => item.id === boardSport)?.label }}.</p>
+                  <p>
+                    Vista previa con
+                    {{ sports.find((item) => item.id === boardSport)?.label }}.
+                    Clásico / Clásico claro se guardan para todos los deportes.
+                  </p>
                 </div>
                 <ScoreboardStylePicker
                   mode="tv"
