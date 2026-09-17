@@ -2,6 +2,9 @@
 import { computed } from 'vue'
 import { useScoreboardStore } from '@/stores/scoreboard'
 import type { PlayerRole } from '@/types/scoreboard'
+import FootballSideSwitch from '@/sports/football/controls/FootballSideSwitch.vue'
+
+const side = defineModel<'local' | 'visit'>('side', { default: 'local' })
 
 const store = useScoreboardStore()
 
@@ -26,12 +29,22 @@ function digitsOnly(value: string, max = 2): string {
 </script>
 
 <template>
-  <div class="football-roster">
+  <div class="football-roster" :data-side="side">
     <p class="football-roster__hint">
       Nómina de fútbol: número, nombre y rol (jugador, portero o capitán).
     </p>
+    <FootballSideSwitch
+      v-model="side"
+      :local-name="store.state.localTeam"
+      :visit-name="store.state.visitTeam"
+    />
     <div class="football-roster__grid">
-      <section v-for="team in teams" :key="team.key" class="football-roster__team">
+      <section
+        v-for="team in teams"
+        :key="team.key"
+        class="football-roster__team"
+        :class="`football-roster__team--${team.key}`"
+      >
         <h3>{{ team.label }} — {{ team.name }}</h3>
         <div v-if="rosterFor(team.key).length" class="football-roster__list">
           <div
