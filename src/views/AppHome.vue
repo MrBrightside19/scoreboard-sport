@@ -3,20 +3,14 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
-import { createMatch, fetchActiveFreeMatch, fetchMatchState } from '@/services/matchSync'
 import { fetchEntitlement, resolvePlan } from '@/services/entitlementsService'
 import { getPlanDefinition } from '@/config/plans'
 import { listAvailableSports, getSportModule } from '@/sports/registry'
-import {
-  getStorageKey,
-  readMatchIdFromStorage,
-  writeMatchIdToStorage,
-} from '@/utils/localSync'
-import { generateMatchId } from '@/utils/matchId'
+import { writeMatchIdToStorage } from '@/utils/localSync'
+import { createOrResumeFreeMatch } from '@/utils/createFreeMatch'
 import type { Entitlement } from '@/types/billing'
 import type { SportId } from '@/types/sport'
 import { EntitlementError } from '@/types/billing'
-import { parseSportId } from '@/types/sport'
 
 type CreateMode = 'match' | 'tournament'
 
@@ -81,42 +75,7 @@ async function createMatchFlow(sportId: SportId): Promise<void> {
   creating.value = true
   error.value = null
   try {
-    let matchId: string | null = null
-    if (isSupabaseConfigured && auth.profile) {
-      const active = await fetchActiveFreeMatch(auth.profile.id)
-      if (active?.id) {
-        const record = await fetchMatchState(active.id)
-        const activeSport = parseSportId(record?.sport ?? record?.state?.sport)
-        if (activeSport === sportId) {
-          matchId = active.id
-        } else {
-          throw new EntitlementError(
-            `Ya tienes un partido en vivo de ${getSportModule(activeSport).label}. Finalízalo antes de crear uno de otro deporte.`,
-          )
-        }
-      }
-    } else {
-      const localId = readMatchIdFromStorage()
-      if (localId) {
-        const raw = localStorage.getItem(getStorageKey(localId))
-        if (raw) {
-          const parsed = JSON.parse(raw) as { sport?: string }
-          if (parseSportId(parsed.sport) === sportId) matchId = localId
-        }
-      }
-    }
-
-    if (!matchId) {
-      matchId = generateMatchId()
-      const sport = getSportModule(sportId)
-      const state = sport.createDefaultState()
-      if (isSupabaseConfigured) {
-        await createMatch(matchId, state, auth.profile?.id, sport.id)
-      } else {
-        localStorage.setItem(getStorageKey(matchId), JSON.stringify(state))
-      }
-    }
-
+    const matchId = await createOrResumeFreeMatch(sportId, auth.profile?.id)
     writeMatchIdToStorage(matchId)
     const boardUrl = router.resolve({ name: 'board', query: { matchId } }).href
     const controlsUrl = router.resolve({ name: 'controls', query: { matchId } }).href
