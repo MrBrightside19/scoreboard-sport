@@ -398,31 +398,33 @@ const recentCards = computed(() =>
             >
               <div class="controls__clock">
                 <div class="controls__clock-main">
-                  <div ref="clockDisplayEl" class="controls__clock-display">
-                    {{
-                      store.state.intermissionActive
-                        ? store.state.intermissionTime
-                        : store.state.timeGame
-                    }}
+                  <div class="controls__clock-main-core">
+                    <div ref="clockDisplayEl" class="controls__clock-display">
+                      {{
+                        store.state.intermissionActive
+                          ? store.state.intermissionTime
+                          : store.state.timeGame
+                      }}
+                    </div>
+                    <p class="controls__clock-status">
+                      <template v-if="store.state.intermissionActive">
+                        {{ store.state.isPaused ? 'Descanso en pausa' : 'Descanso' }}
+                      </template>
+                      <template v-else>
+                        {{ store.state.isPaused ? 'En pausa' : 'En juego' }}
+                      </template>
+                    </p>
+                    <a-button
+                      class="controls__clock-toggle"
+                      size="large"
+                      :type="store.state.isPaused ? 'primary' : 'default'"
+                      @click="store.togglePause()"
+                    >
+                      {{ store.state.isPaused ? 'Reanudar' : 'Pausar' }}
+                    </a-button>
                   </div>
-                  <p class="controls__clock-status">
-                    <template v-if="store.state.intermissionActive">
-                      {{ store.state.isPaused ? 'Descanso en pausa' : 'Descanso' }}
-                    </template>
-                    <template v-else>
-                      {{ store.state.isPaused ? 'En pausa' : 'En juego' }}
-                    </template>
-                  </p>
-                  <a-button
-                    class="controls__clock-toggle"
-                    size="large"
-                    :type="store.state.isPaused ? 'primary' : 'default'"
-                    @click="store.togglePause()"
-                  >
-                    {{ store.state.isPaused ? 'Reanudar' : 'Pausar' }}
-                  </a-button>
                   <div
-                    v-if="!store.state.intermissionActive && !showIntermissionControls"
+                    v-if="!store.state.intermissionActive"
                     class="controls__clock-adjust"
                   >
                     <label>Ajustar tiempo</label>
@@ -482,46 +484,46 @@ const recentCards = computed(() =>
                     </span>
                   </div>
                 </div>
-              </div>
 
-              <div v-if="showIntermissionControls" class="football-match__rest">
-                <div class="football-match__rest-time">
-                  <label>Descanso</label>
-                  <TimeInput
-                    compact
-                    :value="intermissionDraft"
-                    :disabled="store.state.intermissionActive && !store.state.isPaused"
-                    @update:value="onIntermissionDraftUpdate"
-                    @blur="commitIntermissionDraft"
-                    @enter="commitIntermissionDraft"
-                  />
+                <div v-if="showIntermissionControls" class="football-match__rest">
+                  <div class="football-match__rest-time">
+                    <label>Descanso</label>
+                    <TimeInput
+                      compact
+                      :value="intermissionDraft"
+                      :disabled="store.state.intermissionActive && !store.state.isPaused"
+                      @update:value="onIntermissionDraftUpdate"
+                      @blur="commitIntermissionDraft"
+                      @enter="commitIntermissionDraft"
+                    />
+                  </div>
+                  <div class="football-match__rest-actions">
+                    <a-button type="primary" @click="startOrToggleIntermission">
+                      <template v-if="!store.state.intermissionActive">
+                        Iniciar
+                      </template>
+                      <template v-else-if="store.state.isPaused">
+                        Reanudar
+                      </template>
+                      <template v-else>
+                        Pausar
+                      </template>
+                    </a-button>
+                    <a-button
+                      v-if="store.state.intermissionActive"
+                      @click="stopIntermission"
+                    >
+                      Terminar
+                    </a-button>
+                  </div>
+                  <span class="controls__clock-hint">
+                    El marcador TV muestra la cuenta de descanso.
+                    Beep en los últimos {{ countdownBeepSeconds() }} s
+                    (configurable en Perfil).
+                    Al terminar (o al pulsar Terminar descanso), pasa solo al siguiente tiempo
+                    (salvo el último).
+                  </span>
                 </div>
-                <div class="football-match__rest-actions">
-                  <a-button type="primary" @click="startOrToggleIntermission">
-                    <template v-if="!store.state.intermissionActive">
-                      Iniciar
-                    </template>
-                    <template v-else-if="store.state.isPaused">
-                      Reanudar
-                    </template>
-                    <template v-else>
-                      Pausar
-                    </template>
-                  </a-button>
-                  <a-button
-                    v-if="store.state.intermissionActive"
-                    @click="stopIntermission"
-                  >
-                    Terminar
-                  </a-button>
-                </div>
-                <span class="controls__clock-hint">
-                  El marcador TV muestra la cuenta de descanso.
-                  Beep en los últimos {{ countdownBeepSeconds() }} s
-                  (configurable en Perfil).
-                  Al terminar (o al pulsar Terminar descanso), pasa solo al siguiente tiempo
-                  (salvo el último).
-                </span>
               </div>
             </a-card>
           </div>
@@ -727,7 +729,10 @@ const recentCards = computed(() =>
             </div>
           </a-card>
 
-          <a-card title="Enlaces de marcador" class="controls__card controls__card--wide">
+          <a-card
+            title="Enlaces de marcador"
+            class="controls__card controls__card--wide football-config__links-card"
+          >
             <p class="football-config__hint">
               Live es el marcador público. Overlay es para OBS. TV abre el marcador a pantalla completa.
             </p>
