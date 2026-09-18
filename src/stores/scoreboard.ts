@@ -11,7 +11,6 @@ import type {
 import type { FutsalExclusionEvent } from '@/sports/futsal/types'
 import {
   createDefaultScoreboardState,
-  DEFAULT_GAME_TIME,
   DEFAULT_INTERMISSION_TIME,
   DEFAULT_PENALTY_TYPE_ID,
   isGoalPending,
@@ -20,6 +19,7 @@ import {
 } from '@/sports/scoreboardState'
 import { getPenaltyType, secondsToClock } from '@/data/penaltyCatalog'
 import { getSportModule } from '@/sports/registry'
+import { clockDirection, isCountUpSport, kickoffClock } from '@/sports/clockRules'
 import { fetchMatchState } from '@/services/matchSync'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
 import {
@@ -34,6 +34,7 @@ import {
   normalizeGameTime,
   parseTimeToSeconds,
   tickDown,
+  tickUp,
 } from '@/utils/clock'
 
 export const useScoreboardStore = defineStore('scoreboard', () => {
@@ -78,7 +79,9 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
         ...next,
         localTeam: fallback.localTeam,
         visitTeam: fallback.visitTeam,
-        timeGame: fallback.timeGame ?? next.timeGame,
+        timeGame: isCountUpSport(next.sport)
+          ? next.timeGame
+          : fallback.timeGame ?? next.timeGame,
       }
     }
 
@@ -116,26 +119,35 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     persistLocal()
   }
 
+  function interpolateGameClock(now = Date.now()): string {
+    return interpolateClock(
+      state.value.timeGame,
+      state.value.isPaused,
+      state.value.updatedAt,
+      now,
+      clockDirection(state.value.sport),
+    )
+  }
+
   function syncElapsedAndPause(): void {
     if (state.value.isPaused) {
       patch({ updatedAt: new Date().toISOString() })
       return
     }
 
+    const direction = clockDirection(state.value.sport)
     const clockSeconds = parseTimeToSeconds(state.value.timeGame)
-    if (clockSeconds <= 0) {
+    if (direction === 'down' && clockSeconds <= 0) {
       patch({ isPaused: true })
       return
     }
 
-    const syncedTime = interpolateClock(
-      state.value.timeGame,
-      state.value.isPaused,
-      state.value.updatedAt,
-    )
+    const syncedTime = interpolateGameClock()
     const playedSeconds = Math.max(
       0,
-      clockSeconds - parseTimeToSeconds(syncedTime),
+      direction === 'up'
+        ? parseTimeToSeconds(syncedTime) - clockSeconds
+        : clockSeconds - parseTimeToSeconds(syncedTime),
     )
 
     const syncPenaltyList = (penalties: TeamPenalty[]): TeamPenalty[] =>
@@ -242,11 +254,7 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
   }
 
   function markGoal(team: 'local' | 'visit'): string {
-    const gameMinute = interpolateClock(
-      state.value.timeGame,
-      state.value.isPaused,
-      state.value.updatedAt,
-    )
+    const gameMinute = interpolateGameClock()
 
     const goal: GoalEvent = {
       id: generateId(),
@@ -320,11 +328,7 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     result: ShotResult,
     goalkeeperPlayerId?: string,
   ): string {
-    const gameMinute = interpolateClock(
-      state.value.timeGame,
-      state.value.isPaused,
-      state.value.updatedAt,
-    )
+    const gameMinute = interpolateGameClock()
 
     const shot: ShotEvent = {
       id: generateId(),
@@ -383,7 +387,10 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
   }
 
   /** Pasa al siguiente periodo conservando el tiempo restante de las faltas. */
-  function advanceToNextPeriod(periodLength = DEFAULT_GAME_TIME): void {
+  function advanceToNextPeriod(periodLength?: string): void {
+    const nextLength = normalizeGameTime(
+      periodLength ?? kickoffClock(state.value.sport),
+    )
     if (state.value.intermissionActive) {
       if (!state.value.isPaused && parseTimeToSeconds(state.value.intermissionTime) > 0) {
         const synced = interpolateClock(
@@ -399,15 +406,20 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
       } else {
         patch({ intermissionActive: false, isPaused: true })
       }
-    } else if (!state.value.isPaused && parseTimeToSeconds(state.value.timeGame) > 0) {
-      syncElapsedAndPause()
     } else if (!state.value.isPaused) {
-      patch({ isPaused: true })
+      if (
+        clockDirection(state.value.sport) === 'up' ||
+        parseTimeToSeconds(state.value.timeGame) > 0
+      ) {
+        syncElapsedAndPause()
+      } else {
+        patch({ isPaused: true })
+      }
     }
 
     patch({
       gamePeriod: state.value.gamePeriod + 1,
-      timeGame: normalizeGameTime(periodLength),
+      timeGame: nextLength,
       intermissionActive: false,
       intermissionTime: state.value.intermissionDuration || DEFAULT_INTERMISSION_TIME,
       isPaused: true,
@@ -415,6 +427,14 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
   }
 
   function startIntermission(duration?: string): void {
+    if (!state.value.isPaused && !state.value.intermissionActive) {
+      if (
+        clockDirection(state.value.sport) === 'up' ||
+        parseTimeToSeconds(state.value.timeGame) > 0
+      ) {
+        patch({ timeGame: interpolateGameClock() })
+      }
+    }
     const configured = normalizeGameTime(
       duration ?? (state.value.intermissionDuration || DEFAULT_INTERMISSION_TIME),
     )
@@ -571,14 +591,18 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
         return
       }
 
-      const clockSeconds = parseTimeToSeconds(state.value.timeGame)
-      if (clockSeconds <= 0) {
+      const direction = clockDirection(state.value.sport)
+      if (direction === 'down' && parseTimeToSeconds(state.value.timeGame) <= 0) {
         patch({ isPaused: true })
         return
       }
 
-      const nextTime = tickDown(state.value.timeGame)
-      const periodEnded = parseTimeToSeconds(nextTime) <= 0
+      const nextTime =
+        direction === 'up'
+          ? tickUp(state.value.timeGame)
+          : tickDown(state.value.timeGame)
+      const periodEnded =
+        direction === 'down' && parseTimeToSeconds(nextTime) <= 0
 
       const next: Partial<ScoreboardState> = {
         timeGame: nextTime,

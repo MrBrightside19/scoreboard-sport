@@ -6,6 +6,7 @@ import ControlsClockDock from '@/components/controls/ControlsClockDock.vue'
 import ControlsMatchEndCard from '@/components/controls/ControlsMatchEndCard.vue'
 import ControlsOperatorLinks from '@/components/controls/ControlsOperatorLinks.vue'
 import { getSportModule } from '@/sports/registry'
+import { isRegulationElapsed, kickoffClock } from '@/sports/clockRules'
 import { useMatchOperatorSession } from '@/composables/useMatchOperatorSession'
 import { useControlsClockDock } from '@/composables/useControlsClockDock'
 import { useMatchClockAlerts } from '@/composables/useMatchClockAlerts'
@@ -22,7 +23,6 @@ import {
 import {
   FOOTBALL_CARD_LABELS,
   FOOTBALL_EXTRA_PERIODS,
-  FOOTBALL_EXTRA_TIME,
   FOOTBALL_MAX_PERIODS,
   FOOTBALL_PERIODS,
   type FootballCardKind,
@@ -87,7 +87,7 @@ const canAdvancePeriod = computed(
     store.state.gamePeriod < maxPeriods.value &&
     (store.state.intermissionActive ||
       store.state.isPaused ||
-      parseTimeToSeconds(store.state.timeGame) <= 0),
+      isRegulationElapsed(store.state)),
 )
 
 const restBreakConsumed = ref(false)
@@ -97,14 +97,14 @@ const showIntermissionControls = computed(() => {
   if (store.state.intermissionActive) return restSeconds > 0
   if (restBreakConsumed.value) return false
   if (store.state.gamePeriod >= maxPeriods.value) return false
-  return parseTimeToSeconds(store.state.timeGame) <= 0
+  return isRegulationElapsed(store.state)
 })
 
 watch(
   () => store.state.timeGame,
   (time) => {
     if (!clockEditing.value) clockDraft.value = time
-    if (parseTimeToSeconds(time) > 0) restBreakConsumed.value = false
+    if (!isRegulationElapsed(store.state)) restBreakConsumed.value = false
   },
 )
 
@@ -160,11 +160,7 @@ function setGamePeriod(period: number): void {
 function nextPeriod(): void {
   if (!canAdvancePeriod.value) return
   if (store.state.gamePeriod >= maxPeriods.value) return
-  const nextLength =
-    store.state.gamePeriod >= FOOTBALL_PERIODS
-      ? FOOTBALL_EXTRA_TIME
-      : sport.value.clock.defaultPeriodTime
-  store.advanceToNextPeriod(nextLength)
+  store.advanceToNextPeriod(kickoffClock('football'))
   clockDraft.value = store.state.timeGame
   intermissionDraft.value =
     store.state.intermissionDuration || sport.value.clock.intermissionDefault
@@ -444,7 +440,8 @@ const recentCards = computed(() =>
                       Siguiente tiempo
                     </a-button>
                     <span class="controls__clock-hint">
-                      FIFA: 2 × 45′. Como máximo 2 prórrogas de 15′.
+                      FIFA: el reloj parte de 00:00 y suma. 2 × 45′ (puede pasar el 45′, tiempo añadido).
+                      Como máximo 2 prórrogas de 15′ desde 00:00.
                     </span>
                   </div>
                 </div>

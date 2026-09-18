@@ -4,11 +4,12 @@ import {
   FOOTBALL_BREAK_TIME,
   FOOTBALL_HALF_TIME,
   FOOTBALL_PERIODS,
+  FOOTBALL_EXTRA_TIME,
 } from '@/sports/football/types'
 
 /** UI: ControlsShell + FootballControls (layout hockey, reglas FIFA). Live/Overlay = diseño principal. */
 
-export const FOOTBALL_STATE_VERSION = 1
+export const FOOTBALL_STATE_VERSION = 2
 
 export const footballSport: SportModule = {
   id: 'football',
@@ -16,11 +17,12 @@ export const footballSport: SportModule = {
   shortLabel: 'Fútbol',
   available: true,
   description:
-    'FIFA campo: 2×45′, descanso 15′, goles, tarjetas amarilla/roja y nómina.',
+    'FIFA campo: reloj desde 00:00, 2×45′, descanso 15′, goles, tarjetas y nómina.',
   stateVersion: FOOTBALL_STATE_VERSION,
   clock: {
-    direction: 'down',
+    direction: 'up',
     defaultPeriodTime: FOOTBALL_HALF_TIME,
+    overtimePeriodTime: FOOTBALL_EXTRA_TIME,
     periods: FOOTBALL_PERIODS,
     overtimeLabel: 'Prórroga',
     intermissionDefault: FOOTBALL_BREAK_TIME,
@@ -40,11 +42,11 @@ export const footballSport: SportModule = {
     }
     return `${period}T`
   },
-  createDefaultState(localTeam, visitTeam, timeGame) {
+  createDefaultState(localTeam, visitTeam, _timeGame) {
     const state = createDefaultScoreboardState(
       localTeam,
       visitTeam,
-      timeGame ?? FOOTBALL_HALF_TIME,
+      '00:00',
       'football',
     )
     state.intermissionDuration = FOOTBALL_BREAK_TIME

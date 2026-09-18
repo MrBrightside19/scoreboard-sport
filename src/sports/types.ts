@@ -3,7 +3,10 @@ import type { SportId } from '@/types/sport'
 
 export interface SportClockConfig {
   direction: 'down' | 'up'
+  /** Duración reglamentaria del periodo (cuenta atrás = valor inicial). */
   defaultPeriodTime: string
+  /** Duración de prórroga, si el deporte la tiene. */
+  overtimePeriodTime?: string
   periods: number
   overtimeLabel: string
   intermissionDefault: string

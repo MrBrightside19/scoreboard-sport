@@ -27,6 +27,7 @@ import {
   assertCanStartLiveMatch,
 } from './entitlementsService'
 import { getSportModule } from '@/sports/registry'
+import { kickoffClock } from '@/sports/clockRules'
 import { parseSportId, type SportId } from '@/types/sport'
 import { upsertCourtStream } from './tournamentCourtStream'
 import { fetchAssistantTournamentIds } from './tournamentAssistantService'
@@ -878,7 +879,9 @@ export async function startTournamentMatch(
   const state = sport.createDefaultState(
     tournamentMatch.local_team,
     tournamentMatch.visit_team,
-    normalizeGameTime(tournamentMatch.game_time || sport.clock.defaultPeriodTime),
+    sport.clock.direction === 'up'
+      ? kickoffClock(sport.id)
+      : normalizeGameTime(tournamentMatch.game_time || sport.clock.defaultPeriodTime),
   )
   state.matchCategory = tournamentMatch.category?.trim() || ''
 
