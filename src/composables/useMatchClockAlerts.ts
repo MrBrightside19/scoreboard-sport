@@ -1,6 +1,7 @@
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useScoreboardStore } from '@/stores/scoreboard'
 import { parseTimeToSeconds } from '@/utils/clock'
+import { remainingClockSeconds } from '@/sports/clockRules'
 import { playCountdownBeep } from '@/utils/countdownBeep'
 import { playLateGameWarning } from '@/utils/lateGameWarningBeep'
 import {
@@ -37,7 +38,7 @@ export function useMatchClockAlerts() {
 
   watch(
     () => ({
-      seconds: parseTimeToSeconds(store.state.timeGame),
+      seconds: remainingClockSeconds(store.state),
       paused: store.state.isPaused,
       intermission: store.state.intermissionActive,
       tick: prefsTick.value,
@@ -60,7 +61,7 @@ export function useMatchClockAlerts() {
 
   watch(
     () => ({
-      seconds: parseTimeToSeconds(store.state.timeGame),
+      seconds: remainingClockSeconds(store.state),
       period: store.state.gamePeriod,
       paused: store.state.isPaused,
       intermission: store.state.intermissionActive,

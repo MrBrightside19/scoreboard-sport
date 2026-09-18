@@ -35,16 +35,24 @@ export function tickDown(time: string, seconds = 1): string {
   return formatSecondsToTime(current - seconds)
 }
 
+export function tickUp(time: string, seconds = 1): string {
+  const current = parseTimeToSeconds(time)
+  return formatSecondsToTime(current + seconds)
+}
+
 export function interpolateClock(
   timeGame: string,
   isPaused: boolean,
   updatedAt: string,
   now = Date.now(),
+  direction: 'down' | 'up' = 'down',
 ): string {
   if (isPaused) return timeGame
   const elapsedSeconds = Math.floor((now - new Date(updatedAt).getTime()) / 1000)
   if (elapsedSeconds <= 0) return timeGame
-  return tickDown(timeGame, elapsedSeconds)
+  return direction === 'up'
+    ? tickUp(timeGame, elapsedSeconds)
+    : tickDown(timeGame, elapsedSeconds)
 }
 
 /** Reloj de periodo agotado: las faltas no deben seguir corriendo. */

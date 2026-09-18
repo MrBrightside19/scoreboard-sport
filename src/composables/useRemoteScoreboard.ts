@@ -2,6 +2,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import type { ScoreboardState, TeamPenalty } from '@/sports/scoreboardState'
 import { getLiveClockUpdateMs } from '@/config/poll'
 import { interpolateClock, interpolatePenaltyTime, parseTimeToSeconds } from '@/utils/clock'
+import { clockDirection } from '@/sports/clockRules'
 import { fetchMatchState } from '@/services/matchSync'
 import { normalizeScoreboardState } from '@/sports/scoreboardState'
 
@@ -51,7 +52,13 @@ export function useRemoteScoreboard(matchId: () => string | null) {
       )
       displayTime.value = timeGame
     } else {
-      displayTime.value = interpolateClock(timeGame, isPaused, updatedAt)
+      displayTime.value = interpolateClock(
+        timeGame,
+        isPaused,
+        updatedAt,
+        Date.now(),
+        clockDirection(remoteState.value.sport),
+      )
       displayIntermissionTime.value = intermissionTime
     }
 

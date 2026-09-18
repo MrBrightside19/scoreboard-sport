@@ -2,6 +2,8 @@ import { generateId } from '@/utils/id'
 import { findPlayerById, playerLabel } from '@/utils/roster'
 import type { ScoreboardState } from '@/sports/scoreboardState'
 import type { FootballCardKind } from '@/sports/football/types'
+import { clockDirection } from '@/sports/clockRules'
+import { interpolateClock } from '@/utils/clock'
 
 export function cardCount(
   state: ScoreboardState,
@@ -58,6 +60,13 @@ export function addFootballCard(
   const label = player ? playerLabel(player) : ''
   const now = new Date().toISOString()
   const cards = [...(state.footballCards ?? [])]
+  const gameMinute = interpolateClock(
+    state.timeGame,
+    state.isPaused,
+    state.updatedAt,
+    Date.now(),
+    clockDirection(state.sport),
+  )
 
   if (playerId && isPlayerExpelled(state, team, playerId)) {
     return {
@@ -80,7 +89,7 @@ export function addFootballCard(
     playerId,
     player: label,
     period: state.gamePeriod,
-    gameMinute: state.timeGame,
+    gameMinute,
     createdAt: now,
   }
 
