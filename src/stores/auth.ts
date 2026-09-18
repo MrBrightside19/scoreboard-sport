@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import type { Profile } from '@/types/auth'
 import {
   changePassword,
+  deleteOwnAccount,
   getCurrentProfile,
   onAuthStateChange,
   signIn,
@@ -105,6 +106,19 @@ export const useAuthStore = defineStore('auth', () => {
     await changePassword(currentPassword, newPassword)
   }
 
+  async function deleteAccount(password: string): Promise<void> {
+    error.value = null
+    await deleteOwnAccount(password)
+    profile.value = null
+    assistantTournamentIds.value = []
+    info.value = null
+    try {
+      await signOut()
+    } catch {
+      // La sesión ya no es válida si el usuario se eliminó.
+    }
+  }
+
   function init(): () => void {
     void loadProfile()
     if (!isSupabaseConfigured) return () => undefined
@@ -135,6 +149,7 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     updateDisplayName,
     updatePassword,
+    deleteAccount,
     init,
   }
 })

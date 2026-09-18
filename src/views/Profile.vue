@@ -35,6 +35,8 @@ import ScoreboardStylePicker from '@/components/ScoreboardStylePicker.vue'
 import { fetchEntitlement, resolvePlan } from '@/services/entitlementsService'
 import { getPlanDefinition } from '@/config/plans'
 import type { Entitlement } from '@/types/billing'
+import { clearMatchIdFromStorage } from '@/utils/localSync'
+import { isSupabaseConfigured } from '@/services/supabaseClient'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -42,8 +44,12 @@ const router = useRouter()
 const savingProfile = ref(false)
 const savingPassword = ref(false)
 const loggingOut = ref(false)
+const deletingAccount = ref(false)
+const showDeleteModal = ref(false)
+const deletePassword = ref('')
 const profileError = ref<string | null>(null)
 const passwordError = ref<string | null>(null)
+const deleteError = ref<string | null>(null)
 
 const form = reactive({
   displayName: '',
@@ -267,6 +273,31 @@ async function handleLogout(): Promise<void> {
     await router.push({ name: 'landing' })
   } finally {
     loggingOut.value = false
+  }
+}
+
+function openDeleteAccount(): void {
+  deletePassword.value = ''
+  deleteError.value = null
+  showDeleteModal.value = true
+}
+
+async function confirmDeleteAccount(): Promise<void> {
+  if (deletingAccount.value || !deletePassword.value) return
+  deletingAccount.value = true
+  deleteError.value = null
+  try {
+    await auth.deleteAccount(deletePassword.value)
+    clearMatchIdFromStorage()
+    showDeleteModal.value = false
+    message.success('Cuenta eliminada')
+    await router.replace({ name: 'landing' })
+  } catch (err) {
+    deleteError.value =
+      err instanceof Error ? err.message : 'No se pudo eliminar la cuenta'
+    throw err
+  } finally {
+    deletingAccount.value = false
   }
 }
 </script>
@@ -633,6 +664,55 @@ async function handleLogout(): Promise<void> {
             </a-button>
           </div>
         </section>
+
+        <section
+          v-if="isSupabaseConfigured"
+          class="profile__panel profile__panel--danger"
+          aria-labelledby="profile-delete"
+        >
+          <div class="profile__panel-head">
+            <div>
+              <h2 id="profile-delete">Eliminar cuenta</h2>
+              <p class="profile__desc">
+                Borra tu usuario, partidos sueltos y torneos de forma permanente.
+                Esta acción no se puede deshacer.
+              </p>
+            </div>
+            <a-button danger @click="openDeleteAccount">
+              Eliminar cuenta
+            </a-button>
+          </div>
+        </section>
+
+        <a-modal
+          v-model:open="showDeleteModal"
+          title="Eliminar cuenta"
+          ok-text="Eliminar definitivamente"
+          ok-type="danger"
+          cancel-text="Cancelar"
+          :confirm-loading="deletingAccount"
+          :ok-button-props="{ disabled: !deletePassword }"
+          destroy-on-close
+          @ok="confirmDeleteAccount"
+        >
+          <p class="profile__delete-copy">
+            Se eliminarán tu usuario, partidos y torneos. No podrás recuperarlos.
+            Confirma con tu contraseña.
+          </p>
+          <a-input-password
+            v-model:value="deletePassword"
+            autocomplete="current-password"
+            placeholder="Tu contraseña"
+            @pressEnter="confirmDeleteAccount"
+          />
+          <a-alert
+            v-if="deleteError"
+            type="error"
+            :message="deleteError"
+            show-icon
+            class="profile__alert profile__alert--modal"
+          />
+        </a-modal>
       </template>
     </a-spin>
   </div>
@@ -720,6 +800,17 @@ async function handleLogout(): Promise<void> {
 
 .profile__alert {
   margin-bottom: 0.85rem;
+}
+
+.profile__alert--modal {
+  margin-top: 0.85rem;
+  margin-bottom: 0;
+}
+
+.profile__delete-copy {
+  margin: 0 0 0.85rem;
+  color: var(--app-text-muted);
+  line-height: 1.45;
 }
 
 .profile__actions {
