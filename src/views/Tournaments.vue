@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import type { Rule } from 'ant-design-vue/es/form'
 import { useAuthStore } from '@/stores/auth'
 import { createTournament, fetchManagedTournaments } from '@/services/tournamentService'
 import type { Tournament } from '@/types/tournament'
+import { listAvailableSports } from '@/sports/registry'
+import type { SportId } from '@/types/sport'
+import { parseSportId, sportLabel } from '@/types/sport'
 
 const auth = useAuthStore()
+const route = useRoute()
 const router = useRouter()
 const tournaments = ref<Tournament[]>([])
 const assistedTournamentIds = ref<Set<string>>(new Set())
@@ -15,12 +19,14 @@ const creating = ref(false)
 const showModal = ref(false)
 const error = ref<string | null>(null)
 
+const sports = listAvailableSports()
 const form = reactive({
   name: '',
   description: '',
   start_date: '',
   end_date: '',
   visibility: 'public' as 'public' | 'private',
+  sport: 'hockey' as SportId,
 })
 
 const rules: Record<string, Rule[]> = {
@@ -46,6 +52,10 @@ function visibilityTagClass(visibility: Tournament['visibility']): string {
   return `page__tag--visibility-${visibility}`
 }
 
+function preferredSportFromQuery(): SportId {
+  return parseSportId(route.query.sport)
+}
+
 async function load(): Promise<void> {
   if (!auth.profile) return
   loading.value = true
@@ -63,13 +73,14 @@ async function load(): Promise<void> {
   }
 }
 
-function openModal(): void {
+function openModal(prefillSport?: SportId): void {
   error.value = null
   form.name = ''
   form.description = ''
   form.start_date = ''
   form.end_date = ''
   form.visibility = 'public'
+  form.sport = prefillSport ?? preferredSportFromQuery()
   showModal.value = true
 }
 
@@ -95,10 +106,14 @@ async function submit(): Promise<void> {
         start_date: form.start_date || null,
         end_date: form.end_date || null,
         visibility: form.visibility,
+        sport: form.sport,
       },
       auth.profile.id,
     )
     showModal.value = false
+    if (route.query.create === '1' || route.query.sport) {
+      await router.replace({ name: 'tournaments' })
+    }
     await router.push(`/tournaments/${t.id}`)
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'No se pudo crear el torneo'
@@ -107,7 +122,12 @@ async function submit(): Promise<void> {
   }
 }
 
-onMounted(() => void load())
+onMounted(async () => {
+  await load()
+  if (route.query.create === '1' && auth.isOrganizer) {
+    openModal(preferredSportFromQuery())
+  }
+})
 </script>
 
 <template>
@@ -149,6 +169,7 @@ onMounted(() => void load())
             <a-tag :class="visibilityTagClass(t.visibility)">
               {{ visibilityLabels[t.visibility] }}
             </a-tag>
+            <a-tag>{{ sportLabel(t.sport as SportId) }}</a-tag>
           </div>
         </router-link>
       </div>
@@ -171,6 +192,13 @@ onMounted(() => void load())
         </a-form-item>
         <a-form-item label="Fin">
           <a-input v-model:value="form.end_date" type="date" />
+        </a-form-item>
+        <a-form-item label="Deporte">
+          <a-select v-model:value="form.sport">
+            <a-select-option v-for="sport in sports" :key="sport.id" :value="sport.id">
+              {{ sport.label }}
+            </a-select-option>
+          </a-select>
         </a-form-item>
         <a-form-item label="Visibilidad">
           <a-select v-model:value="form.visibility">

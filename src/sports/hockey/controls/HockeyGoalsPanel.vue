@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { useScoreboardStore } from '@/stores/scoreboard'
-import { isGoalPending } from '@/types/hockeyScoreboard'
-import type { GoalEvent } from '@/types/hockeyScoreboard'
+import { isGoalPending } from '@/sports/scoreboardState'
+import type { GoalEvent } from '@/sports/scoreboardState'
+import { getSportModule } from '@/sports/registry'
 import { findPlayerById, playerLabel } from '@/utils/roster'
 
 const store = useScoreboardStore()
+const sport = computed(() => getSportModule(store.state.sport))
+const showShots = computed(() => sport.value.features.shots)
 
 const goalModalOpen = ref(false)
 const completingGoalId = ref<string | null>(null)
@@ -75,6 +78,10 @@ function goalDescription(team: 'local' | 'visit', scorerId: string, assistId: st
 function rosterFor(team: 'local' | 'visit') {
   return team === 'local' ? store.state.rosterLocal : store.state.rosterVisit
 }
+
+function periodText(period: number): string {
+  return sport.value.periodLabel(period)
+}
 </script>
 
 <template>
@@ -115,11 +122,11 @@ function rosterFor(team: 'local' | 'visit') {
             <div class="goals-panel__meta">
               <template v-if="isGoalPending(goal)">
                 <strong>Gol pendiente</strong>
-                <span>P{{ goal.period }} · {{ goal.gameMinute }}</span>
+                <span>{{ periodText(goal.period) }} · {{ goal.gameMinute }}</span>
               </template>
               <template v-else>
                 <strong>{{ goalDescription(team.key, goal.scorerPlayerId, goal.assistPlayerId) }}</strong>
-                <span>P{{ goal.period }} · {{ goal.gameMinute }}</span>
+                <span>{{ periodText(goal.period) }} · {{ goal.gameMinute }}</span>
               </template>
             </div>
             <a-button
@@ -134,7 +141,7 @@ function rosterFor(team: 'local' | 'visit') {
         </div>
         <a-empty v-else :image-style="{ height: '36px' }" description="Sin goles registrados" />
 
-        <div class="goals-panel__shots">
+        <div v-if="showShots" class="goals-panel__shots">
           <div class="goals-panel__shots-head">
             <h4>Tiros y atajadas</h4>
             <span>
@@ -145,7 +152,7 @@ function rosterFor(team: 'local' | 'visit') {
           <ul v-if="team.shots.length" class="goals-panel__shot-list">
             <li v-for="shot in team.shots" :key="shot.id">
               {{ shot.result === 'save' ? 'Atajada' : 'Tiro' }}
-              · P{{ shot.period }} {{ shot.gameMinute }}
+              · {{ periodText(shot.period) }} {{ shot.gameMinute }}
             </li>
           </ul>
           <p v-else class="goals-panel__shot-empty">Sin tiros ni atajadas</p>
@@ -174,7 +181,7 @@ function rosterFor(team: 'local' | 'visit') {
       <a-form layout="vertical">
         <a-form-item label="Minuto del partido">
           <a-input
-            :value="completingGoal ? `P${completingGoal.period} · ${completingGoal.gameMinute}` : ''"
+            :value="completingGoal ? `${periodText(completingGoal.period)} · ${completingGoal.gameMinute}` : ''"
             disabled
           />
           <span class="goals-panel__clock-note">Capturado al marcar el gol en la pestaña Partido</span>

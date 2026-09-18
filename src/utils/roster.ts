@@ -1,4 +1,4 @@
-import type { PlayerRole, RosterPlayer } from '@/types/hockeyScoreboard'
+import type { PlayerRole, RosterPlayer } from '@/types/scoreboard'
 
 export const MAX_ASSISTANT_CAPTAINS = 2
 

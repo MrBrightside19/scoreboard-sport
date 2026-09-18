@@ -1,5 +1,5 @@
-import type { ScoreboardState } from '@/types/hockeyScoreboard'
-import { normalizeScoreboardState } from '@/types/hockeyScoreboard'
+import type { ScoreboardState } from '@/sports/scoreboardState'
+import { normalizeScoreboardState } from '@/sports/scoreboardState'
 import type { TournamentMatch } from '@/types/tournament'
 import { findPlayerById, playerLabel } from '@/utils/roster'
 import { penaltyTypeLabel } from '@/data/penaltyCatalog'

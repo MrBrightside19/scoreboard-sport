@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import ScoreBoard from '@/components/ScoreBoard.vue'
-import ArenaScoreBoard from '@/components/ArenaScoreBoard.vue'
-import { createDefaultScoreboardState } from '@/types/hockeyScoreboard'
+import { getSportModule } from '@/sports/registry'
+import { getSportUi } from '@/sports/ui'
+import type { SportId } from '@/types/sport'
+import { DEFAULT_SPORT } from '@/types/sport'
 import type {
   OverlayScoreboardStyle,
   ScoreboardStyleOption,
@@ -10,60 +11,106 @@ import type {
 } from '@/config/scoreboardStyles'
 import {
   OVERLAY_SCOREBOARD_STYLES,
-  TV_SCOREBOARD_STYLES,
+  tvStyleOptionsForSport,
 } from '@/config/scoreboardStyles'
 
-const props = defineProps<{
-  mode: 'tv' | 'overlay'
-  modelValue: TvScoreboardStyle | OverlayScoreboardStyle
-}>()
+const props = withDefaults(
+  defineProps<{
+    mode: 'tv' | 'overlay'
+    modelValue: TvScoreboardStyle | OverlayScoreboardStyle
+    sport?: SportId
+    /** TV: tema compartido, diseños por deporte, o todos. */
+    filter?: 'all' | 'shared' | 'sport-specific'
+  }>(),
+  { sport: DEFAULT_SPORT, filter: 'all' },
+)
 
 const emit = defineEmits<{
   'update:modelValue': [value: TvScoreboardStyle | OverlayScoreboardStyle]
 }>()
 
+const sportUi = computed(() => getSportUi(props.sport))
 const options = computed(() =>
-  props.mode === 'tv' ? TV_SCOREBOARD_STYLES : OVERLAY_SCOREBOARD_STYLES,
+  props.mode === 'tv'
+    ? tvStyleOptionsForSport(props.sport, props.filter)
+    : OVERLAY_SCOREBOARD_STYLES,
 )
 
-const previewState = createDefaultScoreboardState('Tiburones', 'Halcones')
-previewState.goalLocal = 3
-previewState.goalVisit = 2
-previewState.gamePeriod = 2
-previewState.timeGame = '12:45'
-previewState.matchCategory = 'U15'
-previewState.localColor = '#3da5ff'
-previewState.visitColor = '#ff5a36'
-previewState.penaltiesLocal = [
-  {
-    id: 'preview-p1',
-    playerId: '',
-    player: '12',
-    penaltyTypeId: 'minor',
-    infraction: '',
-    time: '1:42',
-  },
-]
-previewState.shots = [
-  {
-    id: 'preview-s1',
-    team: 'visit',
-    result: 'save',
-    goalkeeperPlayerId: '',
-    gameMinute: '10:00',
-    period: 2,
-    createdAt: '',
-  },
-  {
-    id: 'preview-s2',
-    team: 'local',
-    result: 'save',
-    goalkeeperPlayerId: '',
-    gameMinute: '11:00',
-    period: 2,
-    createdAt: '',
-  },
-]
+const previewState = computed(() => {
+  const state = getSportModule(props.sport).createDefaultState('Tiburones', 'Halcones')
+  state.goalLocal = 48
+  state.goalVisit = 45
+  if (props.sport === 'hockey') {
+    state.goalLocal = 3
+    state.goalVisit = 2
+  }
+  if (props.sport === 'futsal') {
+    state.goalLocal = 4
+    state.goalVisit = 3
+  }
+  if (props.sport === 'football') {
+    state.goalLocal = 2
+    state.goalVisit = 1
+    state.footballCards = [
+      {
+        id: 'preview-yc',
+        team: 'visit',
+        playerId: '',
+        player: '8',
+        kind: 'yellow',
+        period: 1,
+        gameMinute: '22:00',
+        createdAt: '',
+      },
+    ]
+  }
+  state.gamePeriod = 2
+  state.timeGame =
+    props.sport === 'basketball'
+      ? '06:12'
+      : props.sport === 'football'
+        ? '38:12'
+        : '12:45'
+  state.matchCategory = 'U15'
+  if (props.sport === 'hockey') {
+    state.penaltiesLocal = [
+      {
+        id: 'preview-p1',
+        playerId: '',
+        player: '12',
+        penaltyTypeId: 'minor',
+        infraction: '',
+        time: '1:42',
+      },
+    ]
+    state.shots = [
+      {
+        id: 'preview-s1',
+        team: 'visit',
+        result: 'save',
+        goalkeeperPlayerId: '',
+        gameMinute: '10:00',
+        period: 2,
+        createdAt: '',
+      },
+    ]
+  }
+  if (props.sport === 'basketball') {
+    state.basketballFouls = [
+      {
+        id: 'preview-f1',
+        team: 'visit',
+        playerId: '',
+        player: '',
+        kind: 'personal',
+        period: 2,
+        gameMinute: '06:12',
+        createdAt: '',
+      },
+    ]
+  }
+  return state
+})
 
 function select(option: ScoreboardStyleOption<string>): void {
   if (option.id === props.modelValue) return
@@ -100,21 +147,17 @@ function isSelected(id: string): boolean {
             class="style-picker__preview-inner"
             :class="mode === 'tv' ? 'style-picker__preview-inner--tv' : 'style-picker__preview-inner--overlay'"
           >
-            <ArenaScoreBoard
-              v-if="mode === 'tv' && option.id === 'arena'"
+            <component
+              :is="sportUi.Tv"
+              v-if="mode === 'tv'"
               preview
-              :state="previewState"
-            />
-            <ScoreBoard
-              v-else-if="mode === 'tv'"
-              tv
-              :tv-light="option.id === 'classic-light'"
               class="style-picker__classic-tv"
+              :tv-style="option.id as TvScoreboardStyle"
               :state="previewState"
             />
-            <ScoreBoard
+            <component
+              :is="sportUi.Overlay"
               v-else
-              overlay
               :overlay-style="option.id as OverlayScoreboardStyle"
               :state="previewState"
             />
@@ -324,6 +367,13 @@ function isSelected(id: string): boolean {
   --bug-name: 1.05rem;
   --bug-score: 1.7rem;
   --bug-clock: 1.2rem;
+}
+
+.style-picker__preview--overlay :deep(.futsal-overlay),
+.style-picker__preview--overlay :deep(.bball-overlay),
+.style-picker__preview--overlay :deep(.football-overlay) {
+  width: min(100%, 520px);
+  margin: 0 auto;
 }
 
 .style-picker__meta {

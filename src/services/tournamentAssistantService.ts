@@ -1,5 +1,6 @@
 import type { Profile } from '@/types/auth'
 import { MAX_TOURNAMENT_ASSISTANTS, type TournamentAssistant } from '@/types/tournament'
+import { assertCanAddAssistant } from './entitlementsService'
 import { supabaseRest } from './supabaseRest'
 
 export async function findProfileByEmail(email: string): Promise<Profile | null> {
@@ -47,8 +48,13 @@ export async function assignTournamentAssistant(
   }
 
   const current = await fetchTournamentAssistants(tournamentId)
-  if (current.length >= MAX_TOURNAMENT_ASSISTANTS) {
-    throw new Error(`Este torneo ya tiene ${MAX_TOURNAMENT_ASSISTANTS} asistentes asignados.`)
+  try {
+    await assertCanAddAssistant(organizerId, current.length)
+  } catch {
+    if (current.length >= MAX_TOURNAMENT_ASSISTANTS) {
+      throw new Error(`Este torneo ya tiene ${MAX_TOURNAMENT_ASSISTANTS} asistentes asignados.`)
+    }
+    throw new Error('Tu plan no permite más asistentes. Actualiza para agregar otro.')
   }
 
   if (current.some((assistant) => assistant.user_id === profile.id)) {

@@ -8,7 +8,7 @@ import {
   secondsToClock,
 } from '@/data/penaltyCatalog'
 import { playerLabel } from '@/utils/roster'
-import { MAX_PENALTIES_PER_TEAM } from '@/types/hockeyScoreboard'
+import { MAX_PENALTIES_PER_TEAM } from '@/sports/scoreboardState'
 
 const store = useScoreboardStore()
 

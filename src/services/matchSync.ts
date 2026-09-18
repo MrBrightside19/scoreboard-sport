@@ -1,5 +1,7 @@
 import type { MatchRecord } from '@/types/match'
-import type { ScoreboardState } from '@/types/hockeyScoreboard'
+import type { ScoreboardState } from '@/sports/scoreboardState'
+import { parseSportId, type SportId } from '@/types/sport'
+import { assertCanStartLiveMatch, fetchEntitlement, resolveLimits } from './entitlementsService'
 import { supabaseRest } from './supabaseRest'
 
 export async function fetchMatchState(matchId: string): Promise<MatchRecord | null> {
@@ -44,7 +46,7 @@ export async function publishMatchState(
       method: 'POST',
       body: {
         id: matchId,
-        sport: 'hockey',
+        sport: parseSportId(state.sport),
         is_live: true,
         title: meta.title ?? `${state.localTeam} vs ${state.visitTeam}`,
         ...payload,
@@ -59,9 +61,16 @@ export async function createMatch(
   matchId: string,
   state: ScoreboardState,
   organizerId?: string | null,
+  sport?: SportId,
 ): Promise<MatchRecord> {
-  return publishMatchState(matchId, state, {
-    title: `${state.localTeam} vs ${state.visitTeam}`,
+  let nextState = sport ? { ...state, sport } : state
+  if (organizerId) {
+    await assertCanStartLiveMatch(organizerId, { sport: nextState.sport })
+    const limits = resolveLimits(await fetchEntitlement(organizerId))
+    nextState = { ...nextState, showBranding: limits.showBranding }
+  }
+  return publishMatchState(matchId, nextState, {
+    title: `${nextState.localTeam} vs ${nextState.visitTeam}`,
     organizer_id: organizerId ?? null,
     is_live: true,
   })

@@ -3,17 +3,23 @@ import { reactive, ref } from 'vue'
 import type { Rule } from 'ant-design-vue/es/form'
 import { useAuthStore } from '@/stores/auth'
 
+const props = withDefaults(
+  defineProps<{
+    initialMode?: 'login' | 'register'
+  }>(),
+  { initialMode: 'login' },
+)
+
 const emit = defineEmits<{
   success: []
 }>()
 
 const auth = useAuthStore()
-const mode = ref<'login' | 'register'>('login')
+const mode = ref<'login' | 'register'>(props.initialMode)
 const form = reactive({
   email: '',
   password: '',
   displayName: '',
-  asOrganizer: false,
 })
 const submitting = ref(false)
 
@@ -42,7 +48,6 @@ async function submit(): Promise<void> {
         form.email,
         form.password,
         form.displayName,
-        form.asOrganizer,
       )
       if (loggedIn) emit('success')
     }
@@ -81,12 +86,6 @@ async function submit(): Promise<void> {
 
     <a-form-item label="Contraseña" name="password" :rules="rules.password">
       <a-input-password v-model:value="form.password" placeholder="Mínimo 6 caracteres" />
-    </a-form-item>
-
-    <a-form-item v-if="mode === 'register'">
-      <a-checkbox v-model:checked="form.asOrganizer">
-        Registrarme como organizador
-      </a-checkbox>
     </a-form-item>
 
     <a-alert

@@ -1,18 +1,13 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
 import { fetchLiveMatches } from '@/services/liveMatchesService'
 import type { LiveMatchSummary } from '@/types/match'
 import LiveMatchCard from '@/components/LiveMatchCard.vue'
-import AuthModal from '@/components/AuthModal.vue'
 import { APP_VERSION } from '@/config/version'
-
-const route = useRoute()
 
 const liveMatches = ref<LiveMatchSummary[]>([])
 const loadingLive = ref(false)
-const showAuth = ref(false)
 
 async function loadLive(): Promise<void> {
   if (!isSupabaseConfigured) return
@@ -26,9 +21,6 @@ async function loadLive(): Promise<void> {
 
 onMounted(() => {
   void loadLive()
-  if (route.query.auth === 'organizer' || route.query.auth === 'staff') {
-    showAuth.value = true
-  }
 })
 </script>
 
@@ -36,10 +28,10 @@ onMounted(() => {
   <div class="home">
     <header class="home__hero">
       <div class="home__hero-content">
-        <p class="home__eyebrow">Marcador deportivo en vivo</p>
-        <h1>ScoreDesk</h1>
+        <p class="home__eyebrow">Directorio público</p>
+        <h1>En vivo ahora</h1>
         <p class="home__subtitle">
-          Opera partidos desde la mesa de control, proyecta en pantalla TV y comparte enlaces públicos para espectadores.
+          Mira partidos sin crear cuenta. Si organizas, entra a la app para operar la mesa.
         </p>
 
         <div v-if="!isSupabaseConfigured" class="home__warning">
@@ -55,7 +47,7 @@ onMounted(() => {
 
     <section class="home__section">
       <div class="home__section-header">
-        <h2>En vivo ahora</h2>
+        <h2>Partidos públicos</h2>
         <a-button type="link" @click="loadLive">Actualizar</a-button>
       </div>
 
@@ -72,15 +64,6 @@ onMounted(() => {
       <span class="home__footer-sep" aria-hidden="true">·</span>
       <span>v{{ APP_VERSION }}</span>
     </footer>
-
-    <a-modal
-      v-model:open="showAuth"
-      title="Acceso"
-      :footer="null"
-      destroy-on-close
-    >
-      <AuthModal @success="showAuth = false" />
-    </a-modal>
   </div>
 </template>
 

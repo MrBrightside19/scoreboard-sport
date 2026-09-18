@@ -157,6 +157,38 @@ export async function changePassword(
   if (error) throw new Error(toAuthMessage(error))
 }
 
+export async function deleteOwnAccount(password: string): Promise<void> {
+  const supabase = getSupabaseClient()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  if (!session?.user?.email) throw new Error('No autenticado')
+  if (!password) throw new Error('Ingresa tu contraseña para confirmar.')
+
+  const { error: reauthError } = await supabase.auth.signInWithPassword({
+    email: session.user.email,
+    password,
+  })
+  if (reauthError) {
+    throw new Error(
+      reauthError.code === 'invalid_credentials' ||
+        reauthError.message.toLowerCase().includes('invalid login credentials')
+        ? 'La contraseña no es correcta.'
+        : toAuthMessage(reauthError),
+    )
+  }
+
+  const { error } = await supabase.rpc('delete_own_account')
+  if (error) {
+    if (error.message.toLowerCase().includes('could not find') || error.code === 'PGRST202') {
+      throw new Error(
+        'Falta ejecutar supabase/delete-own-account.sql en el SQL Editor de Supabase.',
+      )
+    }
+    throw new Error(error.message)
+  }
+}
+
 export function onAuthStateChange(
   callback: (isAuthenticated: boolean) => void,
 ): () => void {

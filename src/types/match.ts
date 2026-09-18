@@ -1,4 +1,4 @@
-import type { ScoreboardState } from './hockeyScoreboard'
+import type { ScoreboardState } from '@/sports/scoreboardState'
 import type { SportId } from './sport'
 
 export interface MatchRecord {

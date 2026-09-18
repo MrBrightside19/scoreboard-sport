@@ -7,7 +7,8 @@ import type {
   ShotEvent,
   ShotResult,
   TeamPenalty,
-} from '@/types/hockeyScoreboard'
+} from '@/sports/scoreboardState'
+import type { FutsalExclusionEvent } from '@/sports/futsal/types'
 import {
   createDefaultScoreboardState,
   DEFAULT_GAME_TIME,
@@ -15,10 +16,10 @@ import {
   DEFAULT_PENALTY_TYPE_ID,
   isGoalPending,
   MAX_PENALTIES_PER_TEAM,
-  MAX_PERIODS,
   normalizeScoreboardState,
-} from '@/types/hockeyScoreboard'
+} from '@/sports/scoreboardState'
 import { getPenaltyType, secondsToClock } from '@/data/penaltyCatalog'
+import { getSportModule } from '@/sports/registry'
 import { fetchMatchState } from '@/services/matchSync'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
 import {
@@ -150,6 +151,12 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
       timeGame: syncedTime,
       penaltiesLocal: syncPenaltyList(state.value.penaltiesLocal),
       penaltiesVisit: syncPenaltyList(state.value.penaltiesVisit),
+      futsalExclusions: (state.value.futsalExclusions ?? [])
+        .map((item) => ({
+          ...item,
+          time: tickDown(item.time, playedSeconds),
+        }))
+        .filter((item) => parseTimeToSeconds(item.time) > 0),
       isPaused: true,
       updatedAt: new Date().toISOString(),
     }
@@ -517,9 +524,17 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
       .filter((penalty) => parseTimeToSeconds(penalty.time) > 0)
   }
 
+  function tickFutsalExclusions(
+    exclusions: FutsalExclusionEvent[],
+  ): FutsalExclusionEvent[] {
+    return exclusions
+      .map((item) => ({ ...item, time: tickDown(item.time) }))
+      .filter((item) => parseTimeToSeconds(item.time) > 0)
+  }
+
   /** Al terminar el descanso: avanza de periodo si queda alguno; si no, solo pausa. */
   function finishIntermissionTick(): void {
-    if (state.value.gamePeriod < MAX_PERIODS) {
+    if (state.value.gamePeriod < getSportModule(state.value.sport).clock.periods) {
       advanceToNextPeriod()
       return
     }
@@ -569,6 +584,7 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
         timeGame: nextTime,
         penaltiesLocal: tickPenaltyList(state.value.penaltiesLocal),
         penaltiesVisit: tickPenaltyList(state.value.penaltiesVisit),
+        futsalExclusions: tickFutsalExclusions(state.value.futsalExclusions ?? []),
         isPaused: periodEnded,
         updatedAt: new Date().toISOString(),
       }

@@ -9,5 +9,10 @@ declare module 'vue-router' {
     hideNav?: boolean
     requiresStaff?: boolean
     requiresAuth?: boolean
+    /** Hub de mesa: solo teléfonos / pantallas angostas. */
+    mobileOnly?: boolean
+    /** Organizador (crear partido / torneo): solo escritorio. */
+    desktopOnly?: boolean
+    nav?: 'marketing' | 'app'
   }
 }
