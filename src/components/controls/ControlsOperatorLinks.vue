@@ -69,4 +69,7 @@ const route = useRoute()
   <router-link class="controls__link-switch-match" :to="{ name: 'mobile-mesa' }">
     <a-button>Otro partido</a-button>
   </router-link>
+  <router-link class="controls__link-profile" :to="{ name: 'profile' }">
+    <a-button>Perfil</a-button>
+  </router-link>
 </template>

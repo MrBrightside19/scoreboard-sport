@@ -37,6 +37,7 @@ import { getPlanDefinition } from '@/config/plans'
 import type { Entitlement } from '@/types/billing'
 import { clearMatchIdFromStorage } from '@/utils/localSync'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
+import { isMobileMesaViewport } from '@/utils/mobileMesa'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -78,6 +79,7 @@ const designSportUsesSpecific = computed(() =>
 
 const entitlement = ref<Entitlement | null>(null)
 const currentPlan = computed(() => getPlanDefinition(resolvePlan(entitlement.value)))
+const showMesaBack = ref(false)
 
 const roleLabel = computed(() => {
   if (auth.isOrganizer) return 'Organizador'
@@ -116,6 +118,7 @@ watch(
 )
 
 onMounted(() => {
+  showMesaBack.value = isMobileMesaViewport()
   if (!auth.loading && !auth.isAuthenticated) {
     void router.replace({ name: 'access', query: { redirect: '/perfil' } })
   }
@@ -306,6 +309,13 @@ async function confirmDeleteAccount(): Promise<void> {
   <div class="profile">
     <a-spin :spinning="auth.loading">
       <header class="profile__header">
+        <router-link
+          v-if="showMesaBack"
+          class="profile__back"
+          :to="{ name: 'mobile-mesa' }"
+        >
+          Volver a la mesa
+        </router-link>
         <h1>Perfil</h1>
         <p>Tu cuenta y las preferencias del sistema en este navegador.</p>
       </header>
@@ -745,6 +755,18 @@ async function confirmDeleteAccount(): Promise<void> {
   }
 }
 
+.profile__back {
+  display: inline-block;
+  margin: 0 0 0.65rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
 .profile__panel {
   padding: 1.15rem 1.2rem;
   border-radius: 12px;
@@ -933,5 +955,25 @@ async function confirmDeleteAccount(): Promise<void> {
   font-size: 0.88rem;
   line-height: 1.45;
   color: var(--app-text-muted);
+}
+
+@media (max-width: 900px) {
+  .profile {
+    padding: 1.15rem 1rem 2.5rem;
+  }
+
+  .profile__header h1 {
+    font-size: 2rem;
+  }
+
+  .profile__panel-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .profile__pref-card-top {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 </style>

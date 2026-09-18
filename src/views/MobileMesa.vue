@@ -166,9 +166,12 @@ watch(
         <p class="mobile-mesa__eyebrow">Mesa móvil</p>
         <h1>Operar partido</h1>
       </div>
-      <a-button v-if="auth.isAuthenticated" size="small" @click="signOut">
-        Salir
-      </a-button>
+      <div v-if="auth.isAuthenticated" class="mobile-mesa__actions">
+        <router-link :to="{ name: 'profile' }">
+          <a-button size="small">Perfil</a-button>
+        </router-link>
+        <a-button size="small" @click="signOut">Salir</a-button>
+      </div>
     </header>
 
     <p class="mobile-mesa__lead">
@@ -352,6 +355,12 @@ watch(
   align-items: flex-start;
   gap: 1rem;
   margin-bottom: 0.75rem;
+}
+
+.mobile-mesa__actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.4rem;
 }
 
 .mobile-mesa__eyebrow {
