@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import ScoreBoard from '@/components/ScoreBoard.vue'
-import ArenaScoreBoard from '@/components/ArenaScoreBoard.vue'
+import { getSportUi } from '@/sports/ui'
 import { useScoreboardStore } from '@/stores/scoreboard'
 import { useLocalScoreboardSync } from '@/composables/useLocalScoreboardSync'
 import { fetchCourtStream } from '@/services/tournamentCourtStream'
@@ -13,12 +12,10 @@ import {
   readCourtActiveMatch,
   readMatchIdFromStorage,
 } from '@/utils/localSync'
-import { useScoreboardDisplayPrefs } from '@/composables/useScoreboardDisplayPrefs'
-import { isArenaTvStyle, isClassicLightTvStyle } from '@/config/scoreboardStyles'
 
 const route = useRoute()
 const store = useScoreboardStore()
-const { tvStyle } = useScoreboardDisplayPrefs()
+const sportUi = computed(() => getSportUi(store.state.sport))
 
 const tournamentId = computed(() => route.params.tournamentId as string)
 const court = computed(() => route.params.court as string)
@@ -133,18 +130,10 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div
-    class="board-root"
-    :class="{ 'board-root--light': isClassicLightTvStyle(tvStyle) }"
-  >
-    <ArenaScoreBoard
-      v-if="activeMatchId && ready && isArenaTvStyle(tvStyle)"
-      :state="store.state"
-    />
-    <ScoreBoard
-      v-else-if="activeMatchId && ready"
-      tv
-      :tv-light="isClassicLightTvStyle(tvStyle)"
+  <div class="board-root">
+    <component
+      :is="sportUi.Tv"
+      v-if="activeMatchId && ready"
       :state="store.state"
     />
     <div v-else-if="activeMatchId" class="board-empty">Cargando marcador…</div>
@@ -160,10 +149,6 @@ onUnmounted(() => {
   background: #0a0e17;
 }
 
-.board-root--light {
-  background: #e9eef5;
-}
-
 .board-empty {
   min-height: 100vh;
   display: grid;
@@ -171,9 +156,5 @@ onUnmounted(() => {
   color: rgba(255, 255, 255, 0.5);
   padding: 1.5rem;
   text-align: center;
-}
-
-.board-root--light .board-empty {
-  color: rgba(18, 24, 32, 0.55);
 }
 </style>

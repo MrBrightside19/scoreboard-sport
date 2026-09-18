@@ -16,7 +16,7 @@ import {
   roleLabel,
   roleToPositionText,
 } from '@/utils/roster'
-import type { PlayerRole } from '@/types/hockeyScoreboard'
+import type { PlayerRole } from '@/sports/scoreboardState'
 import type { TournamentRosterPlayer, TournamentTeam } from '@/types/tournament'
 
 const props = defineProps<{

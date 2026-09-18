@@ -12,8 +12,8 @@ import {
   DEFAULT_TEAM_COLOR_VISIT,
   TEAM_COLOR_PALETTE,
 } from '@/types/tournament'
-import type { RosterPlayer, ScoreboardState } from '@/types/hockeyScoreboard'
-import { createDefaultScoreboardState } from '@/types/hockeyScoreboard'
+import type { RosterPlayer, ScoreboardState } from '@/sports/scoreboardState'
+import { createDefaultScoreboardState } from '@/sports/scoreboardState'
 import { generateMatchId } from '@/utils/matchId'
 import { generateId } from '@/utils/id'
 import { normalizeGameTime } from '@/utils/clock'
@@ -21,6 +21,13 @@ import { parseRoleFromText, joinPersonName, roleToPositionText } from '@/utils/r
 import { parseScheduledAt } from '@/utils/tournamentImport'
 import { supabaseRest } from './supabaseRest'
 import { createMatch, fetchMatchState, finishMatch } from './matchSync'
+import {
+  assertCanAddCalendarMatch,
+  assertCanCreateTournament,
+  assertCanStartLiveMatch,
+} from './entitlementsService'
+import { getSportModule } from '@/sports/registry'
+import { parseSportId, type SportId } from '@/types/sport'
 import { upsertCourtStream } from './tournamentCourtStream'
 import { fetchAssistantTournamentIds } from './tournamentAssistantService'
 
@@ -92,16 +99,24 @@ export async function fetchTournament(id: string): Promise<Tournament | null> {
 }
 
 export async function createTournament(
-  payload: Pick<Tournament, 'name' | 'description' | 'start_date' | 'end_date' | 'visibility'>,
+  payload: Pick<Tournament, 'name' | 'description' | 'start_date' | 'end_date' | 'visibility'> & {
+    sport?: SportId | string
+  },
   organizerId: string,
 ): Promise<Tournament> {
+  const sport = parseSportId(payload.sport)
+  await assertCanCreateTournament(organizerId, sport)
   const rows = await supabaseRest<Tournament[]>('tournaments', {
     method: 'POST',
     body: {
-      ...payload,
+      name: payload.name,
+      description: payload.description,
+      start_date: payload.start_date,
+      end_date: payload.end_date,
+      visibility: payload.visibility,
       organizer_id: organizerId,
       status: 'draft',
-      sport: 'hockey',
+      sport,
     },
     prefer: 'return=representation',
   })
@@ -716,6 +731,10 @@ export async function createTournamentMatch(
     scheduled_at?: string | null
   },
 ): Promise<TournamentMatch> {
+  const tournament = await fetchTournament(tournamentId)
+  if (tournament) {
+    await assertCanAddCalendarMatch(tournament.organizer_id, tournamentId)
+  }
   const existing = await fetchTournamentMatches(tournamentId)
   const nextOrder =
     existing.reduce((max, match) => Math.max(max, match.sort_order), -1) + 1
@@ -852,11 +871,14 @@ export async function startTournamentMatch(
     tournamentMatch.id,
   )
 
+  await assertCanStartLiveMatch(organizerId, { sport: tournament.sport })
+
   const matchId = generateMatchId()
-  const state = createDefaultScoreboardState(
+  const sport = getSportModule(tournament.sport)
+  const state = sport.createDefaultState(
     tournamentMatch.local_team,
     tournamentMatch.visit_team,
-    normalizeGameTime(tournamentMatch.game_time),
+    normalizeGameTime(tournamentMatch.game_time || sport.clock.defaultPeriodTime),
   )
   state.matchCategory = tournamentMatch.category?.trim() || ''
 
@@ -886,7 +908,7 @@ export async function startTournamentMatch(
     // Si falla la carga de plantillas/equipos, el partido inicia sin ellos.
   }
 
-  await createMatch(matchId, state, organizerId)
+  await createMatch(matchId, state, organizerId, state.sport)
   await supabaseRest(`matches?id=eq.${matchId}`, {
     method: 'PATCH',
     body: {

@@ -1,0 +1,1221 @@
+/* Mesa de control de fútbol: el layout de escritorio se conserva.
+ * En pantallas chicas se compacta para llenar el viewport y evitar scroll de página. */
+
+$football-compact: 900px;
+$football-short: 520px;
+
+@media (max-width: $football-compact) {
+  html:has(.football-controls),
+  html:has(.football-controls) body,
+  html:has(.football-controls) #app,
+  html:has(.football-controls) .app-shell,
+  html:has(.football-controls) .app-main {
+    height: 100vh;
+    height: 100svh;
+    max-height: 100vh;
+    max-height: 100svh;
+    min-height: 0 !important;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+}
+
+.football-controls .controls__score-controls .ant-btn {
+  font-size: 1.7rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.football-score-plus__text {
+  display: none;
+}
+
+.football-score-plus__inner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28rem;
+  line-height: 1;
+}
+
+.football-score-plus__mark {
+  display: block;
+  line-height: 1;
+  font-weight: 700;
+  font-size: 1.7rem;
+}
+
+.football-controls .controls__score {
+  font-size: 4.5rem;
+}
+
+.football-controls .controls__clock-main-core {
+  display: contents;
+}
+
+.football-controls .controls__clock-adjust {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+
+  label {
+    margin: 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.6;
+  }
+}
+
+.football-controls .controls__clock-period {
+  align-items: center;
+  justify-items: center;
+
+  .ant-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1;
+
+    > span {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      transform: translateY(-0.04em);
+    }
+  }
+}
+
+.football-match__rest {
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: center;
+  justify-items: center;
+  gap: 0.85rem 1.5rem;
+  align-items: center;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  text-align: center;
+}
+
+.football-match__rest-time {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+
+  label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.6;
+    white-space: nowrap;
+  }
+}
+
+.football-match__rest-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.football-match__rest .controls__clock-hint {
+  grid-column: 1 / -1;
+  margin-top: 0;
+  max-width: 36rem;
+}
+
+.football-side-switch {
+  display: none;
+}
+
+.football-config__teams {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.football-config__hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.78rem;
+  opacity: 0.55;
+  color: var(--app-text-muted);
+}
+
+.football-config__links {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.5rem;
+
+  > a {
+    display: block;
+    min-width: 0;
+
+    .ant-btn {
+      width: 100%;
+    }
+  }
+}
+
+.football-config__team {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+
+  > span {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.55;
+  }
+
+  > strong {
+    font-size: 0.95rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.football-controls .controls__tabs .ant-tabs-tab {
+  font-size: 1.05rem;
+  padding-block: 0.9rem;
+}
+
+.football-controls .controls__tabs .ant-tabs-tab-btn {
+  font-size: inherit;
+}
+
+.football-controls__tab-clock,
+.football-controls .ant-tabs-extra-content {
+  display: none;
+}
+
+@media (max-width: $football-compact) {
+  .football-controls.controls {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: 100%;
+    margin: 0;
+    padding: max(0.4rem, env(safe-area-inset-top)) 0.55rem
+      max(0.4rem, env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    touch-action: manipulation;
+  }
+
+  .football-controls .controls__header {
+    flex-shrink: 0;
+    margin-bottom: 0.35rem;
+    gap: 0.35rem;
+    align-items: center;
+
+    h1 {
+      margin: 0;
+      font-size: 1.05rem;
+      line-height: 1.15;
+    }
+  }
+
+  .football-controls .controls__sport,
+  .football-controls .controls__match-id {
+    display: none;
+  }
+
+  .football-controls .controls__links {
+    gap: 0.3rem;
+
+    .ant-btn {
+      height: 28px;
+      padding: 0 8px;
+      font-size: 12px;
+    }
+  }
+
+  .football-controls .controls__body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .football-controls .controls__tabs.ant-tabs {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .football-controls .ant-tabs-nav {
+    flex-shrink: 0;
+    margin-bottom: 0.4rem !important;
+
+    &::before {
+      border-color: var(--app-border-strong);
+    }
+  }
+
+  .football-controls .ant-tabs-nav-wrap {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .football-controls .ant-tabs-nav-list {
+    width: 100% !important;
+    display: flex !important;
+    transform: none !important;
+  }
+
+  .football-controls .ant-tabs-nav-operations,
+  .football-controls .ant-tabs-nav-more,
+  .football-controls .ant-tabs-nav-add,
+  .football-controls .football-controls__more-hidden {
+    display: none !important;
+  }
+
+  .football-controls .ant-tabs-tab {
+    flex: 1 1 0 !important;
+    justify-content: center;
+    min-width: 0;
+    margin: 0 !important;
+    padding: 0.48rem 0.12rem !important;
+    font-size: 0.84rem;
+  }
+
+  .football-controls .ant-tabs-tab-btn {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .football-controls .ant-tabs-extra-content {
+    display: block;
+    flex-shrink: 0;
+    margin-left: 0.35rem;
+  }
+
+  .football-controls__tab-clock {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 3.6rem;
+    padding: 0.1rem 0.28rem;
+    border: 1px solid var(--app-border);
+    border-radius: 8px;
+    background: var(--app-surface);
+    color: var(--app-text);
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.2rem;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+  }
+
+  .football-controls .ant-tabs-content-holder {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .football-controls .ant-tabs-content {
+    height: 100%;
+  }
+
+  .football-controls .ant-tabs-tabpane {
+    height: 100%;
+    outline: none;
+  }
+
+  .football-controls .ant-tabs-tabpane-active {
+    display: flex !important;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .football-controls .controls__dock {
+    display: none;
+  }
+
+  .football-controls .ant-card {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .football-controls .ant-card-head {
+    min-height: 0;
+    padding: 0 0.65rem;
+    border-bottom-color: var(--app-border);
+
+    .ant-card-head-title {
+      padding: 0.45rem 0;
+      font-size: 0.82rem;
+    }
+  }
+
+  .football-controls .ant-card-body {
+    flex: 1;
+    min-height: 0;
+    padding: 0.55rem 0.65rem;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .football-controls .controls__score-hint,
+  .football-controls .controls__clock-hint,
+  .football-controls .football-cards__alert,
+  .football-controls .football-roster__hint,
+  .football-controls .goals-panel__hint,
+  .football-controls .goals-panel__pending-alert .ant-alert-description {
+    display: none !important;
+  }
+
+  .football-side-switch {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    flex-shrink: 0;
+    gap: 0.3rem;
+    margin-bottom: 0.4rem;
+    padding: 0.2rem;
+    border-radius: 10px;
+    border: 1px solid var(--app-border);
+    background: var(--app-surface);
+
+    button {
+      min-width: 0;
+      height: 2.15rem;
+      padding: 0 0.5rem;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--app-text-muted);
+      font: inherit;
+      font-size: 0.78rem;
+      font-weight: 650;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      cursor: pointer;
+
+      &.is-active {
+        background: var(--app-bg-elevated);
+        color: var(--app-text);
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+      }
+    }
+  }
+
+  /* —— Partido: local | reloj | visita —— */
+  .football-controls .football-match__score > .ant-card-head,
+  .football-controls .football-match__clock .ant-card-head {
+    display: none;
+  }
+
+  .football-controls .controls__grid {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    gap: 0.3rem;
+    overflow: hidden;
+  }
+
+  .football-controls .football-match__score.ant-card {
+    display: contents;
+  }
+
+  .football-controls .football-match__score .ant-card-body,
+  .football-controls .controls__match {
+    display: contents;
+  }
+
+  .football-controls .controls__divider {
+    display: none;
+  }
+
+  .football-controls .controls__side--local {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .football-controls .football-match__clock.controls__clock-section {
+    grid-column: 2;
+    grid-row: 1;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .football-controls .controls__side--visit {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .football-controls .football-match__clock .ant-card {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    height: auto;
+    max-width: 100%;
+  }
+
+  .football-controls .controls__grid--rest .football-match__clock .ant-card {
+    flex: 1 1 0;
+  }
+
+  .football-controls .football-match__clock .ant-card-body {
+    height: 100%;
+    min-height: 0;
+    padding: 0.28rem;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .football-controls .controls__side {
+    min-height: 0;
+    height: 100%;
+    gap: 0.16rem;
+    padding: 0.24rem 0.22rem;
+    justify-content: stretch;
+  }
+
+  .football-controls .controls__side .ant-input-affix-wrapper,
+  .football-controls .controls__side .ant-input {
+    font-size: 16px;
+  }
+
+  .football-controls .controls__side .ant-input-lg,
+  .football-controls .controls__side .ant-input-affix-wrapper-lg {
+    min-height: 1.9rem;
+    padding-block: 0.12rem;
+    padding-inline: 0.4rem;
+  }
+
+  .football-controls .controls__side .ant-input-show-count-suffix {
+    display: none;
+  }
+
+  .football-controls .controls__side-label {
+    font-size: 0.6rem;
+    line-height: 1;
+  }
+
+  .football-score-plus__text {
+    display: block;
+    margin: 0;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    line-height: 1;
+  }
+
+  .football-controls .football-score-plus.ant-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    padding-inline: 0.25rem;
+
+    > span {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+    }
+  }
+
+  .football-controls .football-score-plus__inner {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.18rem;
+    line-height: 1;
+  }
+
+  .football-controls .football-score-plus__mark {
+    font-size: 1.85rem;
+    line-height: 1;
+  }
+
+  .football-controls .controls__score-controls {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.16rem;
+    margin: 0;
+    width: 100%;
+
+    .controls__score {
+      flex: 1 1 auto;
+      min-height: 0;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      container-type: size;
+      font-size: clamp(6.34rem, 28vmin, 12rem);
+      line-height: 0.85;
+      overflow: hidden;
+    }
+
+    .ant-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      order: 2;
+      flex: 0 0 3.2rem;
+      width: 100%;
+      min-height: 3.2rem;
+      height: 3.2rem;
+      margin: 0;
+      padding: 0;
+      font-size: 1.85rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .ant-btn-primary {
+      order: 1;
+      flex: 0 0 3.2rem;
+      min-height: 3.2rem;
+      height: 3.2rem;
+      font-weight: 700;
+    }
+  }
+
+  @supports (font-size: 1cqh) {
+    .football-controls .controls__score-controls .controls__score {
+      font-size: max(4.5rem, min(90cqh, 92cqw, 12rem));
+    }
+  }
+
+  .football-controls .controls__meta {
+    margin: 0;
+    font-size: 0.62rem;
+    line-height: 1.2;
+  }
+
+  .football-controls .controls__clock {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+  }
+
+  .football-controls .football-match__clock .ant-card-body {
+    gap: 0.25rem;
+  }
+
+  .football-controls .football-match__clock .controls__clock {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .football-controls .controls__clock-main {
+    flex: 1.35 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 0;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    justify-content: center;
+    align-items: center;
+    gap: 0.22rem;
+    padding: 0.55rem 0.32rem 0.35rem;
+    overflow: visible;
+  }
+
+  .football-controls .controls__clock-main-core {
+    display: contents;
+  }
+
+  .football-controls .controls__grid--rest .controls__clock-adjust {
+    display: none;
+  }
+
+  .football-controls .football-match__rest-start-extra {
+    display: none;
+  }
+
+  .football-controls .controls__clock-adjust {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(3.6rem, 4.5rem);
+    align-items: center;
+    align-self: stretch;
+    gap: 0.28rem;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    margin-top: 0.15rem;
+    box-sizing: border-box;
+
+    label {
+      margin: 0;
+      font-size: 0.58rem;
+      letter-spacing: 0.02em;
+      text-align: left;
+      line-height: 1.15;
+      min-width: 0;
+    }
+
+    .time-input,
+    .time-input--compact {
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+
+    .time-input input,
+    .ant-input {
+      min-width: 0;
+      padding-inline: 0.28rem;
+      font-size: 0.92rem;
+    }
+  }
+
+  .football-controls .controls__clock-display {
+    font-size: clamp(2.21rem, 8.06vw, 3.32rem);
+    line-height: 1.25;
+    padding-top: 0.18em;
+    overflow: visible;
+  }
+
+  .football-controls .controls__clock-status {
+    order: 0;
+    width: 100%;
+    margin: 0;
+    font-size: 0.58rem;
+  }
+
+  .football-controls .controls__clock-toggle {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    height: 2.35rem;
+    margin: 0 0 0.65rem;
+  }
+
+  .football-controls .controls__clock-panels {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    min-height: 0;
+    gap: 0.18rem;
+  }
+
+  .football-controls .controls__clock-field {
+    height: auto;
+    padding: 0.22rem 0.28rem;
+    gap: 0.16rem;
+    justify-content: center;
+
+    label {
+      font-size: 0.58rem;
+    }
+  }
+
+  .football-controls .controls__clock-field--period {
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      'label period'
+      'next next';
+    align-items: center;
+    justify-content: stretch;
+    justify-items: stretch;
+    gap: 0.16rem 0.32rem;
+    min-height: 0;
+    min-width: 0;
+    text-align: left;
+
+    > label {
+      grid-area: label;
+      margin: 0;
+      text-align: left;
+      white-space: nowrap;
+      line-height: 1;
+    }
+
+    .controls__clock-period {
+      grid-area: period;
+    }
+
+    .controls__next-period {
+      grid-area: next;
+      margin-top: 0;
+    }
+  }
+
+  .football-controls .controls__clock-period {
+    max-width: none;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: 2.05rem minmax(0, 1fr) 2.05rem;
+    align-items: center;
+    justify-items: center;
+    gap: 0.2rem;
+
+    .ant-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 2.05rem;
+      min-width: 2.05rem;
+      height: 2.05rem;
+      padding: 0;
+      font-size: 1.2rem;
+      font-weight: 700;
+      line-height: 1;
+
+      > span {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        transform: translateY(-0.04em);
+      }
+    }
+  }
+
+  .football-controls .controls__clock-period-label {
+    font-size: 0.92rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .football-controls .controls__next-period {
+    max-width: none;
+    height: 1.9rem;
+    font-size: 0.72rem;
+  }
+
+  .football-controls .time-input--compact {
+    width: 100%;
+  }
+
+  .football-controls .controls__grid--rest .controls__clock-main {
+    flex: 1 1 0;
+    gap: 0.12rem;
+    padding: 0.4rem 0.28rem 0.2rem;
+  }
+
+  .football-controls .controls__grid--rest .controls__clock-display {
+    font-size: clamp(1.85rem, 6.8vw, 2.8rem);
+  }
+
+  .football-controls .controls__grid--rest .controls__clock-toggle {
+    height: 2.05rem;
+    margin-bottom: 0.2rem;
+  }
+
+  .football-controls .controls__grid--rest .controls__clock-panels,
+  .football-controls .controls__grid--rest .controls__clock-field--period {
+    flex: 0 0 auto;
+  }
+
+  .football-controls .controls__grid--rest .controls__clock-field {
+    padding: 0.18rem 0.22rem;
+    gap: 0.12rem;
+  }
+
+  .football-controls .controls__grid--rest .controls__next-period {
+    height: 1.75rem;
+  }
+
+  .football-controls .football-match__rest {
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    grid-template-areas: 'label input actions';
+    align-items: center;
+    gap: 0.18rem 0.3rem;
+    padding: 0.22rem 0.28rem;
+  }
+
+  .football-controls .football-match__rest-time {
+    display: contents;
+
+    label {
+      grid-area: label;
+      font-size: 0.58rem;
+      text-align: left;
+      white-space: nowrap;
+    }
+  }
+
+  .football-controls .football-match__rest .time-input {
+    grid-area: input;
+    width: 5.5rem;
+    max-width: 100%;
+  }
+
+  .football-controls .football-match__rest-actions {
+    grid-area: actions;
+    grid-column: auto;
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 0.25rem;
+    justify-content: stretch;
+
+    .ant-btn {
+      flex: 1 1 0;
+      width: auto;
+      min-width: 0;
+      height: 2rem;
+      font-size: 0.7rem;
+      padding-inline: 0.3rem;
+    }
+  }
+
+
+  /* —— Nómina —— */
+  .football-controls .football-roster {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .football-controls .football-roster__grid {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .football-controls .football-roster[data-side='local'] .football-roster__team--visit,
+  .football-controls .football-roster[data-side='visit'] .football-roster__team--local {
+    display: none;
+  }
+
+  .football-controls .football-roster__team {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    padding: 0.55rem;
+    gap: 0.4rem;
+
+    h3 {
+      display: none;
+    }
+  }
+
+  .football-controls .football-roster__list,
+  .football-controls .football-roster__team > .ant-empty {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+
+  .football-controls .football-roster__row {
+    grid-template-columns: 2.6rem minmax(0, 1fr) 6.2rem 1.6rem;
+  }
+
+  /* —— Goles —— */
+  .football-controls .football-goals {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .football-controls .goals-panel {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .football-controls .goals-panel__pending-alert {
+    flex-shrink: 0;
+    margin-bottom: 0.4rem;
+    padding: 0.4rem 0.55rem;
+  }
+
+  .football-controls .goals-panel__grid {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .football-controls .football-goals[data-side='local'] .goals-panel__team:last-child,
+  .football-controls .football-goals[data-side='visit'] .goals-panel__team:first-child {
+    display: none;
+  }
+
+  .football-controls .goals-panel__team {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    padding: 0.55rem;
+  }
+
+  .football-controls .goals-panel__list,
+  .football-controls .goals-panel__team > .ant-empty {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+
+  /* —— Tarjetas —— */
+  .football-controls .football-cards {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    align-items: stretch;
+    overflow: hidden;
+    gap: 0.4rem;
+  }
+
+  .football-controls .football-cards > .football-side-switch {
+    grid-column: 1 / -1;
+    margin-bottom: 0;
+  }
+
+  .football-controls .football-cards .controls__split {
+    grid-column: 1;
+    grid-row: 2;
+    min-height: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .football-controls .football-cards .controls__split .ant-card-head {
+    display: none;
+  }
+
+  .football-controls .football-cards[data-side='local'] .football-cards__visit,
+  .football-controls .football-cards[data-side='visit'] .football-cards__local {
+    display: none;
+  }
+
+  .football-controls .football-cards .controls__split > .ant-card {
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+  }
+
+  .football-controls .football-cards .controls__split .ant-card-body {
+    flex: 1;
+    min-height: 0;
+    gap: 0.4rem;
+  }
+
+  .football-controls .football-cards .controls__meta {
+    margin: 0;
+  }
+
+  .football-controls .controls__foul-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.35rem;
+    margin-top: auto;
+
+    .ant-btn {
+      width: 100%;
+      height: 2.45rem;
+      margin: 0;
+    }
+
+    .controls__card-btn {
+      justify-content: center;
+    }
+
+    .ant-btn:last-child {
+      grid-column: 1 / -1;
+    }
+  }
+
+  .football-controls .football-cards__log {
+    grid-column: 2;
+    grid-row: 2;
+    min-height: 0;
+    height: 100%;
+    margin: 0 !important;
+  }
+
+  .football-controls .football-cards__log .ant-card-body {
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+
+  .football-controls .controls__log {
+    font-size: 0.78rem;
+    gap: 0.45rem;
+  }
+
+  /* —— Config —— */
+  .football-controls .football-config {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    padding-bottom: 0.35rem;
+  }
+
+  .football-controls .football-config .ant-card {
+    flex: 0 0 auto;
+  }
+
+  .football-controls .football-config .ant-card-body {
+    flex: none;
+  }
+
+  .football-controls.controls .controls__match {
+    display: contents !important;
+  }
+
+  .football-controls.controls .football-roster__grid,
+  .football-controls.controls .football-goals .goals-panel__grid {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .football-controls.controls .football-cards .controls__split {
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 0;
+    height: 100%;
+  }
+
+  .football-controls.controls .football-roster__row {
+    grid-template-columns: 2.6rem minmax(0, 1fr) 6.2rem 1.6rem;
+  }
+}
+
+@media (max-width: $football-compact) and (max-height: $football-short) {
+  .football-controls .controls__header {
+    display: none;
+  }
+
+  .football-controls .controls__clock-status {
+    display: none;
+  }
+
+  .football-controls .controls__score-controls .controls__score {
+    font-size: clamp(4.2rem, 22vmin, 7rem);
+  }
+
+  .football-controls .controls__clock-main {
+    padding: 0.45rem 0.28rem 0.3rem;
+  }
+
+  .football-controls .ant-tabs-tab {
+    padding: 0.34rem 0.18rem !important;
+    font-size: 0.84rem;
+  }
+
+  .football-score-plus__text {
+    display: none;
+  }
+}
+
+/* Escritorio: a partir de aquí los ajustes de fútbol son solo para pantalla grande. */
+@media (min-width: ($football-compact + 1px)) {
+  .football-controls .football-config {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .football-controls .football-config__links-card {
+    display: none;
+  }
+
+  .football-controls .controls__clock {
+    grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  }
+
+  .football-controls .controls__clock:has(.controls__clock-adjust) {
+    grid-template-columns: minmax(180px, 240px) minmax(11rem, 14rem) minmax(0, 1fr);
+  }
+
+  .football-controls .controls__clock-main {
+    display: contents;
+  }
+
+  .football-controls .controls__clock-main-core {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.65rem;
+    padding: 1rem 1.25rem;
+    border-radius: 12px;
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
+    text-align: center;
+  }
+
+  .football-controls .controls__clock-adjust {
+    height: 100%;
+    justify-content: center;
+    gap: 0.55rem;
+    padding: 0.9rem 1rem;
+    border-radius: 12px;
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
+    text-align: center;
+  }
+
+  .football-controls .controls__clock-panels {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .football-match__rest {
+    grid-column: 1 / -1;
+  }
+}

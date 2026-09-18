@@ -1,10 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { useAuthStore } from '@/stores/auth'
 import {
+  getSharedTvScoreboardStyle,
+  getTvScoreboardStyle,
   getUserPreferences,
+  isUsingSportSpecificTvStyle,
+  clearSportTvStyleOverride,
+  setSharedTvScoreboardStyle,
+  setTvScoreboardStyle,
   setUserPreferences,
   type AppTheme,
   type UserPreferences,
@@ -13,13 +19,25 @@ import {
   MIN_LATE_GAME_WARNING_MINUTES,
   MAX_LATE_GAME_WARNING_MINUTES,
 } from '@/utils/userPreferences'
+import { listAvailableSports } from '@/sports/registry'
+import { DEFAULT_SPORT, type SportId } from '@/types/sport'
 import { playLateGameWarning } from '@/utils/lateGameWarningBeep'
 import { playCountdownBeep } from '@/utils/countdownBeep'
 import type {
   OverlayScoreboardStyle,
   TvScoreboardStyle,
 } from '@/config/scoreboardStyles'
+import {
+  isSharedTvStyle,
+  sportSpecificTvStyles,
+} from '@/config/scoreboardStyles'
 import ScoreboardStylePicker from '@/components/ScoreboardStylePicker.vue'
+import { fetchEntitlement, resolvePlan } from '@/services/entitlementsService'
+import { getPlanDefinition } from '@/config/plans'
+import type { Entitlement } from '@/types/billing'
+import { clearMatchIdFromStorage } from '@/utils/localSync'
+import { isSupabaseConfigured } from '@/services/supabaseClient'
+import { isMobileMesaViewport } from '@/utils/mobileMesa'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -27,8 +45,12 @@ const router = useRouter()
 const savingProfile = ref(false)
 const savingPassword = ref(false)
 const loggingOut = ref(false)
+const deletingAccount = ref(false)
+const showDeleteModal = ref(false)
+const deletePassword = ref('')
 const profileError = ref<string | null>(null)
 const passwordError = ref<string | null>(null)
+const deleteError = ref<string | null>(null)
 
 const form = reactive({
   displayName: '',
@@ -43,6 +65,21 @@ const passwordForm = reactive({
 const prefs = reactive<UserPreferences>({
   ...getUserPreferences(),
 })
+const boardSport = ref<SportId>(DEFAULT_SPORT)
+const designSport = ref<SportId>('hockey')
+const sports = listAvailableSports()
+const sharedTvStyle = computed(() => getSharedTvScoreboardStyle())
+const currentTvStyle = computed(() => getTvScoreboardStyle(designSport.value))
+const designSportHasSpecific = computed(
+  () => sportSpecificTvStyles(designSport.value).length > 0,
+)
+const designSportUsesSpecific = computed(() =>
+  isUsingSportSpecificTvStyle(designSport.value),
+)
+
+const entitlement = ref<Entitlement | null>(null)
+const currentPlan = computed(() => getPlanDefinition(resolvePlan(entitlement.value)))
+const showMesaBack = ref(false)
 
 const roleLabel = computed(() => {
   if (auth.isOrganizer) return 'Organizador'
@@ -57,7 +94,7 @@ const roleHint = computed(() => {
   if (auth.isAssistant) {
     return 'Puedes operar calendario y controles de los torneos donde te asignaron.'
   }
-  return 'Puedes ver torneos públicos y marcadores en vivo. Para organizar, crea una cuenta de organizador.'
+  return 'Puedes ver torneos públicos y marcadores en vivo. Entra a la app para organizar con el plan Free.'
 })
 
 const displayNameDirty = computed(() => {
@@ -81,8 +118,14 @@ watch(
 )
 
 onMounted(() => {
+  showMesaBack.value = isMobileMesaViewport()
   if (!auth.loading && !auth.isAuthenticated) {
-    void router.replace({ name: 'home', query: { auth: '1' } })
+    void router.replace({ name: 'access', query: { redirect: '/perfil' } })
+  }
+  if (auth.profile) {
+    void fetchEntitlement(auth.profile.id).then((row) => {
+      entitlement.value = row
+    })
   }
 })
 
@@ -90,7 +133,7 @@ watch(
   () => auth.loading,
   (loading) => {
     if (!loading && !auth.isAuthenticated) {
-      void router.replace({ name: 'home', query: { auth: '1' } })
+      void router.replace({ name: 'access', query: { redirect: '/perfil' } })
     }
   },
 )
@@ -195,12 +238,27 @@ function setTheme(theme: AppTheme): void {
   message.success(theme === 'light' ? 'Tema claro activado' : 'Tema oscuro activado')
 }
 
-function onTvStyleChange(style: TvScoreboardStyle | OverlayScoreboardStyle): void {
+function onSharedTvStyleChange(style: TvScoreboardStyle | OverlayScoreboardStyle): void {
   const next = style as TvScoreboardStyle
-  if (prefs.tvScoreboardStyle === next) return
-  prefs.tvScoreboardStyle = next
-  setUserPreferences({ tvScoreboardStyle: next })
-  message.success('Estilo de marcador TV actualizado')
+  if (!isSharedTvStyle(next) || sharedTvStyle.value === next) return
+  const updated = setSharedTvScoreboardStyle(next)
+  Object.assign(prefs, updated)
+  message.success('Tema TV aplicado a todos los deportes')
+}
+
+function onSportTvStyleChange(style: TvScoreboardStyle | OverlayScoreboardStyle): void {
+  const next = style as TvScoreboardStyle
+  if (isSharedTvStyle(next) || currentTvStyle.value === next) return
+  const updated = setTvScoreboardStyle(designSport.value, next)
+  Object.assign(prefs, updated)
+  message.success('Diseño exclusivo de marcador actualizado')
+}
+
+function useSharedThemeForSport(): void {
+  if (!designSportUsesSpecific.value) return
+  const updated = clearSportTvStyleOverride(designSport.value)
+  Object.assign(prefs, updated)
+  message.success('Marcador vuelve al tema compartido')
 }
 
 function onOverlayStyleChange(style: TvScoreboardStyle | OverlayScoreboardStyle): void {
@@ -215,9 +273,34 @@ async function handleLogout(): Promise<void> {
   loggingOut.value = true
   try {
     await auth.logout()
-    await router.push({ name: 'home' })
+    await router.push({ name: 'landing' })
   } finally {
     loggingOut.value = false
+  }
+}
+
+function openDeleteAccount(): void {
+  deletePassword.value = ''
+  deleteError.value = null
+  showDeleteModal.value = true
+}
+
+async function confirmDeleteAccount(): Promise<void> {
+  if (deletingAccount.value || !deletePassword.value) return
+  deletingAccount.value = true
+  deleteError.value = null
+  try {
+    await auth.deleteAccount(deletePassword.value)
+    clearMatchIdFromStorage()
+    showDeleteModal.value = false
+    message.success('Cuenta eliminada')
+    await router.replace({ name: 'landing' })
+  } catch (err) {
+    deleteError.value =
+      err instanceof Error ? err.message : 'No se pudo eliminar la cuenta'
+    throw err
+  } finally {
+    deletingAccount.value = false
   }
 }
 </script>
@@ -226,6 +309,13 @@ async function handleLogout(): Promise<void> {
   <div class="profile">
     <a-spin :spinning="auth.loading">
       <header class="profile__header">
+        <router-link
+          v-if="showMesaBack"
+          class="profile__back"
+          :to="{ name: 'mobile-mesa' }"
+        >
+          Volver a la mesa
+        </router-link>
         <h1>Perfil</h1>
         <p>Tu cuenta y las preferencias del sistema en este navegador.</p>
       </header>
@@ -281,6 +371,20 @@ async function handleLogout(): Promise<void> {
               </a-button>
             </div>
           </a-form>
+        </section>
+
+        <section class="profile__panel" aria-labelledby="profile-plan">
+          <div class="profile__panel-head">
+            <div>
+              <h2 id="profile-plan">Plan</h2>
+              <p class="profile__desc">
+                Ahora mismo: {{ currentPlan.name }}. El live público no consume plan.
+              </p>
+            </div>
+            <RouterLink :to="{ name: 'plans' }">
+              <a-button type="primary">Ver planes</a-button>
+            </RouterLink>
+          </div>
         </section>
 
         <section class="profile__panel" aria-labelledby="profile-password">
@@ -464,29 +568,91 @@ async function handleLogout(): Promise<void> {
               <header class="profile__pref-group-head">
                 <h3 id="profile-boards">Marcadores</h3>
                 <p>
-                  Estilos visuales para la pantalla de cancha y la transmisión OBS.
+                  El tema de color es compartido. Los diseños exclusivos (como Arena LED)
+                  se eligen por deporte.
                 </p>
               </header>
 
               <div class="profile__pref-card profile__pref-card--stack">
                 <div class="profile__pref-card-copy">
-                  <h4>Marcador TV</h4>
-                  <p>Diseño de la pantalla grande de cancha.</p>
+                  <h4>Tema TV (todos los deportes)</h4>
+                  <p>
+                    Clásico u claro para salas oscuras o iluminadas. Afecta fútbol, futsal,
+                    básquet y hockey (si no usan un diseño exclusivo).
+                  </p>
+                </div>
+                <div class="profile__theme-toggle" role="tablist" aria-label="Deporte de vista previa">
+                  <a-button
+                    v-for="sport in sports"
+                    :key="sport.id"
+                    size="small"
+                    :type="boardSport === sport.id ? 'primary' : 'default'"
+                    @click="boardSport = sport.id"
+                  >
+                    {{ sport.shortLabel }}
+                  </a-button>
                 </div>
                 <ScoreboardStylePicker
                   mode="tv"
-                  :model-value="prefs.tvScoreboardStyle"
-                  @update:model-value="onTvStyleChange"
+                  filter="shared"
+                  :sport="boardSport"
+                  :model-value="sharedTvStyle"
+                  @update:model-value="onSharedTvStyleChange"
                 />
               </div>
 
               <div class="profile__pref-card profile__pref-card--stack">
                 <div class="profile__pref-card-copy">
+                  <h4>Diseños por deporte</h4>
+                  <p>
+                    Variantes con layout propio. Hoy solo hockey tiene Arena LED; el resto
+                    usa el tema compartido.
+                  </p>
+                </div>
+                <div class="profile__theme-toggle" role="tablist" aria-label="Deporte del diseño">
+                  <a-button
+                    v-for="sport in sports"
+                    :key="sport.id"
+                    :type="designSport === sport.id ? 'primary' : 'default'"
+                    @click="designSport = sport.id"
+                  >
+                    {{ sport.shortLabel }}
+                  </a-button>
+                </div>
+
+                <template v-if="designSportHasSpecific">
+                  <div class="profile__design-shared">
+                    <a-button
+                      block
+                      :type="designSportUsesSpecific ? 'default' : 'primary'"
+                      @click="useSharedThemeForSport"
+                    >
+                      Usar tema compartido
+                      <template v-if="!designSportUsesSpecific"> (activo)</template>
+                    </a-button>
+                  </div>
+                  <ScoreboardStylePicker
+                    mode="tv"
+                    filter="sport-specific"
+                    :sport="designSport"
+                    :model-value="currentTvStyle"
+                    @update:model-value="onSportTvStyleChange"
+                  />
+                </template>
+                <p v-else class="profile__design-empty">
+                  {{ sports.find((item) => item.id === designSport)?.label }}
+                  todavía no tiene un diseño exclusivo. Usa el tema TV compartido de arriba.
+                </p>
+              </div>
+
+              <div class="profile__pref-card profile__pref-card--stack">
+                <div class="profile__pref-card-copy">
                   <h4>Overlay OBS</h4>
-                  <p>Diseño del marcador transparente para transmisión.</p>
+                  <p>Barra transparente de transmisión (compartida entre deportes).</p>
                 </div>
                 <ScoreboardStylePicker
                   mode="overlay"
+                  :sport="boardSport"
                   :model-value="prefs.overlayScoreboardStyle"
                   @update:model-value="onOverlayStyleChange"
                 />
@@ -508,6 +674,55 @@ async function handleLogout(): Promise<void> {
             </a-button>
           </div>
         </section>
+
+        <section
+          v-if="isSupabaseConfigured"
+          class="profile__panel profile__panel--danger"
+          aria-labelledby="profile-delete"
+        >
+          <div class="profile__panel-head">
+            <div>
+              <h2 id="profile-delete">Eliminar cuenta</h2>
+              <p class="profile__desc">
+                Borra tu usuario, partidos sueltos y torneos de forma permanente.
+                Esta acción no se puede deshacer.
+              </p>
+            </div>
+            <a-button danger @click="openDeleteAccount">
+              Eliminar cuenta
+            </a-button>
+          </div>
+        </section>
+
+        <a-modal
+          v-model:open="showDeleteModal"
+          title="Eliminar cuenta"
+          ok-text="Eliminar definitivamente"
+          ok-type="danger"
+          cancel-text="Cancelar"
+          :confirm-loading="deletingAccount"
+          :ok-button-props="{ disabled: !deletePassword }"
+          destroy-on-close
+          @ok="confirmDeleteAccount"
+        >
+          <p class="profile__delete-copy">
+            Se eliminarán tu usuario, partidos y torneos. No podrás recuperarlos.
+            Confirma con tu contraseña.
+          </p>
+          <a-input-password
+            v-model:value="deletePassword"
+            autocomplete="current-password"
+            placeholder="Tu contraseña"
+            @pressEnter="confirmDeleteAccount"
+          />
+          <a-alert
+            v-if="deleteError"
+            type="error"
+            :message="deleteError"
+            show-icon
+            class="profile__alert profile__alert--modal"
+          />
+        </a-modal>
       </template>
     </a-spin>
   </div>
@@ -537,6 +752,18 @@ async function handleLogout(): Promise<void> {
     margin: 0.5rem 0 0;
     font-size: 0.92rem;
     color: var(--app-text-muted);
+  }
+}
+
+.profile__back {
+  display: inline-block;
+  margin: 0 0 0.65rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
   }
 }
 
@@ -595,6 +822,17 @@ async function handleLogout(): Promise<void> {
 
 .profile__alert {
   margin-bottom: 0.85rem;
+}
+
+.profile__alert--modal {
+  margin-top: 0.85rem;
+  margin-bottom: 0;
+}
+
+.profile__delete-copy {
+  margin: 0 0 0.85rem;
+  color: var(--app-text-muted);
+  line-height: 1.45;
 }
 
 .profile__actions {
@@ -702,5 +940,40 @@ async function handleLogout(): Promise<void> {
   display: flex;
   gap: 0.45rem;
   flex-wrap: wrap;
+}
+
+.profile__pref-group .profile__theme-toggle {
+  margin-bottom: 0.85rem;
+}
+
+.profile__design-shared {
+  margin-top: 0.15rem;
+}
+
+.profile__design-empty {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--app-text-muted);
+}
+
+@media (max-width: 900px) {
+  .profile {
+    padding: 1.15rem 1rem 2.5rem;
+  }
+
+  .profile__header h1 {
+    font-size: 2rem;
+  }
+
+  .profile__panel-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .profile__pref-card-top {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 </style>

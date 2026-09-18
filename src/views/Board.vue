@@ -1,26 +1,24 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import ScoreBoard from '@/components/ScoreBoard.vue'
-import ArenaScoreBoard from '@/components/ArenaScoreBoard.vue'
 import { useScoreboardStore } from '@/stores/scoreboard'
 import { useLocalScoreboardSync } from '@/composables/useLocalScoreboardSync'
-import { useScoreboardDisplayPrefs } from '@/composables/useScoreboardDisplayPrefs'
-import { isArenaTvStyle, isClassicLightTvStyle } from '@/config/scoreboardStyles'
 import { readMatchIdFromStorage } from '@/utils/localSync'
 import { normalizeGameTime } from '@/utils/clock'
+import { getSportUi } from '@/sports/ui'
+import ScoreboardBrandMark from '@/components/ScoreboardBrandMark.vue'
 
 const route = useRoute()
 const store = useScoreboardStore()
 const ready = ref(false)
-const { tvStyle } = useScoreboardDisplayPrefs()
+const sportUi = computed(() => getSportUi(store.state.sport))
 
 const matchId = computed(
   () => (route.query.matchId as string) || readMatchIdFromStorage() || '',
 )
 
 const matchFallback = computed((): Pick<
-  import('@/types/hockeyScoreboard').ScoreboardState,
+  import('@/sports/scoreboardState').ScoreboardState,
   'localTeam' | 'visitTeam' | 'timeGame'
 > | undefined => {
   const local = route.query.local as string | undefined
@@ -46,23 +44,26 @@ watch(
 </script>
 
 <template>
-  <ArenaScoreBoard
-    v-if="matchId && ready && isArenaTvStyle(tvStyle)"
-    :state="store.state"
-  />
-  <ScoreBoard
-    v-else-if="matchId && ready"
-    tv
-    :tv-light="isClassicLightTvStyle(tvStyle)"
-    :state="store.state"
-  />
-  <div v-else-if="matchId" class="board-empty">Cargando marcador…</div>
-  <div v-else class="board-empty">
-    <p>No hay partido activo. Abre la mesa de control y crea un partido.</p>
+  <div class="board-root">
+    <component
+      :is="sportUi.Tv"
+      v-if="matchId && ready"
+      :state="store.state"
+    />
+    <div v-else-if="matchId" class="board-empty">Cargando marcador…</div>
+    <div v-else class="board-empty">
+      <p>No hay partido activo. Abre la mesa de control y crea un partido.</p>
+    </div>
+    <ScoreboardBrandMark v-if="matchId && ready && store.state.showBranding" />
   </div>
 </template>
 
 <style scoped>
+.board-root {
+  position: relative;
+  min-height: 100vh;
+}
+
 .board-empty {
   min-height: 100vh;
   display: grid;
