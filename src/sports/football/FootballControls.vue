@@ -6,7 +6,7 @@ import ControlsClockDock from '@/components/controls/ControlsClockDock.vue'
 import ControlsMatchEndCard from '@/components/controls/ControlsMatchEndCard.vue'
 import ControlsOperatorLinks from '@/components/controls/ControlsOperatorLinks.vue'
 import { getSportModule } from '@/sports/registry'
-import { isRegulationElapsed, kickoffClock } from '@/sports/clockRules'
+import { isPeriodPlayFinished, isStoppagePlay, kickoffClock, periodEndClockSeconds } from '@/sports/clockRules'
 import { useMatchOperatorSession } from '@/composables/useMatchOperatorSession'
 import { useControlsClockDock } from '@/composables/useControlsClockDock'
 import { useMatchClockAlerts } from '@/composables/useMatchClockAlerts'
@@ -16,6 +16,8 @@ import HockeyGoalsPanel from '@/sports/hockey/controls/HockeyGoalsPanel.vue'
 import {
   addFootballCard,
   cardCount,
+  clampFootballStoppage,
+  footballStoppageMinutes,
   isPlayerExpelled,
   playerYellowCount,
   undoLastFootballCard,
@@ -23,12 +25,16 @@ import {
 import {
   FOOTBALL_CARD_LABELS,
   FOOTBALL_EXTRA_PERIODS,
+  FOOTBALL_EXTRA_TIME,
+  FOOTBALL_HALF_TIME,
   FOOTBALL_MAX_PERIODS,
+  FOOTBALL_MAX_STOPPAGE_MINUTES,
   FOOTBALL_PERIODS,
   type FootballCardKind,
 } from '@/sports/football/types'
 import { isGoalPending } from '@/sports/scoreboardState'
-import { parseTimeToSeconds } from '@/utils/clock'
+import { normalizeFootballPeriodLength } from '@/sports/football/state'
+import { formatSecondsToTime, parseTimeToSeconds } from '@/utils/clock'
 import { findPlayerById, playerLabel } from '@/utils/roster'
 import { message } from 'ant-design-vue'
 
@@ -64,6 +70,10 @@ const { countdownBeepSeconds, lateGameWarningMinutes, lateGameWarningEnabled } =
 
 const clockDraft = ref(store.state.timeGame)
 const clockEditing = ref(false)
+const periodLengthDraft = ref(
+  store.state.footballPeriodLength || FOOTBALL_HALF_TIME,
+)
+const periodLengthEditing = ref(false)
 const intermissionDraft = ref(
   store.state.intermissionDuration || sport.value.clock.intermissionDefault,
 )
@@ -87,7 +97,7 @@ const canAdvancePeriod = computed(
     store.state.gamePeriod < maxPeriods.value &&
     (store.state.intermissionActive ||
       store.state.isPaused ||
-      isRegulationElapsed(store.state)),
+      isPeriodPlayFinished(store.state)),
 )
 
 const restBreakConsumed = ref(false)
@@ -97,14 +107,42 @@ const showIntermissionControls = computed(() => {
   if (store.state.intermissionActive) return restSeconds > 0
   if (restBreakConsumed.value) return false
   if (store.state.gamePeriod >= maxPeriods.value) return false
-  return isRegulationElapsed(store.state)
+  return isPeriodPlayFinished(store.state)
 })
 
+const canEditPeriodLength = computed(
+  () =>
+    store.state.gamePeriod === 1 &&
+    store.state.isPaused &&
+    !store.state.intermissionActive,
+)
+
+const periodLengthMinutes = computed(() =>
+  Math.floor(
+    parseTimeToSeconds(store.state.footballPeriodLength || FOOTBALL_HALF_TIME) /
+      60,
+  ),
+)
+
 watch(
-  () => store.state.timeGame,
-  (time) => {
+  () =>
+    [
+      store.state.timeGame,
+      store.state.footballStoppageMinutes,
+      store.state.footballPeriodLength,
+    ] as const,
+  ([time]) => {
     if (!clockEditing.value) clockDraft.value = time
-    if (!isRegulationElapsed(store.state)) restBreakConsumed.value = false
+    if (!isPeriodPlayFinished(store.state)) restBreakConsumed.value = false
+  },
+)
+
+watch(
+  () => store.state.footballPeriodLength,
+  (length) => {
+    if (!periodLengthEditing.value) {
+      periodLengthDraft.value = length || FOOTBALL_HALF_TIME
+    }
   },
 )
 
@@ -153,6 +191,23 @@ function commitClockDraft(): void {
   clockDraft.value = store.state.timeGame
 }
 
+function onPeriodLengthDraftUpdate(value: string): void {
+  periodLengthEditing.value = true
+  periodLengthDraft.value = value
+}
+
+function commitPeriodLength(): void {
+  periodLengthEditing.value = false
+  if (!canEditPeriodLength.value) {
+    periodLengthDraft.value =
+      store.state.footballPeriodLength || FOOTBALL_HALF_TIME
+    return
+  }
+  const next = normalizeFootballPeriodLength(periodLengthDraft.value)
+  store.patch(clampClockToPeriodEnd({ footballPeriodLength: next }))
+  periodLengthDraft.value = store.state.footballPeriodLength
+}
+
 function setGamePeriod(period: number): void {
   store.setPeriod(Math.max(1, Math.min(maxPeriods.value, period)))
 }
@@ -161,6 +216,7 @@ function nextPeriod(): void {
   if (!canAdvancePeriod.value) return
   if (store.state.gamePeriod >= maxPeriods.value) return
   store.advanceToNextPeriod(kickoffClock('football'))
+  store.patch({ footballStoppageMinutes: 0 })
   clockDraft.value = store.state.timeGame
   intermissionDraft.value =
     store.state.intermissionDuration || sport.value.clock.intermissionDefault
@@ -243,6 +299,49 @@ const cardKinds = Object.entries(FOOTBALL_CARD_LABELS) as Array<[FootballCardKin
 const recentCards = computed(() =>
   [...(store.state.footballCards ?? [])].slice(-10).reverse(),
 )
+
+const stoppageMinutes = computed(() => footballStoppageMinutes(store.state))
+
+const inStoppagePlay = computed(() => isStoppagePlay(store.state))
+
+const footballDockTime = computed(() => {
+  if (!inStoppagePlay.value) return dockClockTime.value
+  return `${dockClockTime.value} +${stoppageMinutes.value}`
+})
+
+const footballDockLabel = computed(() => {
+  if (!inStoppagePlay.value) return dockClockLabel.value
+  const period = sport.value.periodLabel(store.state.gamePeriod)
+  return store.state.isPaused ? `${period} · descuento · pausa` : `${period} · descuento`
+})
+
+function clampClockToPeriodEnd(
+  extra: Partial<{
+    footballPeriodLength: string
+    footballStoppageMinutes: number
+    timeGame: string
+  }>,
+) {
+  const nextState = { ...store.state, ...extra }
+  const cap = periodEndClockSeconds(nextState)
+  const elapsed = parseTimeToSeconds(nextState.timeGame)
+  if (elapsed <= cap) return extra
+  return {
+    ...extra,
+    timeGame: formatSecondsToTime(cap),
+    isPaused: true,
+  }
+}
+
+function adjustStoppage(delta: number): void {
+  store.patch(
+    clampClockToPeriodEnd({
+      footballStoppageMinutes: clampFootballStoppage(
+        stoppageMinutes.value + delta,
+      ),
+    }),
+  )
+}
 </script>
 
 <template>
@@ -270,10 +369,10 @@ const recentCards = computed(() =>
         <button
           type="button"
           class="football-controls__tab-clock"
-          :title="dockClockLabel"
+          :title="footballDockLabel"
           @click="activeTab = 'match'"
         >
-          {{ dockClockTime }}
+          {{ footballDockTime }}
         </button>
       </template>
       <a-tab-pane key="match" tab="Partido">
@@ -359,6 +458,13 @@ const recentCards = computed(() =>
               <div class="controls__clock">
                 <div class="controls__clock-main">
                   <div class="controls__clock-main-core">
+                    <span
+                      v-if="inStoppagePlay"
+                      class="football-match__added"
+                      :aria-label="`Descuento +${stoppageMinutes}`"
+                    >
+                      +{{ stoppageMinutes }}
+                    </span>
                     <div ref="clockDisplayEl" class="controls__clock-display">
                       {{
                         store.state.intermissionActive
@@ -366,9 +472,15 @@ const recentCards = computed(() =>
                           : store.state.timeGame
                       }}
                     </div>
-                    <p class="controls__clock-status">
+                    <p
+                      class="controls__clock-status"
+                      :class="{ 'is-stoppage': inStoppagePlay }"
+                    >
                       <template v-if="store.state.intermissionActive">
                         {{ store.state.isPaused ? 'Descanso en pausa' : 'Descanso' }}
+                      </template>
+                      <template v-else-if="inStoppagePlay">
+                        {{ store.state.isPaused ? 'Descuento en pausa' : 'Descuento' }}
                       </template>
                       <template v-else>
                         {{ store.state.isPaused ? 'En pausa' : 'En juego' }}
@@ -440,10 +552,39 @@ const recentCards = computed(() =>
                       Siguiente tiempo
                     </a-button>
                     <span class="controls__clock-hint">
-                      FIFA: el reloj parte de 00:00 y suma. 2 × 45′ (puede pasar el 45′, tiempo añadido).
-                      Como máximo 2 prórrogas de 15′ desde 00:00.
+                      Cada tiempo: {{ periodLengthMinutes }}′ (Config).
+                      El reloj se detiene al cumplir la duración más el descuento.
+                      Prórroga: {{ FOOTBALL_EXTRA_TIME }}.
                     </span>
                   </div>
+                </div>
+
+                <div
+                  v-if="!store.state.intermissionActive"
+                  class="football-match__stoppage"
+                  :class="{ 'is-active': inStoppagePlay }"
+                >
+                  <label>Descuento</label>
+                  <div class="football-match__stoppage-stepper">
+                    <a-button
+                      :disabled="stoppageMinutes <= 0"
+                      @click="adjustStoppage(-1)"
+                    >
+                      −
+                    </a-button>
+                    <span class="football-match__stoppage-value">
+                      {{ stoppageMinutes > 0 ? `+${stoppageMinutes}` : '—' }}
+                    </span>
+                    <a-button
+                      :disabled="stoppageMinutes >= FOOTBALL_MAX_STOPPAGE_MINUTES"
+                      @click="adjustStoppage(1)"
+                    >
+                      +
+                    </a-button>
+                  </div>
+                  <span class="controls__clock-hint">
+                    Cartel del árbitro. El reloj se pausa al cumplirlo; si suma más, reanuda.
+                  </span>
                 </div>
 
                 <div v-if="showIntermissionControls" class="football-match__rest">
@@ -602,6 +743,28 @@ const recentCards = computed(() =>
 
       <a-tab-pane key="config" tab="Config">
         <div class="football-config">
+          <a-card title="Tiempo de juego" class="controls__card controls__card--wide">
+            <label class="football-config__duration">
+              <span>Duración de cada tiempo</span>
+              <TimeInput
+                compact
+                :value="periodLengthDraft"
+                :disabled="!canEditPeriodLength"
+                @update:value="onPeriodLengthDraftUpdate"
+                @focus="periodLengthEditing = true"
+                @blur="commitPeriodLength"
+                @enter="commitPeriodLength"
+              />
+            </label>
+            <p class="football-config__hint">
+              {{
+                canEditPeriodLength
+                  ? 'El reloj parte de 00:00 y se detiene al cumplir esta duración más el descuento (45:00, 35:00, …). La prórroga es 15′.'
+                  : `Cada tiempo: ${periodLengthMinutes}′. Para cambiarlo, pausa en el 1.er tiempo.`
+              }}
+            </p>
+          </a-card>
+
           <a-card title="Equipos y logos" class="controls__card controls__card--wide">
             <div class="football-config__teams">
               <label class="football-config__team">
@@ -734,8 +897,8 @@ const recentCards = computed(() =>
     <template #dock>
       <ControlsClockDock
         :show="showDockClock"
-        :label="dockClockLabel"
-        :time="dockClockTime"
+        :label="footballDockLabel"
+        :time="footballDockTime"
         :paused="store.state.isPaused"
         :intermission="store.state.intermissionActive"
         @scroll-to-clock="scrollToClock"

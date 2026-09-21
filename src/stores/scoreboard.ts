@@ -19,7 +19,7 @@ import {
 } from '@/sports/scoreboardState'
 import { getPenaltyType, secondsToClock } from '@/data/penaltyCatalog'
 import { getSportModule } from '@/sports/registry'
-import { clockDirection, isCountUpSport, kickoffClock } from '@/sports/clockRules'
+import { clockDirection, isCountUpSport, kickoffClock, periodEndClockSeconds } from '@/sports/clockRules'
 import { fetchMatchState } from '@/services/matchSync'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
 import {
@@ -31,6 +31,7 @@ import { generateId } from '@/utils/id'
 import { canSetRole, findPlayerById } from '@/utils/roster'
 import {
   interpolateClock,
+  formatSecondsToTime,
   normalizeGameTime,
   parseTimeToSeconds,
   tickDown,
@@ -120,12 +121,14 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
   }
 
   function interpolateGameClock(now = Date.now()): string {
+    const direction = clockDirection(state.value.sport)
     return interpolateClock(
       state.value.timeGame,
       state.value.isPaused,
       state.value.updatedAt,
       now,
-      clockDirection(state.value.sport),
+      direction,
+      direction === 'up' ? periodEndClockSeconds(state.value) : undefined,
     )
   }
 
@@ -423,6 +426,7 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
       intermissionActive: false,
       intermissionTime: state.value.intermissionDuration || DEFAULT_INTERMISSION_TIME,
       isPaused: true,
+      footballStoppageMinutes: 0,
     })
   }
 
@@ -569,6 +573,22 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     if (tickInterval.value) return
     isWriter.value = true
     tickInterval.value = window.setInterval(() => {
+      const direction = clockDirection(state.value.sport)
+      if (
+        direction === 'up' &&
+        !state.value.intermissionActive
+      ) {
+        const cap = periodEndClockSeconds(state.value)
+        const current = parseTimeToSeconds(state.value.timeGame)
+        if (current > cap) {
+          patch({
+            timeGame: formatSecondsToTime(cap),
+            isPaused: true,
+          })
+          return
+        }
+      }
+
       if (state.value.isPaused) return
 
       if (state.value.intermissionActive) {
@@ -591,18 +611,37 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
         return
       }
 
-      const direction = clockDirection(state.value.sport)
       if (direction === 'down' && parseTimeToSeconds(state.value.timeGame) <= 0) {
         patch({ isPaused: true })
         return
       }
 
-      const nextTime =
-        direction === 'up'
-          ? tickUp(state.value.timeGame)
-          : tickDown(state.value.timeGame)
-      const periodEnded =
-        direction === 'down' && parseTimeToSeconds(nextTime) <= 0
+      if (direction === 'up') {
+        const cap = periodEndClockSeconds(state.value)
+        const current = parseTimeToSeconds(state.value.timeGame)
+        if (current >= cap) {
+          patch({
+            timeGame: formatSecondsToTime(cap),
+            isPaused: true,
+          })
+          return
+        }
+        const uncapped = tickUp(state.value.timeGame)
+        const nextSeconds = parseTimeToSeconds(uncapped)
+        const periodEnded = nextSeconds >= cap
+        const nextTime = periodEnded ? formatSecondsToTime(cap) : uncapped
+        state.value = {
+          ...state.value,
+          timeGame: nextTime,
+          isPaused: periodEnded,
+          updatedAt: new Date().toISOString(),
+        }
+        persistLocal()
+        return
+      }
+
+      const nextTime = tickDown(state.value.timeGame)
+      const periodEnded = parseTimeToSeconds(nextTime) <= 0
 
       const next: Partial<ScoreboardState> = {
         timeGame: nextTime,

@@ -2,17 +2,36 @@
  * Estado y normalización propios de fútbol de campo FIFA (tarjetas amarilla/roja).
  */
 import { generateId } from '@/utils/id'
-import type { FootballCardEvent } from '@/sports/football/types'
+import {
+  FOOTBALL_HALF_TIME,
+  FOOTBALL_MAX_PERIOD_MINUTES,
+  FOOTBALL_MAX_STOPPAGE_MINUTES,
+  type FootballCardEvent,
+} from '@/sports/football/types'
+import { formatSecondsToTime, parseTimeToSeconds } from '@/utils/clock'
 
 export type { FootballCardEvent } from '@/sports/football/types'
 
 export interface FootballStateSlice {
   footballCards: FootballCardEvent[]
+  /** Minutos de descuento del periodo actual (cartel del cuarto árbitro). */
+  footballStoppageMinutes: number
+  /** Duración de cada tiempo reglamentario (p. ej. 45:00 o 35:00). */
+  footballPeriodLength: string
+}
+
+export function normalizeFootballPeriodLength(raw: unknown): string {
+  if (typeof raw !== 'string' || !raw.trim()) return FOOTBALL_HALF_TIME
+  const seconds = parseTimeToSeconds(raw)
+  if (seconds < 60) return FOOTBALL_HALF_TIME
+  return formatSecondsToTime(Math.min(seconds, FOOTBALL_MAX_PERIOD_MINUTES * 60))
 }
 
 export function createFootballStateSlice(): FootballStateSlice {
   return {
     footballCards: [],
+    footballStoppageMinutes: 0,
+    footballPeriodLength: FOOTBALL_HALF_TIME,
   }
 }
 
@@ -37,7 +56,13 @@ function normalizeFootballCards(raw: unknown): FootballCardEvent[] {
 export function normalizeFootballStateSlice(
   source: Record<string, unknown>,
 ): FootballStateSlice {
+  const rawStoppage = Number(source.footballStoppageMinutes)
   return {
     footballCards: normalizeFootballCards(source.footballCards),
+    footballStoppageMinutes:
+      Number.isFinite(rawStoppage) && rawStoppage > 0
+        ? Math.min(FOOTBALL_MAX_STOPPAGE_MINUTES, Math.floor(rawStoppage))
+        : 0,
+    footballPeriodLength: normalizeFootballPeriodLength(source.footballPeriodLength),
   }
 }

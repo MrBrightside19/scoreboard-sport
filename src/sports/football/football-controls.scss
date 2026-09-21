@@ -107,6 +107,106 @@ $football-short: 520px;
   text-align: center;
 }
 
+.football-match__stoppage {
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: center;
+  justify-items: center;
+  gap: 0.45rem 1rem;
+  align-items: center;
+  padding: 0.55rem 0.85rem;
+  border-radius: 12px;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  text-align: center;
+
+  &.is-active {
+    border-color: color-mix(in srgb, #f0c14d 65%, var(--app-border));
+    background: color-mix(in srgb, #f0c14d 12%, var(--app-surface));
+  }
+
+  label {
+    margin: 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.6;
+    white-space: nowrap;
+  }
+}
+
+.football-match__stoppage-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+
+  .ant-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    min-width: 2rem;
+    height: 2rem;
+    padding: 0;
+    font-size: 1.15rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+}
+
+.football-match__stoppage-value {
+  min-width: 2.4rem;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.45rem;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.football-match__stoppage .controls__clock-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.football-controls .controls__clock-display {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.28rem;
+}
+
+.football-match__added {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.5rem;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.55rem;
+  padding: 0.12em 0.4em 0.04em;
+  border-radius: 0.28em;
+  background: #f0c14d;
+  color: #1a1408;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.35rem;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.football-controls .controls__clock-status.is-stoppage {
+  color: #c4921a;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.football-match__stoppage.is-active .football-match__stoppage-value {
+  color: #a67c1a;
+}
+
 .football-match__rest-time {
   display: flex;
   flex-direction: column;
@@ -152,6 +252,26 @@ $football-short: 520px;
   font-size: 0.78rem;
   opacity: 0.55;
   color: var(--app-text-muted);
+}
+
+.football-config__duration {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1rem;
+  margin-bottom: 0.65rem;
+
+  > span {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.55;
+  }
+}
+
+.football-config__duration + .football-config__hint {
+  margin-bottom: 0;
 }
 
 .football-config__links {
@@ -471,6 +591,14 @@ $football-short: 520px;
     gap: 0.25rem;
   }
 
+  .football-controls .football-match__added {
+    top: 0.28rem;
+    right: 0.28rem;
+    font-size: 1.05rem;
+    min-width: 1.35rem;
+    padding: 0.08em 0.32em 0.02em;
+  }
+
   .football-controls .controls__side--visit {
     grid-column: 3;
     grid-row: 1;
@@ -646,6 +774,7 @@ $football-short: 520px;
     min-width: 0;
     max-width: 100%;
     min-height: 0;
+    position: relative;
     flex-direction: column;
     flex-wrap: nowrap;
     justify-content: center;
@@ -751,7 +880,8 @@ $football-short: 520px;
     grid-template-columns: auto minmax(0, 1fr);
     grid-template-areas:
       'label period'
-      'next next';
+      'next next'
+      'hint hint';
     align-items: center;
     justify-content: stretch;
     justify-items: stretch;
@@ -775,6 +905,12 @@ $football-short: 520px;
     .controls__next-period {
       grid-area: next;
       margin-top: 0;
+    }
+
+    .controls__clock-hint {
+      grid-area: hint;
+      margin: 0;
+      text-align: left;
     }
   }
 
@@ -900,6 +1036,40 @@ $football-short: 520px;
       font-size: 0.7rem;
       padding-inline: 0.3rem;
     }
+  }
+
+  .football-controls .football-match__stoppage {
+    display: grid;
+    grid-template-columns: auto auto;
+    justify-content: stretch;
+    justify-items: stretch;
+    align-items: center;
+    gap: 0.18rem 0.35rem;
+    padding: 0.22rem 0.28rem;
+  }
+
+  .football-controls .football-match__stoppage label {
+    font-size: 0.58rem;
+    text-align: left;
+  }
+
+  .football-controls .football-match__stoppage-stepper {
+    justify-self: end;
+
+    .ant-btn {
+      width: 1.9rem;
+      min-width: 1.9rem;
+      height: 1.9rem;
+    }
+  }
+
+  .football-controls .football-match__stoppage-value {
+    font-size: 1.2rem;
+    min-width: 2rem;
+  }
+
+  .football-controls .football-match__stoppage .controls__clock-hint {
+    display: none;
   }
 
 
@@ -1198,6 +1368,7 @@ $football-short: 520px;
     background: var(--app-surface);
     border: 1px solid var(--app-border);
     text-align: center;
+    position: relative;
   }
 
   .football-controls .controls__clock-adjust {
@@ -1215,7 +1386,8 @@ $football-short: 520px;
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .football-match__rest {
+  .football-match__rest,
+  .football-match__stoppage {
     grid-column: 1 / -1;
   }
 }

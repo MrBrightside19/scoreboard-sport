@@ -46,13 +46,27 @@ export function interpolateClock(
   updatedAt: string,
   now = Date.now(),
   direction: 'down' | 'up' = 'down',
+  maxSeconds?: number,
 ): string {
-  if (isPaused) return timeGame
+  if (isPaused) {
+    if (direction === 'up' && maxSeconds != null) {
+      return formatSecondsToTime(Math.min(parseTimeToSeconds(timeGame), maxSeconds))
+    }
+    return timeGame
+  }
   const elapsedSeconds = Math.floor((now - new Date(updatedAt).getTime()) / 1000)
-  if (elapsedSeconds <= 0) return timeGame
-  return direction === 'up'
-    ? tickUp(timeGame, elapsedSeconds)
-    : tickDown(timeGame, elapsedSeconds)
+  if (elapsedSeconds <= 0) {
+    if (direction === 'up' && maxSeconds != null) {
+      return formatSecondsToTime(Math.min(parseTimeToSeconds(timeGame), maxSeconds))
+    }
+    return timeGame
+  }
+  if (direction === 'up') {
+    const next = tickUp(timeGame, elapsedSeconds)
+    if (maxSeconds == null) return next
+    return formatSecondsToTime(Math.min(parseTimeToSeconds(next), maxSeconds))
+  }
+  return tickDown(timeGame, elapsedSeconds)
 }
 
 /** Reloj de periodo agotado: las faltas no deben seguir corriendo. */
