@@ -51,6 +51,8 @@ const previewState = computed(() => {
   if (props.sport === 'football') {
     state.goalLocal = 2
     state.goalVisit = 1
+    state.timeGame = '45:00'
+    state.footballStoppageMinutes = 4
     state.footballCards = [
       {
         id: 'preview-yc',
@@ -69,7 +71,7 @@ const previewState = computed(() => {
     props.sport === 'basketball'
       ? '06:12'
       : props.sport === 'football'
-        ? '38:12'
+        ? state.timeGame
         : '12:45'
   state.matchCategory = 'U15'
   if (props.sport === 'hockey') {

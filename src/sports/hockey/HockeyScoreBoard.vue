@@ -14,6 +14,7 @@ import {
   timeoutsUsedInPeriod,
 } from '@/sports/futsal/actions'
 import { FUTSAL_ACCUMULATED_FOUL_LIMIT } from '@/sports/futsal/types'
+import { footballStoppageLabel } from '@/sports/football/actions'
 import { isInBonus, teamFoulsInPeriod } from '@/sports/basketball/actions'
 import { basketballPointsLabel } from '@/sports/basketball/types'
 
@@ -122,6 +123,7 @@ const tvPenaltiesVisible = computed(() =>
 )
 const tvFutsalMetaVisible = computed(() => sport.value.id === 'futsal')
 const tvBasketFoulsVisible = computed(() => sport.value.id === 'basketball')
+const addedTimeLabel = computed(() => footballStoppageLabel(props.state))
 
 const tvTeamColors = computed(() => ({
   '--local-color': props.state.localColor || '#00d4ff',
@@ -484,6 +486,13 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
         </div>
 
         <div class="nhl-bug__center">
+          <span
+            v-if="addedTimeLabel"
+            class="nhl-bug__added"
+            :aria-label="`Descuento ${addedTimeLabel}`"
+          >
+            {{ addedTimeLabel }}
+          </span>
           <span class="nhl-bug__period">{{ state.intermissionActive ? 'DES' : periodLabel }}</span>
           <span class="nhl-bug__clock" :class="{ 'nhl-bug__clock--paused': state.isPaused }">
             {{ clock }}
@@ -657,6 +666,13 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
           }"
         >
           {{ clock }}
+        </div>
+        <div
+          v-if="addedTimeLabel"
+          class="scoreboard__added"
+          :aria-label="`Descuento ${addedTimeLabel}`"
+        >
+          {{ addedTimeLabel }}
         </div>
         <div
           v-if="tvPeriodVisible"
@@ -866,6 +882,13 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
       <section class="scoreboard__center scoreboard__center--live">
         <div class="scoreboard__clock" :class="{ 'scoreboard__clock--paused': state.isPaused }">
           {{ clock }}
+        </div>
+        <div
+          v-if="addedTimeLabel"
+          class="scoreboard__added scoreboard__added--live"
+          :aria-label="`Descuento ${addedTimeLabel}`"
+        >
+          {{ addedTimeLabel }}
         </div>
         <div class="scoreboard__status">
           {{ liveStatus }}
@@ -1189,6 +1212,7 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
 }
 
 .nhl-bug__center {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1220,6 +1244,27 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   &--paused {
     opacity: 0.7;
   }
+}
+
+.nhl-bug__added {
+  position: absolute;
+  top: 0.18rem;
+  right: 0.22rem;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.05rem;
+  padding: 0.08em 0.28em 0.02em;
+  border-radius: 0.16em;
+  background: #f0c14d;
+  color: #1a1408;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: calc(var(--bug-period) * 1.15);
+  letter-spacing: 0.04em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
 }
 
 .nhl-bug__category {
@@ -1471,6 +1516,26 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
 .scoreboard__clock--paused {
   opacity: 0.65;
   text-shadow: none;
+}
+
+.scoreboard__added {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.15em;
+  padding: 0.08em 0.32em 0.04em;
+  border-radius: 0.18em;
+  background: #f0c14d;
+  color: #1a1408;
+  font-family: 'Bebas Neue', sans-serif;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 28px rgba(240, 193, 77, 0.28);
+}
+
+.scoreboard__added--live {
+  font-size: clamp(1.35rem, 3.6vw, 2.15rem);
 }
 
 /* ——— Live responsivo (espectadores) ——— */
@@ -1850,6 +1915,12 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   text-shadow: 0 0 70px rgba(0, 212, 255, 0.45);
 }
 
+.scoreboard--tv .scoreboard__added {
+  margin-top: 0.15rem;
+  font-size: clamp(2.4rem, 6vw, 4.4rem);
+  box-shadow: 0 0 40px rgba(240, 193, 77, 0.35);
+}
+
 .scoreboard--tv .scoreboard__penalties {
   display: flex;
   flex-direction: column;
@@ -1952,6 +2023,12 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
 
 .scoreboard--tv-light .scoreboard__period--intermission {
   color: #a67c1a;
+}
+
+.scoreboard--tv.scoreboard--tv-light .scoreboard__added {
+  background: #e3a51f;
+  color: #1a1408;
+  box-shadow: 0 8px 22px rgba(18, 24, 32, 0.12);
 }
 
 .scoreboard--tv-light .scoreboard__tv-meta {

@@ -19,7 +19,7 @@ import {
 } from '@/sports/scoreboardState'
 import { getPenaltyType, secondsToClock } from '@/data/penaltyCatalog'
 import { getSportModule } from '@/sports/registry'
-import { clockDirection, isCountUpSport, kickoffClock } from '@/sports/clockRules'
+import { clockDirection, isCountUpSport, kickoffClock, periodEndClockSeconds } from '@/sports/clockRules'
 import { fetchMatchState } from '@/services/matchSync'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
 import {
@@ -31,6 +31,7 @@ import { generateId } from '@/utils/id'
 import { canSetRole, findPlayerById } from '@/utils/roster'
 import {
   interpolateClock,
+  formatSecondsToTime,
   normalizeGameTime,
   parseTimeToSeconds,
   tickDown,
@@ -120,12 +121,14 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
   }
 
   function interpolateGameClock(now = Date.now()): string {
+    const direction = clockDirection(state.value.sport)
     return interpolateClock(
       state.value.timeGame,
       state.value.isPaused,
       state.value.updatedAt,
       now,
-      clockDirection(state.value.sport),
+      direction,
+      direction === 'up' ? periodEndClockSeconds(state.value) : undefined,
     )
   }
 
@@ -388,41 +391,24 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
 
   /** Pasa al siguiente periodo conservando el tiempo restante de las faltas. */
   function advanceToNextPeriod(periodLength?: string): void {
-    const nextLength = normalizeGameTime(
+    const nextTime = normalizeGameTime(
       periodLength ?? kickoffClock(state.value.sport),
     )
-    if (state.value.intermissionActive) {
-      if (!state.value.isPaused && parseTimeToSeconds(state.value.intermissionTime) > 0) {
-        const synced = interpolateClock(
-          state.value.intermissionTime,
-          false,
-          state.value.updatedAt,
-        )
-        patch({
-          intermissionTime: synced,
-          intermissionActive: false,
-          isPaused: true,
-        })
-      } else {
-        patch({ intermissionActive: false, isPaused: true })
-      }
-    } else if (!state.value.isPaused) {
-      if (
-        clockDirection(state.value.sport) === 'up' ||
-        parseTimeToSeconds(state.value.timeGame) > 0
-      ) {
-        syncElapsedAndPause()
-      } else {
-        patch({ isPaused: true })
-      }
+    if (
+      !state.value.intermissionActive &&
+      !state.value.isPaused &&
+      clockDirection(state.value.sport) === 'down' &&
+      parseTimeToSeconds(state.value.timeGame) > 0
+    ) {
+      syncElapsedAndPause()
     }
-
     patch({
       gamePeriod: state.value.gamePeriod + 1,
-      timeGame: nextLength,
+      timeGame: nextTime,
       intermissionActive: false,
       intermissionTime: state.value.intermissionDuration || DEFAULT_INTERMISSION_TIME,
       isPaused: true,
+      footballStoppageMinutes: 0,
     })
   }
 
@@ -552,9 +538,26 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
       .filter((item) => parseTimeToSeconds(item.time) > 0)
   }
 
-  /** Al terminar el descanso: avanza de periodo si queda alguno; si no, solo pausa. */
+  /** Al terminar el descanso: avanza de periodo si queda alguno y reinicia el reloj de cuenta arriba. */
   function finishIntermissionTick(): void {
-    if (state.value.gamePeriod < getSportModule(state.value.sport).clock.periods) {
+    const sport = getSportModule(state.value.sport)
+    const countUp = sport.clock.direction === 'up'
+    if (countUp) {
+      const nextPeriod =
+        state.value.gamePeriod < sport.clock.periods
+          ? state.value.gamePeriod + 1
+          : state.value.gamePeriod
+      patch({
+        gamePeriod: nextPeriod,
+        timeGame: kickoffClock(state.value.sport),
+        intermissionActive: false,
+        intermissionTime: state.value.intermissionDuration || DEFAULT_INTERMISSION_TIME,
+        isPaused: true,
+        footballStoppageMinutes: 0,
+      })
+      return
+    }
+    if (state.value.gamePeriod < sport.clock.periods) {
       advanceToNextPeriod()
       return
     }
@@ -569,6 +572,22 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     if (tickInterval.value) return
     isWriter.value = true
     tickInterval.value = window.setInterval(() => {
+      const direction = clockDirection(state.value.sport)
+      if (
+        direction === 'up' &&
+        !state.value.intermissionActive
+      ) {
+        const cap = periodEndClockSeconds(state.value)
+        const current = parseTimeToSeconds(state.value.timeGame)
+        if (current > cap) {
+          patch({
+            timeGame: formatSecondsToTime(cap),
+            isPaused: true,
+          })
+          return
+        }
+      }
+
       if (state.value.isPaused) return
 
       if (state.value.intermissionActive) {
@@ -591,18 +610,37 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
         return
       }
 
-      const direction = clockDirection(state.value.sport)
       if (direction === 'down' && parseTimeToSeconds(state.value.timeGame) <= 0) {
         patch({ isPaused: true })
         return
       }
 
-      const nextTime =
-        direction === 'up'
-          ? tickUp(state.value.timeGame)
-          : tickDown(state.value.timeGame)
-      const periodEnded =
-        direction === 'down' && parseTimeToSeconds(nextTime) <= 0
+      if (direction === 'up') {
+        const cap = periodEndClockSeconds(state.value)
+        const current = parseTimeToSeconds(state.value.timeGame)
+        if (current >= cap) {
+          patch({
+            timeGame: formatSecondsToTime(cap),
+            isPaused: true,
+          })
+          return
+        }
+        const uncapped = tickUp(state.value.timeGame)
+        const nextSeconds = parseTimeToSeconds(uncapped)
+        const periodEnded = nextSeconds >= cap
+        const nextTime = periodEnded ? formatSecondsToTime(cap) : uncapped
+        state.value = {
+          ...state.value,
+          timeGame: nextTime,
+          isPaused: periodEnded,
+          updatedAt: new Date().toISOString(),
+        }
+        persistLocal()
+        return
+      }
+
+      const nextTime = tickDown(state.value.timeGame)
+      const periodEnded = parseTimeToSeconds(nextTime) <= 0
 
       const next: Partial<ScoreboardState> = {
         timeGame: nextTime,
