@@ -18,7 +18,7 @@ export const footballSport: SportModule = {
   shortLabel: 'Fútbol',
   available: true,
   description:
-    'FIFA campo: reloj desde 00:00, duración por tiempo configurable, descanso 15′, goles, tarjetas y nómina.',
+    'FIFA campo: reloj desde 00:00, duración por periodo configurable, descanso 15′, goles, tarjetas y nómina.',
   stateVersion: FOOTBALL_STATE_VERSION,
   clock: {
     direction: 'up',

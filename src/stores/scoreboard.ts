@@ -391,38 +391,20 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
 
   /** Pasa al siguiente periodo conservando el tiempo restante de las faltas. */
   function advanceToNextPeriod(periodLength?: string): void {
-    const nextLength = normalizeGameTime(
+    const nextTime = normalizeGameTime(
       periodLength ?? kickoffClock(state.value.sport),
     )
-    if (state.value.intermissionActive) {
-      if (!state.value.isPaused && parseTimeToSeconds(state.value.intermissionTime) > 0) {
-        const synced = interpolateClock(
-          state.value.intermissionTime,
-          false,
-          state.value.updatedAt,
-        )
-        patch({
-          intermissionTime: synced,
-          intermissionActive: false,
-          isPaused: true,
-        })
-      } else {
-        patch({ intermissionActive: false, isPaused: true })
-      }
-    } else if (!state.value.isPaused) {
-      if (
-        clockDirection(state.value.sport) === 'up' ||
-        parseTimeToSeconds(state.value.timeGame) > 0
-      ) {
-        syncElapsedAndPause()
-      } else {
-        patch({ isPaused: true })
-      }
+    if (
+      !state.value.intermissionActive &&
+      !state.value.isPaused &&
+      clockDirection(state.value.sport) === 'down' &&
+      parseTimeToSeconds(state.value.timeGame) > 0
+    ) {
+      syncElapsedAndPause()
     }
-
     patch({
       gamePeriod: state.value.gamePeriod + 1,
-      timeGame: nextLength,
+      timeGame: nextTime,
       intermissionActive: false,
       intermissionTime: state.value.intermissionDuration || DEFAULT_INTERMISSION_TIME,
       isPaused: true,
@@ -556,9 +538,26 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
       .filter((item) => parseTimeToSeconds(item.time) > 0)
   }
 
-  /** Al terminar el descanso: avanza de periodo si queda alguno; si no, solo pausa. */
+  /** Al terminar el descanso: avanza de periodo si queda alguno y reinicia el reloj de cuenta arriba. */
   function finishIntermissionTick(): void {
-    if (state.value.gamePeriod < getSportModule(state.value.sport).clock.periods) {
+    const sport = getSportModule(state.value.sport)
+    const countUp = sport.clock.direction === 'up'
+    if (countUp) {
+      const nextPeriod =
+        state.value.gamePeriod < sport.clock.periods
+          ? state.value.gamePeriod + 1
+          : state.value.gamePeriod
+      patch({
+        gamePeriod: nextPeriod,
+        timeGame: kickoffClock(state.value.sport),
+        intermissionActive: false,
+        intermissionTime: state.value.intermissionDuration || DEFAULT_INTERMISSION_TIME,
+        isPaused: true,
+        footballStoppageMinutes: 0,
+      })
+      return
+    }
+    if (state.value.gamePeriod < sport.clock.periods) {
       advanceToNextPeriod()
       return
     }

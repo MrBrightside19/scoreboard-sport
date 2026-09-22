@@ -55,9 +55,17 @@ function syncFromProp(raw: string): void {
 watch(
   () => props.value,
   (next) => {
-    if (!focused.value) syncFromProp(next)
+    if (!focused.value || props.disabled) syncFromProp(next)
   },
   { immediate: true },
+)
+
+watch(
+  () => props.disabled,
+  () => {
+    focused.value = false
+    syncFromProp(props.value)
+  },
 )
 
 function getNativeInput(): HTMLInputElement | null {
@@ -201,6 +209,10 @@ function onFocus(): void {
 
 function onBlur(): void {
   focused.value = false
+  if (props.disabled) {
+    syncFromProp(props.value)
+    return
+  }
   emitCurrent()
   const normalized = formatSecondsToTime(
     (Number.parseInt(minutes.value, 10) || 0) * 60 +

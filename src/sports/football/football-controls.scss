@@ -57,8 +57,14 @@ $football-short: 520px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 0.35rem;
   width: 100%;
+  min-width: 0;
+
+  &.is-disabled {
+    opacity: 0.55;
+  }
 
   label {
     margin: 0;
@@ -68,6 +74,10 @@ $football-short: 520px;
     text-transform: uppercase;
     opacity: 0.6;
   }
+}
+
+.football-controls .controls__clock-panels {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
 .football-controls .controls__clock-period {
@@ -267,6 +277,15 @@ $football-short: 520px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     opacity: 0.55;
+  }
+}
+
+.football-config__duration-input {
+  width: 8.5rem;
+
+  :deep(input) {
+    text-align: center;
+    font-variant-numeric: tabular-nums;
   }
 }
 
@@ -788,49 +807,8 @@ $football-short: 520px;
     display: contents;
   }
 
-  .football-controls .controls__grid--rest .controls__clock-adjust {
-    display: none;
-  }
-
   .football-controls .football-match__rest-start-extra {
     display: none;
-  }
-
-  .football-controls .controls__clock-adjust {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(3.6rem, 4.5rem);
-    align-items: center;
-    align-self: stretch;
-    gap: 0.28rem;
-    width: 100%;
-    min-width: 0;
-    max-width: 100%;
-    margin-top: 0.15rem;
-    box-sizing: border-box;
-
-    label {
-      margin: 0;
-      font-size: 0.58rem;
-      letter-spacing: 0.02em;
-      text-align: left;
-      line-height: 1.15;
-      min-width: 0;
-    }
-
-    .time-input,
-    .time-input--compact {
-      width: 100%;
-      min-width: 0;
-      max-width: 100%;
-      box-sizing: border-box;
-    }
-
-    .time-input input,
-    .ant-input {
-      min-width: 0;
-      padding-inline: 0.28rem;
-      font-size: 0.92rem;
-    }
   }
 
   .football-controls .controls__clock-display {
@@ -856,8 +834,8 @@ $football-short: 520px;
   }
 
   .football-controls .controls__clock-panels {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     flex: 0 0 auto;
     min-height: 0;
     gap: 0.18rem;
@@ -875,42 +853,62 @@ $football-short: 520px;
   }
 
   .football-controls .controls__clock-field--period {
-    flex: 0 0 auto;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-areas:
-      'label period'
-      'next next'
-      'hint hint';
-    align-items: center;
-    justify-content: stretch;
-    justify-items: stretch;
-    gap: 0.16rem 0.32rem;
-    min-height: 0;
     min-width: 0;
-    text-align: left;
+    text-align: center;
 
     > label {
-      grid-area: label;
       margin: 0;
-      text-align: left;
-      white-space: nowrap;
       line-height: 1;
     }
 
     .controls__clock-period {
-      grid-area: period;
-    }
-
-    .controls__next-period {
-      grid-area: next;
-      margin-top: 0;
+      width: 100%;
     }
 
     .controls__clock-hint {
-      grid-area: hint;
       margin: 0;
-      text-align: left;
+    }
+  }
+
+  .football-controls .controls__clock-field--adjust {
+    min-width: 0;
+  }
+
+  .football-controls .controls__clock-adjust {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    align-self: stretch;
+    gap: 0.16rem;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    margin: 0;
+    box-sizing: border-box;
+
+    label {
+      margin: 0;
+      font-size: 0.58rem;
+      letter-spacing: 0.02em;
+      text-align: center;
+      line-height: 1.15;
+      min-width: 0;
+    }
+
+    .time-input,
+    .time-input--compact {
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+
+    .time-input input,
+    .ant-input {
+      min-width: 0;
+      padding-inline: 0.28rem;
+      font-size: 0.92rem;
     }
   }
 
@@ -918,18 +916,18 @@ $football-short: 520px;
     max-width: none;
     width: 100%;
     min-width: 0;
-    grid-template-columns: 2.05rem minmax(0, 1fr) 2.05rem;
+    grid-template-columns: 1.75rem minmax(0, 1fr) 1.75rem;
     align-items: center;
     justify-items: center;
-    gap: 0.2rem;
+    gap: 0.12rem;
 
     .ant-btn {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 2.05rem;
-      min-width: 2.05rem;
-      height: 2.05rem;
+      width: 1.75rem;
+      min-width: 1.75rem;
+      height: 1.75rem;
       padding: 0;
       font-size: 1.2rem;
       font-weight: 700;
@@ -951,12 +949,6 @@ $football-short: 520px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .football-controls .controls__next-period {
-    max-width: none;
-    height: 1.9rem;
-    font-size: 0.72rem;
   }
 
   .football-controls .time-input--compact {
@@ -986,10 +978,6 @@ $football-short: 520px;
   .football-controls .controls__grid--rest .controls__clock-field {
     padding: 0.18rem 0.22rem;
     gap: 0.12rem;
-  }
-
-  .football-controls .controls__grid--rest .controls__next-period {
-    height: 1.75rem;
   }
 
   .football-controls .football-match__rest {
@@ -1349,10 +1337,6 @@ $football-short: 520px;
     grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
   }
 
-  .football-controls .controls__clock:has(.controls__clock-adjust) {
-    grid-template-columns: minmax(180px, 240px) minmax(11rem, 14rem) minmax(0, 1fr);
-  }
-
   .football-controls .controls__clock-main {
     display: contents;
   }
@@ -1375,15 +1359,10 @@ $football-short: 520px;
     height: 100%;
     justify-content: center;
     gap: 0.55rem;
-    padding: 0.9rem 1rem;
-    border-radius: 12px;
-    background: var(--app-surface);
-    border: 1px solid var(--app-border);
-    text-align: center;
   }
 
   .football-controls .controls__clock-panels {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 
   .football-match__rest,

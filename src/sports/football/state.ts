@@ -5,6 +5,7 @@ import { generateId } from '@/utils/id'
 import {
   FOOTBALL_HALF_TIME,
   FOOTBALL_MAX_PERIOD_MINUTES,
+  FOOTBALL_MIN_PERIOD_MINUTES,
   FOOTBALL_MAX_STOPPAGE_MINUTES,
   type FootballCardEvent,
 } from '@/sports/football/types'
@@ -21,10 +22,19 @@ export interface FootballStateSlice {
 }
 
 export function normalizeFootballPeriodLength(raw: unknown): string {
-  if (typeof raw !== 'string' || !raw.trim()) return FOOTBALL_HALF_TIME
-  const seconds = parseTimeToSeconds(raw)
-  if (seconds < 60) return FOOTBALL_HALF_TIME
-  return formatSecondsToTime(Math.min(seconds, FOOTBALL_MAX_PERIOD_MINUTES * 60))
+  const seconds =
+    typeof raw === 'number' && Number.isFinite(raw)
+      ? raw * 60
+      : typeof raw === 'string' && raw.trim()
+        ? parseTimeToSeconds(raw)
+        : NaN
+  if (!Number.isFinite(seconds) || seconds <= 0) return FOOTBALL_HALF_TIME
+  const minutes = Math.round(seconds / 60)
+  const clamped = Math.min(
+    FOOTBALL_MAX_PERIOD_MINUTES,
+    Math.max(FOOTBALL_MIN_PERIOD_MINUTES, minutes),
+  )
+  return formatSecondsToTime(clamped * 60)
 }
 
 export function createFootballStateSlice(): FootballStateSlice {

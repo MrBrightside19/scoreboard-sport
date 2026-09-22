@@ -1,8 +1,8 @@
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useScoreboardStore } from '@/stores/scoreboard'
 import { parseTimeToSeconds } from '@/utils/clock'
-import { remainingClockSeconds } from '@/sports/clockRules'
-import { playCountdownBeep } from '@/utils/countdownBeep'
+import { remainingClockSeconds, remainingUntilPeriodEndSeconds } from '@/sports/clockRules'
+import { playCountdownBeep, unlockBeepAudio } from '@/utils/countdownBeep'
 import { playLateGameWarning } from '@/utils/lateGameWarningBeep'
 import {
   getCountdownBeepSeconds,
@@ -18,6 +18,7 @@ export function useMatchClockAlerts() {
   let lastIntermissionBeepSecond: number | null = null
   let lateGameWarningKey: string | null = null
   let prevLateGameSeconds: number | null = null
+  let playAlertTimer: number | null = null
 
   const countdownBeepSeconds = () => {
     prefsTick.value
@@ -36,27 +37,38 @@ export function useMatchClockAlerts() {
     prefsTick.value += 1
   }
 
+  function scanPlayCountdownBeep(): void {
+    if (store.state.intermissionActive) {
+      lastCountdownBeepSecond = null
+      return
+    }
+    const seconds = remainingUntilPeriodEndSeconds(store.state)
+    if (store.state.isPaused && seconds > 0) {
+      lastCountdownBeepSecond = null
+      return
+    }
+    const threshold = getCountdownBeepSeconds()
+    if (seconds < 0 || seconds > threshold) {
+      lastCountdownBeepSecond = null
+      return
+    }
+    if (lastCountdownBeepSecond === seconds) return
+    lastCountdownBeepSecond = seconds
+    void playCountdownBeep(seconds === 0)
+  }
+
   watch(
-    () => ({
-      seconds: remainingClockSeconds(store.state),
-      paused: store.state.isPaused,
-      intermission: store.state.intermissionActive,
-      tick: prefsTick.value,
-    }),
-    ({ seconds, paused, intermission }) => {
-      if (paused || intermission) {
-        lastCountdownBeepSecond = null
-        return
-      }
-      const threshold = getCountdownBeepSeconds()
-      if (seconds < 0 || seconds > threshold) {
-        lastCountdownBeepSecond = null
-        return
-      }
-      if (lastCountdownBeepSecond === seconds) return
-      lastCountdownBeepSecond = seconds
-      void playCountdownBeep(seconds === 0)
-    },
+    () =>
+      [
+        store.state.timeGame,
+        store.state.isPaused,
+        store.state.intermissionActive,
+        store.state.footballPeriodLength,
+        store.state.footballStoppageMinutes,
+        store.state.gamePeriod,
+        prefsTick.value,
+      ] as const,
+    scanPlayCountdownBeep,
   )
 
   watch(
@@ -108,9 +120,18 @@ export function useMatchClockAlerts() {
 
   onMounted(() => {
     window.addEventListener('scoreboard:prefs-change', onPrefsChange)
+    window.addEventListener('pointerdown', unlockBeepAudio, { once: true })
+    window.addEventListener('keydown', unlockBeepAudio, { once: true })
+    playAlertTimer = window.setInterval(scanPlayCountdownBeep, 250)
   })
   onUnmounted(() => {
     window.removeEventListener('scoreboard:prefs-change', onPrefsChange)
+    window.removeEventListener('pointerdown', unlockBeepAudio)
+    window.removeEventListener('keydown', unlockBeepAudio)
+    if (playAlertTimer != null) {
+      clearInterval(playAlertTimer)
+      playAlertTimer = null
+    }
   })
 
   return {

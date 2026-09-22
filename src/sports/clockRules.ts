@@ -62,6 +62,16 @@ export function remainingClockSeconds(
   return Math.max(0, regulationClockSeconds(state) - elapsed)
 }
 
+/** Segundos que restan hasta el tope (duración + descuento en fútbol). */
+export function remainingUntilPeriodEndSeconds(
+  state: Pick<ScoreboardState, 'sport' | 'gamePeriod' | 'timeGame'> &
+    Partial<Pick<ScoreboardState, 'footballPeriodLength' | 'footballStoppageMinutes'>>,
+): number {
+  const elapsed = parseTimeToSeconds(state.timeGame)
+  if (!isCountUpSport(state.sport)) return elapsed
+  return Math.max(0, periodEndClockSeconds(state) - elapsed)
+}
+
 export function isRegulationElapsed(
   state: Pick<ScoreboardState, 'sport' | 'gamePeriod' | 'timeGame'> &
     Partial<Pick<ScoreboardState, 'footballPeriodLength'>>,
