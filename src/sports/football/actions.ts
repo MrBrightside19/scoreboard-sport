@@ -1,8 +1,11 @@
 import { generateId } from '@/utils/id'
 import { findPlayerById, playerLabel } from '@/utils/roster'
 import type { ScoreboardState } from '@/sports/scoreboardState'
-import type { FootballCardKind } from '@/sports/football/types'
-import { clockDirection } from '@/sports/clockRules'
+import {
+  FOOTBALL_MAX_STOPPAGE_MINUTES,
+  type FootballCardKind,
+} from '@/sports/football/types'
+import { clockDirection, periodEndClockSeconds } from '@/sports/clockRules'
 import { interpolateClock } from '@/utils/clock'
 
 export function cardCount(
@@ -66,6 +69,7 @@ export function addFootballCard(
     state.updatedAt,
     Date.now(),
     clockDirection(state.sport),
+    periodEndClockSeconds(state),
   )
 
   if (playerId && isPlayerExpelled(state, team, playerId)) {
@@ -157,4 +161,24 @@ export function undoLastFootballCard(
   }
 
   return { footballCards: cards }
+}
+
+export function footballStoppageMinutes(state: ScoreboardState): number {
+  if (state.sport !== 'football') return 0
+  const raw = state.footballStoppageMinutes
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return 0
+  return Math.max(0, Math.min(FOOTBALL_MAX_STOPPAGE_MINUTES, Math.floor(raw)))
+}
+
+/** Etiqueta del cartel (`+4`), o null si no debe verse en el marcador. */
+export function footballStoppageLabel(state: ScoreboardState): string | null {
+  if (state.intermissionActive) return null
+  const minutes = footballStoppageMinutes(state)
+  if (minutes <= 0) return null
+  return `+${minutes}`
+}
+
+export function clampFootballStoppage(minutes: number): number {
+  if (!Number.isFinite(minutes)) return 0
+  return Math.max(0, Math.min(FOOTBALL_MAX_STOPPAGE_MINUTES, Math.floor(minutes)))
 }
