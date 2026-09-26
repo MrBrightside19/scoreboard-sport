@@ -40,6 +40,29 @@ export function tickUp(time: string, seconds = 1): string {
   return formatSecondsToTime(current + seconds)
 }
 
+export function isOlderTimestamp(incoming: string, previous: string): boolean {
+  const next = Date.parse(incoming)
+  const prev = Date.parse(previous)
+  if (!Number.isFinite(next) || !Number.isFinite(prev)) return false
+  return next < prev
+}
+
+/**
+ * Salto atrás del reloj en juego (mesa desfasada al despertar), no un ajuste en pausa.
+ * Cuenta arriba: el valor mostrado no debe bajar. Cuenta atrás: no debe subir.
+ */
+export function isImplausibleRunningClockRewind(
+  direction: 'down' | 'up',
+  displayedSeconds: number,
+  incomingSeconds: number,
+  toleranceSeconds = 2,
+): boolean {
+  if (direction === 'up') {
+    return incomingSeconds + toleranceSeconds < displayedSeconds
+  }
+  return incomingSeconds > displayedSeconds + toleranceSeconds
+}
+
 export function interpolateClock(
   timeGame: string,
   isPaused: boolean,

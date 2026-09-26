@@ -35,7 +35,6 @@ import {
   normalizeGameTime,
   parseTimeToSeconds,
   tickDown,
-  tickUp,
 } from '@/utils/clock'
 
 export const useScoreboardStore = defineStore('scoreboard', () => {
@@ -120,6 +119,10 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     persistLocal()
   }
 
+  let writerResumeHandler: (() => void) | null = null
+  let wakeLockSentinel: WakeLockSentinel | null = null
+  let syncingClock = false
+
   function interpolateGameClock(now = Date.now()): string {
     const direction = clockDirection(state.value.sport)
     return interpolateClock(
@@ -132,50 +135,167 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     )
   }
 
+  function playedClockSeconds(
+    fromTime: string,
+    toTime: string,
+    direction: 'down' | 'up',
+  ): number {
+    const from = parseTimeToSeconds(fromTime)
+    const to = parseTimeToSeconds(toTime)
+    return Math.max(0, direction === 'up' ? to - from : from - to)
+  }
+
+  function currentDisplayClock(now = Date.now()): string {
+    if (state.value.intermissionActive) {
+      return interpolateClock(
+        state.value.intermissionTime,
+        state.value.isPaused,
+        state.value.updatedAt,
+        now,
+        'down',
+      )
+    }
+    return interpolateGameClock(now)
+  }
+
+  /** Avanza el reloj con el tiempo real, no con un +1 por cada setInterval. */
+  function catchUpRunningClock(
+    now = Date.now(),
+    options: { allowPeriodAdvance?: boolean } = {},
+  ): boolean {
+    const allowPeriodAdvance = options.allowPeriodAdvance !== false
+    if (syncingClock) return false
+    syncingClock = true
+    try {
+      const direction = clockDirection(state.value.sport)
+
+      if (
+        direction === 'up' &&
+        !state.value.intermissionActive &&
+        parseTimeToSeconds(state.value.timeGame) > periodEndClockSeconds(state.value)
+      ) {
+        patch({
+          timeGame: formatSecondsToTime(periodEndClockSeconds(state.value)),
+          isPaused: true,
+        })
+        return true
+      }
+
+      if (state.value.isPaused) return false
+
+      if (state.value.intermissionActive) {
+        const remaining = parseTimeToSeconds(state.value.intermissionTime)
+        if (remaining <= 0) {
+          if (allowPeriodAdvance) finishIntermissionTick()
+          return allowPeriodAdvance
+        }
+        const nextIntermission = interpolateClock(
+          state.value.intermissionTime,
+          false,
+          state.value.updatedAt,
+          now,
+          'down',
+        )
+        if (nextIntermission === state.value.intermissionTime) return false
+        const ended = parseTimeToSeconds(nextIntermission) <= 0
+        state.value = {
+          ...state.value,
+          intermissionTime: nextIntermission,
+          updatedAt: new Date(now).toISOString(),
+        }
+        persistLocal()
+        if (ended && allowPeriodAdvance) finishIntermissionTick()
+        return true
+      }
+
+      if (direction === 'down' && parseTimeToSeconds(state.value.timeGame) <= 0) {
+        patch({ isPaused: true })
+        return true
+      }
+
+      const previousTime = state.value.timeGame
+      const nextTime = interpolateGameClock(now)
+      const playedSeconds = playedClockSeconds(previousTime, nextTime, direction)
+      const cap = direction === 'up' ? periodEndClockSeconds(state.value) : 0
+      const periodEnded =
+        direction === 'up'
+          ? parseTimeToSeconds(nextTime) >= cap
+          : parseTimeToSeconds(nextTime) <= 0
+
+      if (playedSeconds <= 0 && !periodEnded) return false
+
+      state.value = {
+        ...state.value,
+        timeGame: nextTime,
+        penaltiesLocal: tickPenaltyList(state.value.penaltiesLocal, playedSeconds),
+        penaltiesVisit: tickPenaltyList(state.value.penaltiesVisit, playedSeconds),
+        futsalExclusions: tickFutsalExclusions(
+          state.value.futsalExclusions ?? [],
+          playedSeconds,
+        ),
+        isPaused: periodEnded,
+        updatedAt: new Date(now).toISOString(),
+      }
+      persistLocal()
+      return true
+    } finally {
+      syncingClock = false
+    }
+  }
+
   function syncElapsedAndPause(): void {
     if (state.value.isPaused) {
       patch({ updatedAt: new Date().toISOString() })
       return
     }
-
-    const direction = clockDirection(state.value.sport)
-    const clockSeconds = parseTimeToSeconds(state.value.timeGame)
-    if (direction === 'down' && clockSeconds <= 0) {
+    catchUpRunningClock()
+    if (!state.value.isPaused) {
       patch({ isPaused: true })
-      return
     }
+  }
 
-    const syncedTime = interpolateGameClock()
-    const playedSeconds = Math.max(
-      0,
-      direction === 'up'
-        ? parseTimeToSeconds(syncedTime) - clockSeconds
-        : clockSeconds - parseTimeToSeconds(syncedTime),
-    )
-
-    const syncPenaltyList = (penalties: TeamPenalty[]): TeamPenalty[] =>
-      penalties
-        .map((penalty) => ({
-          ...penalty,
-          time: tickDown(penalty.time, playedSeconds),
-        }))
-        .filter((penalty) => parseTimeToSeconds(penalty.time) > 0)
-
-    state.value = {
-      ...state.value,
-      timeGame: syncedTime,
-      penaltiesLocal: syncPenaltyList(state.value.penaltiesLocal),
-      penaltiesVisit: syncPenaltyList(state.value.penaltiesVisit),
-      futsalExclusions: (state.value.futsalExclusions ?? [])
-        .map((item) => ({
-          ...item,
-          time: tickDown(item.time, playedSeconds),
-        }))
-        .filter((item) => parseTimeToSeconds(item.time) > 0),
-      isPaused: true,
-      updatedAt: new Date().toISOString(),
+  async function requestWriterWakeLock(): Promise<void> {
+    if (typeof navigator === 'undefined' || !('wakeLock' in navigator)) return
+    if (document.visibilityState !== 'visible') return
+    try {
+      wakeLockSentinel = await navigator.wakeLock.request('screen')
+      wakeLockSentinel.addEventListener('release', () => {
+        wakeLockSentinel = null
+      })
+    } catch {
+      wakeLockSentinel = null
     }
-    persistLocal()
+  }
+
+  function bindWriterClockGuards(): void {
+    if (writerResumeHandler || typeof document === 'undefined') return
+    writerResumeHandler = () => {
+      catchUpRunningClock()
+      if (document.visibilityState === 'visible') {
+        void requestWriterWakeLock()
+      }
+    }
+    document.addEventListener('visibilitychange', writerResumeHandler)
+    document.addEventListener('freeze', writerResumeHandler)
+    document.addEventListener('resume', writerResumeHandler)
+    window.addEventListener('pageshow', writerResumeHandler)
+    window.addEventListener('focus', writerResumeHandler)
+    void requestWriterWakeLock()
+  }
+
+  function unbindWriterClockGuards(): void {
+    if (writerResumeHandler) {
+      document.removeEventListener('visibilitychange', writerResumeHandler)
+      document.removeEventListener('freeze', writerResumeHandler)
+      document.removeEventListener('resume', writerResumeHandler)
+      window.removeEventListener('pageshow', writerResumeHandler)
+      window.removeEventListener('focus', writerResumeHandler)
+      writerResumeHandler = null
+    }
+    if (wakeLockSentinel) {
+      void wakeLockSentinel.release()
+      wakeLockSentinel = null
+    }
   }
 
   function persistLocal(): void {
@@ -193,6 +313,7 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
   }
 
   function patch(partial: Partial<ScoreboardState>): void {
+    catchUpRunningClock(Date.now(), { allowPeriodAdvance: false })
     state.value = {
       ...state.value,
       ...partial,
@@ -524,17 +645,20 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     patch({ [key]: list })
   }
 
-  function tickPenaltyList(penalties: TeamPenalty[]): TeamPenalty[] {
+  function tickPenaltyList(penalties: TeamPenalty[], seconds = 1): TeamPenalty[] {
+    if (seconds <= 0) return penalties
     return penalties
-      .map((penalty) => ({ ...penalty, time: tickDown(penalty.time) }))
+      .map((penalty) => ({ ...penalty, time: tickDown(penalty.time, seconds) }))
       .filter((penalty) => parseTimeToSeconds(penalty.time) > 0)
   }
 
   function tickFutsalExclusions(
     exclusions: FutsalExclusionEvent[],
+    seconds = 1,
   ): FutsalExclusionEvent[] {
+    if (seconds <= 0) return exclusions
     return exclusions
-      .map((item) => ({ ...item, time: tickDown(item.time) }))
+      .map((item) => ({ ...item, time: tickDown(item.time, seconds) }))
       .filter((item) => parseTimeToSeconds(item.time) > 0)
   }
 
@@ -571,93 +695,16 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
   function startWriterTick(): void {
     if (tickInterval.value) return
     isWriter.value = true
+    bindWriterClockGuards()
+    catchUpRunningClock()
     tickInterval.value = window.setInterval(() => {
-      const direction = clockDirection(state.value.sport)
-      if (
-        direction === 'up' &&
-        !state.value.intermissionActive
-      ) {
-        const cap = periodEndClockSeconds(state.value)
-        const current = parseTimeToSeconds(state.value.timeGame)
-        if (current > cap) {
-          patch({
-            timeGame: formatSecondsToTime(cap),
-            isPaused: true,
-          })
-          return
-        }
-      }
-
-      if (state.value.isPaused) return
-
-      if (state.value.intermissionActive) {
-        const remaining = parseTimeToSeconds(state.value.intermissionTime)
-        if (remaining <= 0) {
-          finishIntermissionTick()
-          return
-        }
-        const nextIntermission = tickDown(state.value.intermissionTime)
-        const ended = parseTimeToSeconds(nextIntermission) <= 0
-        state.value = {
-          ...state.value,
-          intermissionTime: nextIntermission,
-          updatedAt: new Date().toISOString(),
-        }
-        persistLocal()
-        if (ended) {
-          finishIntermissionTick()
-        }
-        return
-      }
-
-      if (direction === 'down' && parseTimeToSeconds(state.value.timeGame) <= 0) {
-        patch({ isPaused: true })
-        return
-      }
-
-      if (direction === 'up') {
-        const cap = periodEndClockSeconds(state.value)
-        const current = parseTimeToSeconds(state.value.timeGame)
-        if (current >= cap) {
-          patch({
-            timeGame: formatSecondsToTime(cap),
-            isPaused: true,
-          })
-          return
-        }
-        const uncapped = tickUp(state.value.timeGame)
-        const nextSeconds = parseTimeToSeconds(uncapped)
-        const periodEnded = nextSeconds >= cap
-        const nextTime = periodEnded ? formatSecondsToTime(cap) : uncapped
-        state.value = {
-          ...state.value,
-          timeGame: nextTime,
-          isPaused: periodEnded,
-          updatedAt: new Date().toISOString(),
-        }
-        persistLocal()
-        return
-      }
-
-      const nextTime = tickDown(state.value.timeGame)
-      const periodEnded = parseTimeToSeconds(nextTime) <= 0
-
-      const next: Partial<ScoreboardState> = {
-        timeGame: nextTime,
-        penaltiesLocal: tickPenaltyList(state.value.penaltiesLocal),
-        penaltiesVisit: tickPenaltyList(state.value.penaltiesVisit),
-        futsalExclusions: tickFutsalExclusions(state.value.futsalExclusions ?? []),
-        isPaused: periodEnded,
-        updatedAt: new Date().toISOString(),
-      }
-
-      state.value = { ...state.value, ...next }
-      persistLocal()
+      catchUpRunningClock()
     }, 1000)
   }
 
   function stopWriterTick(): void {
     isWriter.value = false
+    unbindWriterClockGuards()
     if (tickInterval.value) {
       clearInterval(tickInterval.value)
       tickInterval.value = null
@@ -702,6 +749,8 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     setPenaltyInfraction,
     startWriterTick,
     stopWriterTick,
+    catchUpRunningClock,
+    currentDisplayClock,
     replaceState,
     persistLocal,
     syncElapsedAndPause,

@@ -493,11 +493,7 @@ function adjustStoppage(delta: number): void {
                       +{{ stoppageMinutes }}
                     </span>
                     <div ref="clockDisplayEl" class="controls__clock-display">
-                      {{
-                        store.state.intermissionActive
-                          ? store.state.intermissionTime
-                          : store.state.timeGame
-                      }}
+                      {{ dockClockTime }}
                     </div>
                     <p
                       class="controls__clock-status"

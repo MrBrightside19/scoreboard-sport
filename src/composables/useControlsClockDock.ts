@@ -29,15 +29,13 @@ export function useControlsClockDock(options: {
   const clockSectionEl = options.clockSectionEl ?? ref<HTMLElement | null>(null)
   const clockDisplayEl = options.clockDisplayEl ?? ref<HTMLElement | null>(null)
   const clockInView = ref(false)
+  const clockTick = ref(Date.now())
   let clockObserver: IntersectionObserver | null = null
+  let displayTimer: number | null = null
 
   const sport = computed(() => getSportModule(store.state.sport))
 
-  const dockClockTime = computed(() =>
-    store.state.intermissionActive
-      ? store.state.intermissionTime
-      : store.state.timeGame,
-  )
+  const dockClockTime = computed(() => store.currentDisplayClock(clockTick.value))
 
   const dockClockLabel = computed(() => {
     if (store.state.intermissionActive) {
@@ -121,12 +119,16 @@ export function useControlsClockDock(options: {
   onMounted(() => {
     window.addEventListener('resize', syncClockInView, { passive: true })
     window.addEventListener('scroll', syncClockInView, { passive: true, capture: true })
+    displayTimer = window.setInterval(() => {
+      clockTick.value = Date.now()
+    }, 250)
     void nextTick(setupClockObserver)
   })
 
   onUnmounted(() => {
     window.removeEventListener('resize', syncClockInView)
     window.removeEventListener('scroll', syncClockInView)
+    if (displayTimer) clearInterval(displayTimer)
     clockObserver?.disconnect()
     clockObserver = null
   })
