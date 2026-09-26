@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-label="ScoreDesk  Marcador deportivo en vivo">
+  <rect width="1600" height="900" fill="#0a0e17"/>
+  <g transform="translate(220 250)">
+    <rect width="400" height="400" rx="88" fill="#0d1524"/>
+    <circle cx="200" cy="200" r="116" fill="none" stroke="#00d4ff" stroke-width="28"/>
+    <circle cx="200" cy="200" r="46" fill="#ff6b35"/>
+  </g>
+  <text
+    x="670"
+    y="468"
+    fill="#f4f7fb"
+    font-family="'Bebas Neue', 'Arial Narrow', Impact, sans-serif"
+    font-size="132"
+    letter-spacing="6"
+  >SCOREDESK</text>
+  <text
+    x="674"
+    y="548"
+    fill="#00d4ff"
+    font-family="Inter, system-ui, sans-serif"
+    font-size="36"
+    font-weight="600"
+  >Marcador deportivo en vivo</text>
+</svg>
