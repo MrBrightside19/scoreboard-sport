@@ -80,6 +80,7 @@ export function useMatchOperatorSession() {
     }
     publishInFlight = true
     try {
+      store.catchUpRunningClock()
       await publishMatchState(matchId.value, store.state, {
         organizer_id: auth.profile?.id ?? null,
         is_live: true,

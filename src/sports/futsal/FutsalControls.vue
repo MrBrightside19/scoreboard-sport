@@ -333,11 +333,7 @@ const exclusions = computed(() => activeExclusions(store.state))
               <div class="controls__clock">
                 <div class="controls__clock-main">
                   <div ref="clockDisplayEl" class="controls__clock-display">
-                    {{
-                      store.state.intermissionActive
-                        ? store.state.intermissionTime
-                        : store.state.timeGame
-                    }}
+                    {{ dockClockTime }}
                   </div>
                   <p class="controls__clock-status">
                     <template v-if="store.state.intermissionActive">

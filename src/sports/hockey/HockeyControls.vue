@@ -81,11 +81,7 @@ let lastCountdownBeepSecond: number | null = null
 let lateGameWarningKey: string | null = null
 let prevLateGameSeconds: number | null = null
 
-const dockClockTime = computed(() =>
-  store.state.intermissionActive
-    ? store.state.intermissionTime
-    : store.state.timeGame,
-)
+const dockClockTime = computed(() => store.currentDisplayClock())
 
 const dockClockLabel = computed(() => {
   if (store.state.intermissionActive) {
@@ -753,6 +749,7 @@ async function publish(): Promise<void> {
 
   publishInFlight = true
   try {
+    store.catchUpRunningClock()
     await publishMatchState(matchId.value, store.state, {
       organizer_id: auth.profile?.id ?? null,
       is_live: true,
@@ -1164,9 +1161,7 @@ onUnmounted(() => {
                   <div class="controls__clock-main">
                     <div ref="clockDisplayEl" class="controls__clock-display">
                       {{
-                        store.state.intermissionActive
-                          ? store.state.intermissionTime
-                          : store.state.timeGame
+                        store.currentDisplayClock()
                       }}
                     </div>
                     <p class="controls__clock-status">
