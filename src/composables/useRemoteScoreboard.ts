@@ -8,7 +8,7 @@ import {
   isOlderTimestamp,
   parseTimeToSeconds,
 } from '@/utils/clock'
-import { clockDirection, periodEndClockSeconds } from '@/sports/clockRules'
+import { clockDirection, countUpClockMaxSeconds } from '@/sports/clockRules'
 import { fetchMatchState } from '@/services/matchSync'
 import { normalizeScoreboardState } from '@/sports/scoreboardState'
 import { useAnimationNow } from '@/composables/useAnimationNow'
@@ -48,7 +48,7 @@ export function useRemoteScoreboard(matchId: () => string | null) {
       snapshot.updatedAt,
       now,
       direction,
-      direction === 'up' ? periodEndClockSeconds(snapshot) : undefined,
+      countUpClockMaxSeconds(snapshot),
     )
   }
 

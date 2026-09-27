@@ -46,15 +46,25 @@ function stoppageClockSeconds(state: RegulationState): number {
   return Math.floor(minutes) * 60
 }
 
-/** Tope del reloj: duración del tiempo + descuento. */
+/** Duración + descuento anunciado. En fútbol no recorta el reloj: sirve para avisos y descanso. */
 export function periodEndClockSeconds(state: RegulationState): number {
   return regulationClockSeconds(state) + stoppageClockSeconds(state)
 }
 
+/** Fútbol FIFA: el reloj no se topea ni se pausa solo al cumplir el tiempo o el +N. */
+export function countUpPausesAtPeriodEnd(sportId: string): boolean {
+  return clockDirection(sportId) === 'up' && sportId !== 'football'
+}
+
+export function countUpClockMaxSeconds(state: RegulationState): number | undefined {
+  if (!countUpPausesAtPeriodEnd(state.sport)) return undefined
+  return periodEndClockSeconds(state)
+}
+
 export function clampCountUpTime(time: string, state: RegulationState): string {
-  return formatSecondsToTime(
-    Math.min(parseTimeToSeconds(time), periodEndClockSeconds(state)),
-  )
+  const maxSeconds = countUpClockMaxSeconds(state)
+  if (maxSeconds == null) return time
+  return formatSecondsToTime(Math.min(parseTimeToSeconds(time), maxSeconds))
 }
 
 export function isCountUpSport(sportId: SportId | string): boolean {
@@ -112,7 +122,7 @@ export function isPeriodPlayFinished(
   return parseTimeToSeconds(state.timeGame) >= periodEndClockSeconds(state)
 }
 
-/** Descuento en curso: el cupo se cumplió y aún no se llega al tope +N. */
+/** Descuento en curso: ya pasó el reglamentario y hay +N, aunque el reloj siga más allá del +N. */
 export function isStoppagePlay(
   state: Pick<ScoreboardState, 'sport' | 'gamePeriod' | 'timeGame'> &
     Partial<
@@ -124,9 +134,5 @@ export function isStoppagePlay(
 ): boolean {
   if (state.sport !== 'football' || state.intermissionActive) return false
   if (stoppageClockSeconds(state) <= 0) return false
-  const elapsed = parseTimeToSeconds(state.timeGame)
-  return (
-    elapsed >= regulationClockSeconds(state) &&
-    elapsed < periodEndClockSeconds(state)
-  )
+  return parseTimeToSeconds(state.timeGame) >= regulationClockSeconds(state)
 }
