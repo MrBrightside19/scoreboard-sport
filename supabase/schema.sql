@@ -7,7 +7,8 @@ create table public.profiles (
   email text not null,
   display_name text,
   role public.user_role not null default 'spectator',
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  saved_team_logos jsonb not null default '[]'::jsonb
 );
 
 create table public.matches (

@@ -13,6 +13,8 @@ import {
 } from '@/services/authService'
 import { fetchAssistantTournamentIds } from '@/services/tournamentAssistantService'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
+import { hydrateSavedTeamLogosFromProfile } from '@/services/savedTeamLogosSync'
+import { clearSavedTeamLogosCache } from '@/utils/userPreferences'
 
 export const useAuthStore = defineStore('auth', () => {
   const profile = ref<Profile | null>(null)
@@ -36,6 +38,7 @@ export const useAuthStore = defineStore('auth', () => {
       assistantTournamentIds.value = profile.value
         ? await fetchAssistantTournamentIds(profile.value.id)
         : []
+      await hydrateSavedTeamLogosFromProfile(profile.value)
       error.value = null
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Error de autenticación'
@@ -50,6 +53,7 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       await signIn(email, password)
       profile.value = await getCurrentProfile()
+      await hydrateSavedTeamLogosFromProfile(profile.value)
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Error al iniciar sesión'
       throw err
@@ -78,6 +82,7 @@ export const useAuthStore = defineStore('auth', () => {
       }
 
       profile.value = await getCurrentProfile()
+      await hydrateSavedTeamLogosFromProfile(profile.value)
       return true
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Error al registrarse'
@@ -90,6 +95,7 @@ export const useAuthStore = defineStore('auth', () => {
     profile.value = null
     assistantTournamentIds.value = []
     info.value = null
+    clearSavedTeamLogosCache()
   }
 
   async function updateDisplayName(displayName: string): Promise<void> {
@@ -112,6 +118,7 @@ export const useAuthStore = defineStore('auth', () => {
     profile.value = null
     assistantTournamentIds.value = []
     info.value = null
+    clearSavedTeamLogosCache()
     try {
       await signOut()
     } catch {
@@ -129,6 +136,7 @@ export const useAuthStore = defineStore('auth', () => {
         profile.value = null
         assistantTournamentIds.value = []
         loading.value = false
+        clearSavedTeamLogosCache()
       }
     })
   }
