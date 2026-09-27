@@ -1,4 +1,4 @@
-import { ref, onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import type { ScoreboardState, TeamPenalty } from '@/sports/scoreboardState'
 import { getLiveClockUpdateMs } from '@/config/poll'
 import {
@@ -11,6 +11,7 @@ import {
 import { clockDirection, periodEndClockSeconds } from '@/sports/clockRules'
 import { fetchMatchState } from '@/services/matchSync'
 import { normalizeScoreboardState } from '@/sports/scoreboardState'
+import { useAnimationNow } from '@/composables/useAnimationNow'
 
 export function useRemoteScoreboard(matchId: () => string | null) {
   const remoteState = ref<ScoreboardState | null>(null)
@@ -20,9 +21,9 @@ export function useRemoteScoreboard(matchId: () => string | null) {
   const displayIntermissionTime = ref('05:00')
   const displayPenaltiesLocal = ref<TeamPenalty[]>([])
   const displayPenaltiesVisit = ref<TeamPenalty[]>([])
+  const clockNow = useAnimationNow()
 
   let pollTimer: number | null = null
-  let clockTimer: number | null = null
   let pollSeq = 0
 
   function interpolatePenalties(
@@ -39,7 +40,7 @@ export function useRemoteScoreboard(matchId: () => string | null) {
       .filter((penalty) => parseTimeToSeconds(penalty.time) > 0)
   }
 
-  function interpolatedPlayTime(snapshot: ScoreboardState, now = Date.now()): string {
+  function interpolatedPlayTime(snapshot: ScoreboardState, now = clockNow.value): string {
     const direction = clockDirection(snapshot.sport)
     return interpolateClock(
       snapshot.timeGame,
@@ -146,13 +147,15 @@ export function useRemoteScoreboard(matchId: () => string | null) {
   onMounted(() => {
     void poll()
     pollTimer = window.setInterval(() => void poll(), getLiveClockUpdateMs())
-    clockTimer = window.setInterval(updateDisplayClock, 250)
+  })
+
+  watch(clockNow, () => {
+    updateDisplayClock()
   })
 
   onUnmounted(() => {
     pollSeq += 1
     if (pollTimer) clearInterval(pollTimer)
-    if (clockTimer) clearInterval(clockTimer)
   })
 
   return {

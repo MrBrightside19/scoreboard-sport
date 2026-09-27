@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { Modal } from 'ant-design-vue'
 import { useScoreboardStore } from '@/stores/scoreboard'
+import { useAnimationNow } from '@/composables/useAnimationNow'
 import { useAuthStore } from '@/stores/auth'
 import { fetchMatchState, finishMatch, publishMatchState } from '@/services/matchSync'
 import {
@@ -81,7 +82,8 @@ let lastCountdownBeepSecond: number | null = null
 let lateGameWarningKey: string | null = null
 let prevLateGameSeconds: number | null = null
 
-const dockClockTime = computed(() => store.currentDisplayClock())
+const clockNow = useAnimationNow()
+const dockClockTime = computed(() => store.currentDisplayClock(clockNow.value))
 
 const dockClockLabel = computed(() => {
   if (store.state.intermissionActive) {
@@ -1160,9 +1162,7 @@ onUnmounted(() => {
                 <div class="controls__clock">
                   <div class="controls__clock-main">
                     <div ref="clockDisplayEl" class="controls__clock-display">
-                      {{
-                        store.currentDisplayClock()
-                      }}
+                      {{ dockClockTime }}
                     </div>
                     <p class="controls__clock-status">
                       <template v-if="store.state.intermissionActive">
@@ -1185,7 +1185,7 @@ onUnmounted(() => {
                   <div class="controls__clock-panels">
                     <div class="controls__clock-field controls__clock-field--time">
                       <div class="controls__clock-field-head">
-                        <label for="controls-game-time">Ajustar tiempo</label>
+                        <label for="controls-game-time">Ajustar reloj</label>
                         <TimeInput
                           id="controls-game-time"
                           compact

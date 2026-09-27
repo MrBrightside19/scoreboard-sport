@@ -161,9 +161,10 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
   /** Avanza el reloj con el tiempo real, no con un +1 por cada setInterval. */
   function catchUpRunningClock(
     now = Date.now(),
-    options: { allowPeriodAdvance?: boolean } = {},
+    options: { allowPeriodAdvance?: boolean; materialize?: boolean } = {},
   ): boolean {
     const allowPeriodAdvance = options.allowPeriodAdvance !== false
+    const materialize = options.materialize === true
     if (syncingClock) return false
     syncingClock = true
     try {
@@ -196,8 +197,9 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
           now,
           'down',
         )
-        if (nextIntermission === state.value.intermissionTime) return false
         const ended = parseTimeToSeconds(nextIntermission) <= 0
+        if (!ended && !materialize) return false
+        if (nextIntermission === state.value.intermissionTime && !ended) return false
         state.value = {
           ...state.value,
           intermissionTime: nextIntermission,
@@ -222,6 +224,7 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
           ? parseTimeToSeconds(nextTime) >= cap
           : parseTimeToSeconds(nextTime) <= 0
 
+      if (!periodEnded && !materialize) return false
       if (playedSeconds <= 0 && !periodEnded) return false
 
       state.value = {
@@ -279,7 +282,6 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
     document.addEventListener('freeze', writerResumeHandler)
     document.addEventListener('resume', writerResumeHandler)
     window.addEventListener('pageshow', writerResumeHandler)
-    window.addEventListener('focus', writerResumeHandler)
     void requestWriterWakeLock()
   }
 
@@ -289,7 +291,6 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
       document.removeEventListener('freeze', writerResumeHandler)
       document.removeEventListener('resume', writerResumeHandler)
       window.removeEventListener('pageshow', writerResumeHandler)
-      window.removeEventListener('focus', writerResumeHandler)
       writerResumeHandler = null
     }
     if (wakeLockSentinel) {
@@ -313,7 +314,7 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
   }
 
   function patch(partial: Partial<ScoreboardState>): void {
-    catchUpRunningClock(Date.now(), { allowPeriodAdvance: false })
+    catchUpRunningClock(Date.now(), { allowPeriodAdvance: false, materialize: true })
     state.value = {
       ...state.value,
       ...partial,

@@ -345,7 +345,7 @@ const foulKinds = Object.entries(BASKETBALL_FOUL_LABELS) as Array<
                 <div class="controls__clock-panels">
                   <div class="controls__clock-field controls__clock-field--time">
                     <div class="controls__clock-field-head">
-                      <label>Ajustar tiempo</label>
+                      <label>Ajustar reloj</label>
                       <TimeInput
                         compact
                         :value="clockDraft"

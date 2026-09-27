@@ -17,10 +17,7 @@ export async function publishMatchState(
   meta: Partial<Pick<MatchRecord, 'title' | 'organizer_id' | 'is_live' | 'tournament_id' | 'court'>> = {},
 ): Promise<MatchRecord> {
   const payload = {
-    state: {
-      ...state,
-      updatedAt: new Date().toISOString(),
-    },
+    state,
     updated_at: new Date().toISOString(),
     goal_local: state.goalLocal,
     goal_visit: state.goalVisit,

@@ -552,7 +552,7 @@ function adjustStoppage(delta: number): void {
                     class="controls__clock-field controls__clock-field--adjust controls__clock-adjust"
                     :class="{ 'is-disabled': !canAdjustGameClock }"
                   >
-                    <label>Ajustar tiempo</label>
+                    <label>Ajustar reloj</label>
                     <TimeInput
                       compact
                       :value="clockDraft"
