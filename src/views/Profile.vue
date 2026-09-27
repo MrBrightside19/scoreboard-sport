@@ -18,6 +18,8 @@ import {
   MAX_COUNTDOWN_BEEP_SECONDS,
   MIN_LATE_GAME_WARNING_MINUTES,
   MAX_LATE_GAME_WARNING_MINUTES,
+  MAX_SAVED_TEAM_LOGO_NAME,
+  isHttpLogoUrl,
 } from '@/utils/userPreferences'
 import { listAvailableSports } from '@/sports/registry'
 import { DEFAULT_SPORT, type SportId } from '@/types/sport'
@@ -38,6 +40,7 @@ import type { Entitlement } from '@/types/billing'
 import { clearMatchIdFromStorage } from '@/utils/localSync'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
 import { isMobileMesaViewport } from '@/utils/mobileMesa'
+import { useSavedTeamLogos } from '@/composables/useSavedTeamLogos'
 
 type ProfileSection = 'cuenta' | 'mesa' | 'marcadores' | 'sesion'
 type BoardView = 'tv' | 'sport' | 'overlay'
@@ -121,6 +124,26 @@ const initials = computed(() => {
 const entitlement = ref<Entitlement | null>(null)
 const currentPlan = computed(() => getPlanDefinition(resolvePlan(entitlement.value)))
 const showMesaBack = ref(false)
+const {
+  logos: savedLogos,
+  selected: selectedSavedLogo,
+  selectedId: selectedSavedLogoId,
+  selectLogo,
+  addLogo,
+  removeLogo,
+} = useSavedTeamLogos()
+const showLogoModal = ref(false)
+const savingLogo = ref(false)
+const logoFormError = ref<string | null>(null)
+const logoPreviewBroken = ref(false)
+const logoForm = reactive({
+  name: '',
+  url: '',
+})
+const canAddLogo = computed(
+  () =>
+    logoForm.name.trim().length > 0 && isHttpLogoUrl(logoForm.url.trim()),
+)
 
 const roleLabel = computed(() => {
   if (auth.isOrganizer) return 'Organizador'
@@ -354,6 +377,54 @@ function togglePasswordForm(): void {
   passwordForm.next = ''
   passwordForm.confirm = ''
 }
+
+watch(
+  () => selectedSavedLogo.value?.url,
+  () => {
+    logoPreviewBroken.value = false
+  },
+)
+
+watch(
+  () => logoForm.url,
+  () => {
+    logoFormError.value = null
+  },
+)
+
+function openAddLogo(): void {
+  logoForm.name = ''
+  logoForm.url = ''
+  logoFormError.value = null
+  showLogoModal.value = true
+}
+
+function onSelectSavedLogo(id: string): void {
+  selectLogo(id || null)
+}
+
+function removeSelectedLogo(): void {
+  if (!selectedSavedLogo.value) return
+  removeLogo(selectedSavedLogo.value.id)
+  message.success('Logo quitado de la lista')
+}
+
+function confirmAddLogo(): Promise<void> {
+  logoFormError.value = null
+  savingLogo.value = true
+  try {
+    addLogo(logoForm.name, logoForm.url)
+    showLogoModal.value = false
+    message.success('Logo guardado')
+    return Promise.resolve()
+  } catch (err) {
+    logoFormError.value =
+      err instanceof Error ? err.message : 'No se pudo guardar el logo'
+    return Promise.reject(err)
+  } finally {
+    savingLogo.value = false
+  }
+}
 </script>
 
 <template>
@@ -548,68 +619,121 @@ function togglePasswordForm(): void {
                 </div>
               </div>
 
-              <div class="profile__grid">
-                <div class="profile__card">
-                  <div class="profile__card-top">
-                    <div>
-                      <h3>Cuenta regresiva final</h3>
-                      <p>
-                        Beep en los últimos
-                        {{ MIN_COUNTDOWN_BEEP_SECONDS }}–{{ MAX_COUNTDOWN_BEEP_SECONDS }} s.
-                      </p>
-                    </div>
-                    <a-switch
-                      :checked="prefs.countdownBeepEnabled"
-                      aria-label="Activar beep de cuenta regresiva"
-                      @update:checked="onBeepToggle"
-                    />
-                  </div>
-                  <div class="profile__card-controls">
-                    <label class="profile__field-label" for="profile-countdown-seconds">Inicia a los</label>
-                    <a-input-number
-                      id="profile-countdown-seconds"
-                      :value="prefs.countdownBeepSeconds"
-                      :min="MIN_COUNTDOWN_BEEP_SECONDS"
-                      :max="MAX_COUNTDOWN_BEEP_SECONDS"
-                      :disabled="!prefs.countdownBeepEnabled"
-                      addon-after="s"
-                      class="profile__seconds-input"
-                      @update:value="onBeepSecondsChange"
-                    />
-                    <a-button @click="previewCountdownBeep">Probar</a-button>
-                  </div>
+              <div class="profile__card">
+                <div>
+                  <h3>Alertas de mesa</h3>
+                  <p>Sonidos de la mesa de control para el final del tiempo y los últimos minutos.</p>
                 </div>
+                <div class="profile__alerts">
+                  <div class="profile__alert-block">
+                    <div class="profile__alert-head">
+                      <div>
+                        <h4>Cuenta regresiva final</h4>
+                        <p>
+                          Beep en los últimos
+                          {{ MIN_COUNTDOWN_BEEP_SECONDS }}–{{ MAX_COUNTDOWN_BEEP_SECONDS }} s.
+                        </p>
+                      </div>
+                      <a-switch
+                        :checked="prefs.countdownBeepEnabled"
+                        aria-label="Activar beep de cuenta regresiva"
+                        @update:checked="onBeepToggle"
+                      />
+                    </div>
+                    <div class="profile__card-controls">
+                      <label class="profile__field-label" for="profile-countdown-seconds">Inicia a los</label>
+                      <a-input-number
+                        id="profile-countdown-seconds"
+                        :value="prefs.countdownBeepSeconds"
+                        :min="MIN_COUNTDOWN_BEEP_SECONDS"
+                        :max="MAX_COUNTDOWN_BEEP_SECONDS"
+                        :disabled="!prefs.countdownBeepEnabled"
+                        addon-after="s"
+                        class="profile__seconds-input"
+                        @update:value="onBeepSecondsChange"
+                      />
+                      <a-button @click="previewCountdownBeep">Probar</a-button>
+                    </div>
+                  </div>
 
-                <div class="profile__card">
-                  <div class="profile__card-top">
-                    <div>
-                      <h3>Últimos minutos</h3>
-                      <p>
-                        Aviso al entrar en los últimos
-                        {{ MIN_LATE_GAME_WARNING_MINUTES }}–{{ MAX_LATE_GAME_WARNING_MINUTES }} min.
-                      </p>
+                  <div class="profile__alert-block">
+                    <div class="profile__alert-head">
+                      <div>
+                        <h4>Últimos minutos</h4>
+                        <p>
+                          Aviso al entrar en los últimos
+                          {{ MIN_LATE_GAME_WARNING_MINUTES }}–{{ MAX_LATE_GAME_WARNING_MINUTES }} min.
+                        </p>
+                      </div>
+                      <a-switch
+                        :checked="prefs.lateGameWarningEnabled"
+                        aria-label="Activar aviso de últimos minutos"
+                        @update:checked="onLateGameWarningToggle"
+                      />
                     </div>
-                    <a-switch
-                      :checked="prefs.lateGameWarningEnabled"
-                      aria-label="Activar aviso de últimos minutos"
-                      @update:checked="onLateGameWarningToggle"
-                    />
-                  </div>
-                  <div class="profile__card-controls">
-                    <label class="profile__field-label" for="profile-late-game-minutes">Avisa a los</label>
-                    <a-input-number
-                      id="profile-late-game-minutes"
-                      :value="prefs.lateGameWarningMinutes"
-                      :min="MIN_LATE_GAME_WARNING_MINUTES"
-                      :max="MAX_LATE_GAME_WARNING_MINUTES"
-                      :disabled="!prefs.lateGameWarningEnabled"
-                      addon-after="min"
-                      class="profile__seconds-input"
-                      @update:value="onLateGameWarningMinutesChange"
-                    />
-                    <a-button @click="previewLateGameWarning">Probar</a-button>
+                    <div class="profile__card-controls">
+                      <label class="profile__field-label" for="profile-late-game-minutes">Avisa a los</label>
+                      <a-input-number
+                        id="profile-late-game-minutes"
+                        :value="prefs.lateGameWarningMinutes"
+                        :min="MIN_LATE_GAME_WARNING_MINUTES"
+                        :max="MAX_LATE_GAME_WARNING_MINUTES"
+                        :disabled="!prefs.lateGameWarningEnabled"
+                        addon-after="min"
+                        class="profile__seconds-input"
+                        @update:value="onLateGameWarningMinutesChange"
+                      />
+                      <a-button @click="previewLateGameWarning">Probar</a-button>
+                    </div>
                   </div>
                 </div>
+              </div>
+
+              <div class="profile__card">
+                <div class="profile__card-top">
+                  <div>
+                    <h3>Logos de equipos</h3>
+                    <p>Guarda las URLs que más usas y elígelas en la mesa del marcador.</p>
+                  </div>
+                </div>
+                <div class="profile__logos">
+                  <div class="profile__logo-preview" aria-hidden="true">
+                    <img
+                      v-if="selectedSavedLogo && !logoPreviewBroken"
+                      :src="selectedSavedLogo.url"
+                      :alt="selectedSavedLogo.name"
+                      @error="logoPreviewBroken = true"
+                    />
+                    <span v-else-if="selectedSavedLogo">No se pudo cargar</span>
+                    <span v-else>Sin logo</span>
+                  </div>
+                  <a-select
+                    :value="selectedSavedLogoId"
+                    :placeholder="savedLogos.length ? 'Elegir logo' : 'Todavía no hay logos'"
+                    :disabled="!savedLogos.length"
+                    class="profile__logo-select"
+                    @update:value="onSelectSavedLogo"
+                  >
+                    <a-select-option
+                      v-for="logo in savedLogos"
+                      :key="logo.id"
+                      :value="logo.id"
+                    >
+                      {{ logo.name }}
+                    </a-select-option>
+                  </a-select>
+                  <a-button type="primary" class="profile__logo-add" @click="openAddLogo">
+                    Agregar logo
+                  </a-button>
+                </div>
+                <button
+                  v-if="selectedSavedLogo"
+                  type="button"
+                  class="profile__text-link"
+                  @click="removeSelectedLogo"
+                >
+                  Quitar de la lista
+                </button>
               </div>
             </section>
 
@@ -742,6 +866,48 @@ function togglePasswordForm(): void {
             </section>
           </div>
         </div>
+
+        <a-modal
+          v-model:open="showLogoModal"
+          title="Agregar logo"
+          ok-text="Guardar logo"
+          cancel-text="Cancelar"
+          :confirm-loading="savingLogo"
+          :ok-button-props="{ disabled: !canAddLogo }"
+          destroy-on-close
+          @ok="confirmAddLogo"
+        >
+          <p class="profile__delete-copy">
+            El nombre identifica al equipo en la lista. La URL es la imagen que verá el marcador.
+          </p>
+          <a-form layout="vertical">
+            <a-form-item label="Nombre del equipo">
+              <a-input
+                v-model:value="logoForm.name"
+                :maxlength="MAX_SAVED_TEAM_LOGO_NAME"
+                show-count
+                placeholder="Tiburones"
+              />
+            </a-form-item>
+            <a-form-item label="URL del logo">
+              <a-input
+                v-model:value="logoForm.url"
+                placeholder="https://…"
+                @pressEnter="canAddLogo && confirmAddLogo()"
+              />
+            </a-form-item>
+          </a-form>
+          <div v-if="isHttpLogoUrl(logoForm.url.trim())" class="profile__logo-modal-preview">
+            <img :src="logoForm.url.trim()" alt="" />
+          </div>
+          <a-alert
+            v-if="logoFormError"
+            type="error"
+            :message="logoFormError"
+            show-icon
+            class="profile__alert profile__alert--modal"
+          />
+        </a-modal>
 
         <a-modal
           v-model:open="showDeleteModal"
@@ -972,10 +1138,13 @@ function togglePasswordForm(): void {
 
 .profile__pane {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
 }
 
 .profile__pane-head {
-  margin-bottom: 1rem;
+  margin-bottom: 0;
 
   h2 {
     margin: 0;
@@ -1046,6 +1215,46 @@ function togglePasswordForm(): void {
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.85rem;
+}
+
+.profile__alerts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem 1.1rem;
+  width: 100%;
+}
+
+.profile__alert-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.profile__alert-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+
+  h4 {
+    margin: 0;
+    font-size: 0.92rem;
+    font-weight: 650;
+  }
+
+  p {
+    margin: 0.2rem 0 0;
+    font-size: 0.78rem;
+    color: var(--app-text-muted);
+    line-height: 1.4;
+  }
+
+  :deep(.ant-switch) {
+    flex-shrink: 0;
+    align-self: center;
+  }
 }
 
 .profile__card-controls {
@@ -1154,9 +1363,77 @@ function togglePasswordForm(): void {
   font-weight: 650;
   color: var(--app-link);
   text-decoration: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
 
   &:hover {
     text-decoration: underline;
+  }
+}
+
+.profile__logos {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+  width: 100%;
+}
+
+.profile__logo-preview {
+  width: 5.5rem;
+  height: 5.5rem;
+  border-radius: 12px;
+  border: 1px solid var(--app-border);
+  background:
+    repeating-conic-gradient(
+        rgba(128, 128, 128, 0.18) 0% 25%,
+        transparent 0% 50%
+      )
+      50% / 12px 12px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #fff;
+  }
+
+  span {
+    font-size: 0.68rem;
+    color: var(--app-text-muted);
+    text-align: center;
+    padding: 0.35rem;
+    line-height: 1.3;
+  }
+}
+
+.profile__logo-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.profile__logo-add {
+  white-space: nowrap;
+}
+
+.profile__logo-modal-preview {
+  width: 5.5rem;
+  height: 5.5rem;
+  margin: 0 0 0.75rem;
+  border-radius: 12px;
+  border: 1px solid var(--app-border);
+  overflow: hidden;
+  background: #fff;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
   }
 }
 
@@ -1246,11 +1523,48 @@ function togglePasswordForm(): void {
   .profile__grid,
   .profile__password-grid {
     grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .profile__pane {
+    gap: 1rem;
   }
 
   .profile__card-top {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .profile__alerts {
+    grid-template-columns: 1fr;
+    gap: 0.85rem;
+  }
+
+  .profile__alert-block + .profile__alert-block {
+    padding-top: 0.85rem;
+    border-top: 1px solid var(--app-border);
+  }
+
+  .profile__alert-head {
+    align-items: center;
+
+    :deep(.ant-switch) {
+      flex-shrink: 0;
+      width: auto;
+    }
+  }
+
+  .profile__logos {
+    grid-template-columns: 4.5rem minmax(0, 1fr);
+
+    .profile__logo-preview {
+      width: 4.5rem;
+      height: 4.5rem;
+    }
+
+    .profile__logo-add {
+      grid-column: 1 / -1;
+    }
   }
 }
 </style>

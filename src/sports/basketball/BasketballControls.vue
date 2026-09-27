@@ -5,6 +5,7 @@ import ControlsShell from '@/components/controls/ControlsShell.vue'
 import ControlsClockDock from '@/components/controls/ControlsClockDock.vue'
 import ControlsMatchEndCard from '@/components/controls/ControlsMatchEndCard.vue'
 import ControlsOperatorLinks from '@/components/controls/ControlsOperatorLinks.vue'
+import TeamLogoField from '@/components/TeamLogoField.vue'
 import { getSportModule } from '@/sports/registry'
 import { useMatchOperatorSession } from '@/composables/useMatchOperatorSession'
 import { useControlsClockDock } from '@/composables/useControlsClockDock'
@@ -245,11 +246,10 @@ const foulKinds = Object.entries(BASKETBALL_FOUL_LABELS) as Array<
                   show-count
                   @update:value="(v: string) => store.setTeams(v, store.state.visitTeam)"
                 />
-                <a-input
-                  :value="store.state.localLogo"
-                  size="small"
+                <TeamLogoField
+                  :model-value="store.state.localLogo"
                   placeholder="URL logo local"
-                  @update:value="(v: string) => store.setTeamLogos(v, store.state.visitLogo)"
+                  @update:model-value="(v: string) => store.setTeamLogos(v, store.state.visitLogo)"
                 />
                 <a-input
                   :value="store.state.localColor"
@@ -284,11 +284,10 @@ const foulKinds = Object.entries(BASKETBALL_FOUL_LABELS) as Array<
                   show-count
                   @update:value="(v: string) => store.setTeams(store.state.localTeam, v)"
                 />
-                <a-input
-                  :value="store.state.visitLogo"
-                  size="small"
+                <TeamLogoField
+                  :model-value="store.state.visitLogo"
                   placeholder="URL logo visita"
-                  @update:value="(v: string) => store.setTeamLogos(store.state.localLogo, v)"
+                  @update:model-value="(v: string) => store.setTeamLogos(store.state.localLogo, v)"
                 />
                 <a-input
                   :value="store.state.visitColor"

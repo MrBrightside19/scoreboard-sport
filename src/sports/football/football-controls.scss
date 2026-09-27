@@ -1269,6 +1269,23 @@ $football-short: 520px;
     padding-bottom: 0.35rem;
   }
 
+  .football-controls .football-config__teams {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.55rem;
+  }
+
+  .football-controls .football-config__team {
+    gap: 0.3rem;
+
+    > span {
+      font-size: 0.68rem;
+    }
+
+    > strong {
+      font-size: 0.82rem;
+    }
+  }
+
   .football-controls .football-config .ant-card {
     flex: 0 0 auto;
   }

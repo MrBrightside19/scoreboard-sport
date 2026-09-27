@@ -5,6 +5,7 @@ import ControlsShell from '@/components/controls/ControlsShell.vue'
 import ControlsClockDock from '@/components/controls/ControlsClockDock.vue'
 import ControlsMatchEndCard from '@/components/controls/ControlsMatchEndCard.vue'
 import ControlsOperatorLinks from '@/components/controls/ControlsOperatorLinks.vue'
+import TeamLogoField from '@/components/TeamLogoField.vue'
 import { getSportModule } from '@/sports/registry'
 import { isPeriodPlayFinished, isStoppagePlay, periodEndClockSeconds } from '@/sports/clockRules'
 import { useMatchOperatorSession } from '@/composables/useMatchOperatorSession'
@@ -862,11 +863,12 @@ function adjustStoppage(delta: number): void {
               <label class="football-config__team">
                 <span>Logo local</span>
                 <strong>{{ store.state.localTeam }}</strong>
-                <a-input
-                  :value="store.state.localLogo"
+                <TeamLogoField
+                  :model-value="store.state.localLogo"
+                  :alt="store.state.localTeam"
+                  preview-side="left"
                   placeholder="URL logo local"
-                  allow-clear
-                  @update:value="(v: string) => store.setTeamLogos(v, store.state.visitLogo)"
+                  @update:model-value="(v: string) => store.setTeamLogos(v, store.state.visitLogo)"
                 />
                 <a-input
                   :value="store.state.localColor"
@@ -879,11 +881,11 @@ function adjustStoppage(delta: number): void {
               <label class="football-config__team">
                 <span>Logo visita</span>
                 <strong>{{ store.state.visitTeam }}</strong>
-                <a-input
-                  :value="store.state.visitLogo"
+                <TeamLogoField
+                  :model-value="store.state.visitLogo"
+                  :alt="store.state.visitTeam"
                   placeholder="URL logo visita"
-                  allow-clear
-                  @update:value="(v: string) => store.setTeamLogos(store.state.localLogo, v)"
+                  @update:model-value="(v: string) => store.setTeamLogos(store.state.localLogo, v)"
                 />
                 <a-input
                   :value="store.state.visitColor"
