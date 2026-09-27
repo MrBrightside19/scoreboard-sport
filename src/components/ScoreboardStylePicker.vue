@@ -181,6 +181,7 @@ function isSelected(id: string): boolean {
 <style scoped lang="scss">
 .style-picker {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 0.75rem;
   width: 100%;
 }

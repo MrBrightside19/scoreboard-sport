@@ -13,12 +13,21 @@ export function kickoffClock(sportId: string): string {
 }
 
 type RegulationState = Pick<ScoreboardState, 'sport' | 'gamePeriod'> &
-  Partial<Pick<ScoreboardState, 'footballPeriodLength' | 'footballStoppageMinutes'>>
+  Partial<
+    Pick<
+      ScoreboardState,
+      'footballPeriodLength' | 'footballExtraTimeLength' | 'footballStoppageMinutes'
+    >
+  >
 
 /** Segundos reglamentarios del periodo actual (45′ / 15′ en fútbol, etc.). */
 export function regulationClockSeconds(state: RegulationState): number {
   const sport = getSportModule(state.sport)
   if (sport.clock.overtimePeriodTime && state.gamePeriod > sport.clock.periods) {
+    if (state.sport === 'football' && state.footballExtraTimeLength) {
+      const extra = parseTimeToSeconds(state.footballExtraTimeLength)
+      if (extra >= 60) return extra
+    }
     return parseTimeToSeconds(sport.clock.overtimePeriodTime)
   }
   if (state.sport === 'football' && state.footballPeriodLength) {
@@ -55,7 +64,7 @@ export function isCountUpSport(sportId: SportId | string): boolean {
 /** Segundos que restan del periodo (cuenta atrás = el reloj; cuenta arriba = cupo − transcurrido). */
 export function remainingClockSeconds(
   state: Pick<ScoreboardState, 'sport' | 'gamePeriod' | 'timeGame'> &
-    Partial<Pick<ScoreboardState, 'footballPeriodLength'>>,
+    Partial<Pick<ScoreboardState, 'footballPeriodLength' | 'footballExtraTimeLength'>>,
 ): number {
   const elapsed = parseTimeToSeconds(state.timeGame)
   if (!isCountUpSport(state.sport)) return elapsed
@@ -65,7 +74,12 @@ export function remainingClockSeconds(
 /** Segundos que restan hasta el tope (duración + descuento en fútbol). */
 export function remainingUntilPeriodEndSeconds(
   state: Pick<ScoreboardState, 'sport' | 'gamePeriod' | 'timeGame'> &
-    Partial<Pick<ScoreboardState, 'footballPeriodLength' | 'footballStoppageMinutes'>>,
+    Partial<
+      Pick<
+        ScoreboardState,
+        'footballPeriodLength' | 'footballExtraTimeLength' | 'footballStoppageMinutes'
+      >
+    >,
 ): number {
   const elapsed = parseTimeToSeconds(state.timeGame)
   if (!isCountUpSport(state.sport)) return elapsed
@@ -74,7 +88,7 @@ export function remainingUntilPeriodEndSeconds(
 
 export function isRegulationElapsed(
   state: Pick<ScoreboardState, 'sport' | 'gamePeriod' | 'timeGame'> &
-    Partial<Pick<ScoreboardState, 'footballPeriodLength'>>,
+    Partial<Pick<ScoreboardState, 'footballPeriodLength' | 'footballExtraTimeLength'>>,
 ): boolean {
   if (!isCountUpSport(state.sport)) {
     return parseTimeToSeconds(state.timeGame) <= 0
@@ -85,7 +99,12 @@ export function isRegulationElapsed(
 /** El tiempo (y su descuento) ya se cumplió: ahí corresponde el descanso. */
 export function isPeriodPlayFinished(
   state: Pick<ScoreboardState, 'sport' | 'gamePeriod' | 'timeGame'> &
-    Partial<Pick<ScoreboardState, 'footballPeriodLength' | 'footballStoppageMinutes'>>,
+    Partial<
+      Pick<
+        ScoreboardState,
+        'footballPeriodLength' | 'footballExtraTimeLength' | 'footballStoppageMinutes'
+      >
+    >,
 ): boolean {
   if (!isCountUpSport(state.sport)) {
     return parseTimeToSeconds(state.timeGame) <= 0
@@ -99,7 +118,7 @@ export function isStoppagePlay(
     Partial<
       Pick<
         ScoreboardState,
-        'footballPeriodLength' | 'footballStoppageMinutes' | 'intermissionActive'
+        'footballPeriodLength' | 'footballExtraTimeLength' | 'footballStoppageMinutes' | 'intermissionActive'
       >
     >,
 ): boolean {

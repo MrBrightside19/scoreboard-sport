@@ -10,6 +10,7 @@ import {
   DEFAULT_TV_SCOREBOARD_STYLE,
 } from '@/config/scoreboardStyles'
 import { parseSportId, type SportId } from '@/types/sport'
+import { generateId } from '@/utils/id'
 
 const ALL_SPORTS: SportId[] = ['hockey', 'futsal', 'basketball', 'football']
 
@@ -34,6 +35,16 @@ export interface UserPreferences {
   tvScoreboardStyles: Partial<Record<SportId, TvScoreboardStyle>>
   /** Estilo del overlay OBS. */
   overlayScoreboardStyle: OverlayScoreboardStyle
+  /** Logos de equipos guardados para reutilizar en los marcadores. */
+  savedTeamLogos: SavedTeamLogo[]
+  /** Logo de la biblioteca que se muestra en Perfil. */
+  selectedSavedLogoId: string | null
+}
+
+export interface SavedTeamLogo {
+  id: string
+  name: string
+  url: string
 }
 
 export const DEFAULT_COUNTDOWN_BEEP_SECONDS = 10
@@ -44,6 +55,9 @@ export const DEFAULT_LATE_GAME_WARNING_MINUTES = 2
 export const MIN_LATE_GAME_WARNING_MINUTES = 1
 export const MAX_LATE_GAME_WARNING_MINUTES = 5
 
+export const MAX_SAVED_TEAM_LOGOS = 24
+export const MAX_SAVED_TEAM_LOGO_NAME = 40
+
 const DEFAULTS: UserPreferences = {
   countdownBeepEnabled: true,
   countdownBeepSeconds: DEFAULT_COUNTDOWN_BEEP_SECONDS,
@@ -53,6 +67,8 @@ const DEFAULTS: UserPreferences = {
   tvScoreboardStyle: DEFAULT_TV_SCOREBOARD_STYLE,
   tvScoreboardStyles: {},
   overlayScoreboardStyle: DEFAULT_OVERLAY_SCOREBOARD_STYLE,
+  savedTeamLogos: [],
+  selectedSavedLogoId: null,
 }
 
 function clampCountdownSeconds(value: unknown): number {
@@ -77,6 +93,45 @@ function normalizeTheme(value: unknown): AppTheme {
   return value === 'light' ? 'light' : 'dark'
 }
 
+export function isHttpLogoUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+function normalizeSavedTeamLogos(raw: unknown): SavedTeamLogo[] {
+  if (!Array.isArray(raw)) return []
+  const logos: SavedTeamLogo[] = []
+  const seenUrls = new Set<string>()
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const row = item as Record<string, unknown>
+    const name = String(row.name ?? '')
+      .trim()
+      .slice(0, MAX_SAVED_TEAM_LOGO_NAME)
+    const url = String(row.url ?? '').trim()
+    const id = String(row.id ?? '').trim() || generateId()
+    if (!name || !isHttpLogoUrl(url) || seenUrls.has(url)) continue
+    seenUrls.add(url)
+    logos.push({ id, name, url })
+    if (logos.length >= MAX_SAVED_TEAM_LOGOS) break
+  }
+  return logos
+}
+
+function normalizeSelectedSavedLogoId(
+  raw: unknown,
+  logos: SavedTeamLogo[],
+): string | null {
+  if (!logos.length) return null
+  const id = typeof raw === 'string' ? raw : ''
+  if (id && logos.some((logo) => logo.id === id)) return id
+  return logos[0]?.id ?? null
+}
+
 function readRaw(): Partial<UserPreferences> {
   try {
     const raw = localStorage.getItem(PREFS_KEY)
@@ -89,6 +144,7 @@ function readRaw(): Partial<UserPreferences> {
 
 export function getUserPreferences(): UserPreferences {
   const stored = readRaw()
+  const savedTeamLogos = normalizeSavedTeamLogos(stored.savedTeamLogos)
   return {
     countdownBeepEnabled:
       typeof stored.countdownBeepEnabled === 'boolean'
@@ -113,6 +169,11 @@ export function getUserPreferences(): UserPreferences {
     ),
     overlayScoreboardStyle: normalizeOverlayScoreboardStyle(
       stored.overlayScoreboardStyle ?? DEFAULTS.overlayScoreboardStyle,
+    ),
+    savedTeamLogos,
+    selectedSavedLogoId: normalizeSelectedSavedLogoId(
+      stored.selectedSavedLogoId,
+      savedTeamLogos,
     ),
   }
 }
@@ -167,7 +228,17 @@ export function setUserPreferences(partial: Partial<UserPreferences>): UserPrefe
     overlayScoreboardStyle: normalizeOverlayScoreboardStyle(
       partial.overlayScoreboardStyle ?? current.overlayScoreboardStyle,
     ),
+    savedTeamLogos: normalizeSavedTeamLogos(
+      partial.savedTeamLogos ?? current.savedTeamLogos,
+    ),
+    selectedSavedLogoId: null,
   }
+  next.selectedSavedLogoId = normalizeSelectedSavedLogoId(
+    partial.selectedSavedLogoId !== undefined
+      ? partial.selectedSavedLogoId
+      : current.selectedSavedLogoId,
+    next.savedTeamLogos,
+  )
   localStorage.setItem(PREFS_KEY, JSON.stringify(next))
   window.dispatchEvent(new Event('scoreboard:prefs-change'))
   if (partial.theme !== undefined) {
@@ -283,6 +354,48 @@ export function clearSportTvStyleOverride(sport: SportId): UserPreferences {
 
 export function getOverlayScoreboardStyle(): OverlayScoreboardStyle {
   return getUserPreferences().overlayScoreboardStyle
+}
+
+export function getSavedTeamLogos(): SavedTeamLogo[] {
+  return getUserPreferences().savedTeamLogos
+}
+
+export function addSavedTeamLogo(name: string, url: string): SavedTeamLogo {
+  const current = getUserPreferences()
+  const trimmedName = name.trim().slice(0, MAX_SAVED_TEAM_LOGO_NAME)
+  const trimmedUrl = url.trim()
+  if (!trimmedName) throw new Error('Escribe el nombre del equipo.')
+  if (!isHttpLogoUrl(trimmedUrl)) {
+    throw new Error('La URL del logo debe empezar por http:// o https://.')
+  }
+  if (current.savedTeamLogos.some((logo) => logo.url === trimmedUrl)) {
+    throw new Error('Esa URL ya está en tu lista.')
+  }
+  if (current.savedTeamLogos.length >= MAX_SAVED_TEAM_LOGOS) {
+    throw new Error(`Puedes guardar hasta ${MAX_SAVED_TEAM_LOGOS} logos.`)
+  }
+  const logo: SavedTeamLogo = {
+    id: generateId(),
+    name: trimmedName,
+    url: trimmedUrl,
+  }
+  setUserPreferences({
+    savedTeamLogos: [...current.savedTeamLogos, logo],
+    selectedSavedLogoId: logo.id,
+  })
+  return logo
+}
+
+export function removeSavedTeamLogo(id: string): UserPreferences {
+  const current = getUserPreferences()
+  const savedTeamLogos = current.savedTeamLogos.filter((logo) => logo.id !== id)
+  const selectedSavedLogoId =
+    current.selectedSavedLogoId === id ? null : current.selectedSavedLogoId
+  return setUserPreferences({ savedTeamLogos, selectedSavedLogoId })
+}
+
+export function setSelectedSavedLogoId(id: string | null): UserPreferences {
+  return setUserPreferences({ selectedSavedLogoId: id })
 }
 
 export function applyAppTheme(theme: AppTheme = getAppTheme()): void {

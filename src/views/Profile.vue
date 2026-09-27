@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -18,6 +18,8 @@ import {
   MAX_COUNTDOWN_BEEP_SECONDS,
   MIN_LATE_GAME_WARNING_MINUTES,
   MAX_LATE_GAME_WARNING_MINUTES,
+  MAX_SAVED_TEAM_LOGO_NAME,
+  isHttpLogoUrl,
 } from '@/utils/userPreferences'
 import { listAvailableSports } from '@/sports/registry'
 import { DEFAULT_SPORT, type SportId } from '@/types/sport'
@@ -38,8 +40,20 @@ import type { Entitlement } from '@/types/billing'
 import { clearMatchIdFromStorage } from '@/utils/localSync'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
 import { isMobileMesaViewport } from '@/utils/mobileMesa'
+import { useSavedTeamLogos } from '@/composables/useSavedTeamLogos'
+
+type ProfileSection = 'cuenta' | 'mesa' | 'marcadores' | 'sesion'
+type BoardView = 'tv' | 'sport' | 'overlay'
+
+const PROFILE_SECTIONS: { id: ProfileSection; label: string; hint: string }[] = [
+  { id: 'cuenta', label: 'Cuenta', hint: 'Nombre y acceso' },
+  { id: 'mesa', label: 'Mesa', hint: 'Sonidos y tema' },
+  { id: 'marcadores', label: 'Marcadores', hint: 'TV y overlay' },
+  { id: 'sesion', label: 'Sesión', hint: 'Salir o eliminar' },
+]
 
 const auth = useAuthStore()
+const route = useRoute()
 const router = useRouter()
 
 const savingProfile = ref(false)
@@ -65,21 +79,71 @@ const passwordForm = reactive({
 const prefs = reactive<UserPreferences>({
   ...getUserPreferences(),
 })
-const boardSport = ref<SportId>(DEFAULT_SPORT)
-const designSport = ref<SportId>('hockey')
+const previewSport = ref<SportId>(DEFAULT_SPORT)
+const boardView = ref<BoardView>('tv')
+const passwordOpen = ref(false)
 const sports = listAvailableSports()
 const sharedTvStyle = computed(() => getSharedTvScoreboardStyle())
-const currentTvStyle = computed(() => getTvScoreboardStyle(designSport.value))
+const currentTvStyle = computed(() => getTvScoreboardStyle(previewSport.value))
 const designSportHasSpecific = computed(
-  () => sportSpecificTvStyles(designSport.value).length > 0,
+  () => sportSpecificTvStyles(previewSport.value).length > 0,
 )
 const designSportUsesSpecific = computed(() =>
-  isUsingSportSpecificTvStyle(designSport.value),
+  isUsingSportSpecificTvStyle(previewSport.value),
 )
+const previewSportLabel = computed(
+  () => sports.find((item) => item.id === previewSport.value)?.label ?? '',
+)
+
+function isProfileSection(value: unknown): value is ProfileSection {
+  return PROFILE_SECTIONS.some((item) => item.id === value)
+}
+
+const section = computed<ProfileSection>({
+  get() {
+    return isProfileSection(route.query.seccion) ? route.query.seccion : 'cuenta'
+  },
+  set(next) {
+    void router.replace({ query: { ...route.query, seccion: next } })
+  },
+})
+
+const initials = computed(() => {
+  const name = form.displayName.trim()
+  if (name) {
+    const parts = name.split(/\s+/).filter(Boolean)
+    if (parts.length >= 2) {
+      return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase()
+    }
+    return name.slice(0, 2).toUpperCase()
+  }
+  const email = auth.profile?.email ?? '?'
+  return email.slice(0, 2).toUpperCase()
+})
 
 const entitlement = ref<Entitlement | null>(null)
 const currentPlan = computed(() => getPlanDefinition(resolvePlan(entitlement.value)))
 const showMesaBack = ref(false)
+const {
+  logos: savedLogos,
+  selected: selectedSavedLogo,
+  selectedId: selectedSavedLogoId,
+  selectLogo,
+  addLogo,
+  removeLogo,
+} = useSavedTeamLogos()
+const showLogoModal = ref(false)
+const savingLogo = ref(false)
+const logoFormError = ref<string | null>(null)
+const logoPreviewBroken = ref(false)
+const logoForm = reactive({
+  name: '',
+  url: '',
+})
+const canAddLogo = computed(
+  () =>
+    logoForm.name.trim().length > 0 && isHttpLogoUrl(logoForm.url.trim()),
+)
 
 const roleLabel = computed(() => {
   if (auth.isOrganizer) return 'Organizador'
@@ -169,6 +233,7 @@ async function savePassword(): Promise<void> {
     passwordForm.current = ''
     passwordForm.next = ''
     passwordForm.confirm = ''
+    passwordOpen.value = false
     message.success('Contraseña actualizada')
   } catch (err) {
     passwordError.value =
@@ -249,14 +314,14 @@ function onSharedTvStyleChange(style: TvScoreboardStyle | OverlayScoreboardStyle
 function onSportTvStyleChange(style: TvScoreboardStyle | OverlayScoreboardStyle): void {
   const next = style as TvScoreboardStyle
   if (isSharedTvStyle(next) || currentTvStyle.value === next) return
-  const updated = setTvScoreboardStyle(designSport.value, next)
+  const updated = setTvScoreboardStyle(previewSport.value, next)
   Object.assign(prefs, updated)
   message.success('Diseño exclusivo de marcador actualizado')
 }
 
 function useSharedThemeForSport(): void {
   if (!designSportUsesSpecific.value) return
-  const updated = clearSportTvStyleOverride(designSport.value)
+  const updated = clearSportTvStyleOverride(previewSport.value)
   Object.assign(prefs, updated)
   message.success('Marcador vuelve al tema compartido')
 }
@@ -303,6 +368,63 @@ async function confirmDeleteAccount(): Promise<void> {
     deletingAccount.value = false
   }
 }
+
+function togglePasswordForm(): void {
+  passwordOpen.value = !passwordOpen.value
+  if (passwordOpen.value) return
+  passwordError.value = null
+  passwordForm.current = ''
+  passwordForm.next = ''
+  passwordForm.confirm = ''
+}
+
+watch(
+  () => selectedSavedLogo.value?.url,
+  () => {
+    logoPreviewBroken.value = false
+  },
+)
+
+watch(
+  () => logoForm.url,
+  () => {
+    logoFormError.value = null
+  },
+)
+
+function openAddLogo(): void {
+  logoForm.name = ''
+  logoForm.url = ''
+  logoFormError.value = null
+  showLogoModal.value = true
+}
+
+function onSelectSavedLogo(id: string): void {
+  selectLogo(id || null)
+}
+
+function removeSelectedLogo(): void {
+  if (!selectedSavedLogo.value) return
+  removeLogo(selectedSavedLogo.value.id)
+  message.success('Logo quitado de la lista')
+}
+
+function confirmAddLogo(): Promise<void> {
+  logoFormError.value = null
+  savingLogo.value = true
+  try {
+    addLogo(logoForm.name, logoForm.url)
+    showLogoModal.value = false
+    message.success('Logo guardado')
+    return Promise.resolve()
+  } catch (err) {
+    logoFormError.value =
+      err instanceof Error ? err.message : 'No se pudo guardar el logo'
+    return Promise.reject(err)
+  } finally {
+    savingLogo.value = false
+  }
+}
 </script>
 
 <template>
@@ -316,383 +438,476 @@ async function confirmDeleteAccount(): Promise<void> {
         >
           Volver a la mesa
         </router-link>
+        <p class="profile__eyebrow">Ajustes</p>
         <h1>Perfil</h1>
-        <p>Tu cuenta y las preferencias del sistema en este navegador.</p>
+        <p>Cuenta, mesa y marcadores, en un solo lugar.</p>
       </header>
 
       <template v-if="auth.profile">
-        <section class="profile__panel" aria-labelledby="profile-account">
-          <div class="profile__panel-head">
-            <div>
-              <h2 id="profile-account">Cuenta</h2>
-              <p class="profile__desc">
-                Datos visibles en la app. El email no se puede cambiar desde aquí.
-              </p>
-            </div>
-          </div>
-
-          <a-form layout="vertical" class="profile__form" @submit.prevent="saveProfile">
-            <a-form-item label="Nombre para mostrar">
-              <a-input
-                v-model:value="form.displayName"
-                :maxlength="40"
-                show-count
-                placeholder="Tu nombre"
-              />
-            </a-form-item>
-
-            <a-form-item label="Email">
-              <a-input :value="auth.profile.email" disabled />
-            </a-form-item>
-
-            <a-form-item label="Rol">
-              <div class="profile__role">
-                <a-tag>{{ roleLabel }}</a-tag>
-                <span class="profile__role-hint">{{ roleHint }}</span>
+        <div class="profile__shell">
+          <aside class="profile__rail">
+            <div class="profile__id">
+              <span class="profile__avatar" aria-hidden="true">{{ initials }}</span>
+              <div class="profile__id-copy">
+                <strong>{{ form.displayName.trim() || 'Sin nombre' }}</strong>
+                <span>{{ auth.profile.email }}</span>
+                <div class="profile__chips">
+                  <span class="profile__chip">{{ roleLabel }}</span>
+                  <RouterLink class="profile__chip profile__chip--plan" :to="{ name: 'plans' }">
+                    Plan {{ currentPlan.name }}
+                  </RouterLink>
+                </div>
               </div>
-            </a-form-item>
+            </div>
 
-            <a-alert
-              v-if="profileError"
-              type="error"
-              :message="profileError"
-              show-icon
-              class="profile__alert"
-            />
-
-            <div class="profile__actions">
-              <a-button
-                type="primary"
-                html-type="submit"
-                :loading="savingProfile"
-                :disabled="!displayNameDirty"
+            <nav class="profile__nav" aria-label="Secciones del perfil">
+              <button
+                v-for="item in PROFILE_SECTIONS"
+                :key="item.id"
+                type="button"
+                class="profile__nav-item"
+                :class="{ 'profile__nav-item--active': section === item.id }"
+                :aria-current="section === item.id ? 'page' : undefined"
+                @click="section = item.id"
               >
-                Guardar cambios
-              </a-button>
-            </div>
-          </a-form>
-        </section>
+                <strong>{{ item.label }}</strong>
+                <span>{{ item.hint }}</span>
+              </button>
+            </nav>
+          </aside>
 
-        <section class="profile__panel" aria-labelledby="profile-plan">
-          <div class="profile__panel-head">
-            <div>
-              <h2 id="profile-plan">Plan</h2>
-              <p class="profile__desc">
-                Ahora mismo: {{ currentPlan.name }}. El live público no consume plan.
-              </p>
-            </div>
-            <RouterLink :to="{ name: 'plans' }">
-              <a-button type="primary">Ver planes</a-button>
-            </RouterLink>
-          </div>
-        </section>
-
-        <section class="profile__panel" aria-labelledby="profile-password">
-          <div class="profile__panel-head">
-            <div>
-              <h2 id="profile-password">Contraseña</h2>
-              <p class="profile__desc">
-                Cambia tu contraseña. Necesitas la actual para confirmar el cambio.
-              </p>
-            </div>
-          </div>
-
-          <a-form layout="vertical" class="profile__form" @submit.prevent="savePassword">
-            <a-form-item label="Contraseña actual">
-              <a-input-password
-                v-model:value="passwordForm.current"
-                autocomplete="current-password"
-                placeholder="Tu contraseña actual"
-              />
-            </a-form-item>
-
-            <a-form-item label="Nueva contraseña">
-              <a-input-password
-                v-model:value="passwordForm.next"
-                autocomplete="new-password"
-                placeholder="Mínimo 6 caracteres"
-              />
-            </a-form-item>
-
-            <a-form-item label="Confirmar nueva contraseña">
-              <a-input-password
-                v-model:value="passwordForm.confirm"
-                autocomplete="new-password"
-                placeholder="Repite la nueva contraseña"
-              />
-            </a-form-item>
-
-            <a-alert
-              v-if="passwordError"
-              type="error"
-              :message="passwordError"
-              show-icon
-              class="profile__alert"
-            />
-
-            <div class="profile__actions">
-              <a-button
-                type="primary"
-                html-type="submit"
-                :loading="savingPassword"
-                :disabled="!canSubmitPassword"
-              >
-                Cambiar contraseña
-              </a-button>
-            </div>
-          </a-form>
-        </section>
-
-        <section class="profile__panel" aria-labelledby="profile-system">
-          <div class="profile__panel-head">
-            <div>
-              <h2 id="profile-system">Configuración del sistema</h2>
-              <p class="profile__desc">
-                Preferencias de este navegador. No se sincronizan entre dispositivos.
-              </p>
-            </div>
-          </div>
-
-          <div class="profile__pref-groups">
-            <section class="profile__pref-group" aria-labelledby="profile-alerts">
-              <header class="profile__pref-group-head">
-                <h3 id="profile-alerts">Alertas de mesa</h3>
-                <p>
-                  Sonidos de la mesa de control para árbitros y operadores.
-                </p>
+          <div class="profile__stage">
+            <section v-if="section === 'cuenta'" class="profile__pane" aria-labelledby="profile-account">
+              <header class="profile__pane-head">
+                <h2 id="profile-account">Cuenta</h2>
+                <p>Datos visibles en la app. El email no se cambia desde aquí.</p>
               </header>
 
-              <div class="profile__pref-card">
-                <div class="profile__pref-card-top">
-                  <div class="profile__pref-card-copy">
-                    <h4>Cuenta regresiva final</h4>
-                    <p>
-                      Beep corto en los últimos segundos del reloj
-                      ({{ MIN_COUNTDOWN_BEEP_SECONDS }}–{{ MAX_COUNTDOWN_BEEP_SECONDS }} s;
-                      por defecto 10).
-                    </p>
-                  </div>
-                  <a-switch
-                    :checked="prefs.countdownBeepEnabled"
-                    aria-label="Activar beep de cuenta regresiva"
-                    @update:checked="onBeepToggle"
+              <div class="profile__grid">
+                <a-form layout="vertical" class="profile__card" @submit.prevent="saveProfile">
+                  <h3>Identidad</h3>
+                  <a-form-item label="Nombre para mostrar">
+                    <a-input
+                      v-model:value="form.displayName"
+                      :maxlength="40"
+                      show-count
+                      placeholder="Tu nombre"
+                    />
+                  </a-form-item>
+                  <a-form-item label="Email">
+                    <a-input :value="auth.profile.email" disabled />
+                  </a-form-item>
+                  <a-alert
+                    v-if="profileError"
+                    type="error"
+                    :message="profileError"
+                    show-icon
+                    class="profile__alert"
                   />
-                </div>
-                <div class="profile__pref-card-controls">
-                  <label class="profile__field-label" for="profile-countdown-seconds">
-                    Inicia a los
-                  </label>
-                  <a-input-number
-                    id="profile-countdown-seconds"
-                    :value="prefs.countdownBeepSeconds"
-                    :min="MIN_COUNTDOWN_BEEP_SECONDS"
-                    :max="MAX_COUNTDOWN_BEEP_SECONDS"
-                    :disabled="!prefs.countdownBeepEnabled"
-                    addon-after="s"
-                    class="profile__seconds-input"
-                    @update:value="onBeepSecondsChange"
-                  />
-                  <a-button @click="previewCountdownBeep">
-                    Probar sonido
+                  <a-button
+                    type="primary"
+                    html-type="submit"
+                    :loading="savingProfile"
+                    :disabled="!displayNameDirty"
+                  >
+                    Guardar nombre
                   </a-button>
+                </a-form>
+
+                <div class="profile__card">
+                  <h3>Rol y plan</h3>
+                  <p class="profile__role-hint">{{ roleHint }}</p>
+                  <div class="profile__chips">
+                    <span class="profile__chip">{{ roleLabel }}</span>
+                    <span class="profile__chip">{{ currentPlan.name }}</span>
+                  </div>
+                  <RouterLink class="profile__text-link" :to="{ name: 'plans' }">
+                    Ver planes
+                  </RouterLink>
                 </div>
               </div>
 
-              <div class="profile__pref-card">
-                <div class="profile__pref-card-top">
-                  <div class="profile__pref-card-copy">
-                    <h4>Últimos minutos de juego</h4>
-                    <p>
-                      Aviso distinto al beep final, al entrar en los últimos minutos
-                      ({{ MIN_LATE_GAME_WARNING_MINUTES }}–{{ MAX_LATE_GAME_WARNING_MINUTES }};
-                      por defecto 2).
-                    </p>
+              <div class="profile__card">
+                <button
+                  type="button"
+                  class="profile__disclosure"
+                  :aria-expanded="passwordOpen"
+                  @click="togglePasswordForm"
+                >
+                  <span>
+                    <strong>Contraseña</strong>
+                    <em>Cámbiala con tu clave actual.</em>
+                  </span>
+                  <span class="profile__disclosure-mark">{{ passwordOpen ? 'Ocultar' : 'Cambiar' }}</span>
+                </button>
+                <a-form
+                  v-if="passwordOpen"
+                  layout="vertical"
+                  class="profile__password"
+                  @submit.prevent="savePassword"
+                >
+                  <div class="profile__password-grid">
+                    <a-form-item label="Contraseña actual">
+                      <a-input-password
+                        v-model:value="passwordForm.current"
+                        autocomplete="current-password"
+                        placeholder="Tu contraseña actual"
+                      />
+                    </a-form-item>
+                    <a-form-item label="Nueva contraseña">
+                      <a-input-password
+                        v-model:value="passwordForm.next"
+                        autocomplete="new-password"
+                        placeholder="Mínimo 6 caracteres"
+                      />
+                    </a-form-item>
+                    <a-form-item label="Confirmar nueva contraseña">
+                      <a-input-password
+                        v-model:value="passwordForm.confirm"
+                        autocomplete="new-password"
+                        placeholder="Repite la nueva contraseña"
+                      />
+                    </a-form-item>
                   </div>
-                  <a-switch
-                    :checked="prefs.lateGameWarningEnabled"
-                    aria-label="Activar aviso de últimos minutos"
-                    @update:checked="onLateGameWarningToggle"
+                  <a-alert
+                    v-if="passwordError"
+                    type="error"
+                    :message="passwordError"
+                    show-icon
+                    class="profile__alert"
                   />
-                </div>
-                <div class="profile__pref-card-controls">
-                  <label class="profile__field-label" for="profile-late-game-minutes">
-                    Avisa a los
-                  </label>
-                  <a-input-number
-                    id="profile-late-game-minutes"
-                    :value="prefs.lateGameWarningMinutes"
-                    :min="MIN_LATE_GAME_WARNING_MINUTES"
-                    :max="MAX_LATE_GAME_WARNING_MINUTES"
-                    :disabled="!prefs.lateGameWarningEnabled"
-                    addon-after="min"
-                    class="profile__seconds-input"
-                    @update:value="onLateGameWarningMinutesChange"
-                  />
-                  <a-button @click="previewLateGameWarning">
-                    Probar sonido
+                  <a-button
+                    type="primary"
+                    html-type="submit"
+                    :loading="savingPassword"
+                    :disabled="!canSubmitPassword"
+                  >
+                    Actualizar contraseña
                   </a-button>
-                </div>
+                </a-form>
               </div>
             </section>
 
-            <section class="profile__pref-group" aria-labelledby="profile-appearance">
-              <header class="profile__pref-group-head">
-                <h3 id="profile-appearance">Apariencia</h3>
-                <p>
-                  Tema de la aplicación. El marcador TV y el overlay OBS se mantienen oscuros.
-                </p>
+            <section v-else-if="section === 'mesa'" class="profile__pane" aria-labelledby="profile-mesa">
+              <header class="profile__pane-head">
+                <h2 id="profile-mesa">Mesa</h2>
+                <p>Preferencias de este navegador. No se sincronizan entre dispositivos.</p>
               </header>
 
-              <div class="profile__pref-card profile__pref-card--inline">
-                <div class="profile__pref-card-copy">
-                  <h4>Tema de la interfaz</h4>
+              <div class="profile__card profile__card--row">
+                <div>
+                  <h3>Tema de la interfaz</h3>
+                  <p>TV y overlay OBS se mantienen oscuros.</p>
                 </div>
-                <div class="profile__theme-toggle" role="group" aria-label="Tema">
-                  <a-button
-                    :type="prefs.theme === 'dark' ? 'primary' : 'default'"
+                <div class="profile__segment" role="group" aria-label="Tema">
+                  <button
+                    type="button"
+                    :class="{ 'profile__segment-btn--on': prefs.theme === 'dark' }"
+                    class="profile__segment-btn"
                     @click="setTheme('dark')"
                   >
                     Oscuro
-                  </a-button>
-                  <a-button
-                    :type="prefs.theme === 'light' ? 'primary' : 'default'"
+                  </button>
+                  <button
+                    type="button"
+                    :class="{ 'profile__segment-btn--on': prefs.theme === 'light' }"
+                    class="profile__segment-btn"
                     @click="setTheme('light')"
                   >
                     Claro
+                  </button>
+                </div>
+              </div>
+
+              <div class="profile__card">
+                <div>
+                  <h3>Alertas de mesa</h3>
+                  <p>Sonidos de la mesa de control para el final del tiempo y los últimos minutos.</p>
+                </div>
+                <div class="profile__alerts">
+                  <div class="profile__alert-block">
+                    <div class="profile__alert-head">
+                      <div>
+                        <h4>Cuenta regresiva final</h4>
+                        <p>
+                          Beep en los últimos
+                          {{ MIN_COUNTDOWN_BEEP_SECONDS }}–{{ MAX_COUNTDOWN_BEEP_SECONDS }} s.
+                        </p>
+                      </div>
+                      <a-switch
+                        :checked="prefs.countdownBeepEnabled"
+                        aria-label="Activar beep de cuenta regresiva"
+                        @update:checked="onBeepToggle"
+                      />
+                    </div>
+                    <div class="profile__card-controls">
+                      <label class="profile__field-label" for="profile-countdown-seconds">Inicia a los</label>
+                      <a-input-number
+                        id="profile-countdown-seconds"
+                        :value="prefs.countdownBeepSeconds"
+                        :min="MIN_COUNTDOWN_BEEP_SECONDS"
+                        :max="MAX_COUNTDOWN_BEEP_SECONDS"
+                        :disabled="!prefs.countdownBeepEnabled"
+                        addon-after="s"
+                        class="profile__seconds-input"
+                        @update:value="onBeepSecondsChange"
+                      />
+                      <a-button @click="previewCountdownBeep">Probar</a-button>
+                    </div>
+                  </div>
+
+                  <div class="profile__alert-block">
+                    <div class="profile__alert-head">
+                      <div>
+                        <h4>Últimos minutos</h4>
+                        <p>
+                          Aviso al entrar en los últimos
+                          {{ MIN_LATE_GAME_WARNING_MINUTES }}–{{ MAX_LATE_GAME_WARNING_MINUTES }} min.
+                        </p>
+                      </div>
+                      <a-switch
+                        :checked="prefs.lateGameWarningEnabled"
+                        aria-label="Activar aviso de últimos minutos"
+                        @update:checked="onLateGameWarningToggle"
+                      />
+                    </div>
+                    <div class="profile__card-controls">
+                      <label class="profile__field-label" for="profile-late-game-minutes">Avisa a los</label>
+                      <a-input-number
+                        id="profile-late-game-minutes"
+                        :value="prefs.lateGameWarningMinutes"
+                        :min="MIN_LATE_GAME_WARNING_MINUTES"
+                        :max="MAX_LATE_GAME_WARNING_MINUTES"
+                        :disabled="!prefs.lateGameWarningEnabled"
+                        addon-after="min"
+                        class="profile__seconds-input"
+                        @update:value="onLateGameWarningMinutesChange"
+                      />
+                      <a-button @click="previewLateGameWarning">Probar</a-button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="profile__card">
+                <div class="profile__card-top">
+                  <div>
+                    <h3>Logos de equipos</h3>
+                    <p>Guarda las URLs que más usas y elígelas en la mesa del marcador.</p>
+                  </div>
+                </div>
+                <div class="profile__logos">
+                  <div class="profile__logo-preview" aria-hidden="true">
+                    <img
+                      v-if="selectedSavedLogo && !logoPreviewBroken"
+                      :src="selectedSavedLogo.url"
+                      :alt="selectedSavedLogo.name"
+                      @error="logoPreviewBroken = true"
+                    />
+                    <span v-else-if="selectedSavedLogo">No se pudo cargar</span>
+                    <span v-else>Sin logo</span>
+                  </div>
+                  <a-select
+                    :value="selectedSavedLogoId"
+                    :placeholder="savedLogos.length ? 'Elegir logo' : 'Todavía no hay logos'"
+                    :disabled="!savedLogos.length"
+                    class="profile__logo-select"
+                    @update:value="onSelectSavedLogo"
+                  >
+                    <a-select-option
+                      v-for="logo in savedLogos"
+                      :key="logo.id"
+                      :value="logo.id"
+                    >
+                      {{ logo.name }}
+                    </a-select-option>
+                  </a-select>
+                  <a-button type="primary" class="profile__logo-add" @click="openAddLogo">
+                    Agregar logo
                   </a-button>
                 </div>
+                <button
+                  v-if="selectedSavedLogo"
+                  type="button"
+                  class="profile__text-link"
+                  @click="removeSelectedLogo"
+                >
+                  Quitar de la lista
+                </button>
               </div>
             </section>
 
-            <section class="profile__pref-group" aria-labelledby="profile-boards">
-              <header class="profile__pref-group-head">
-                <h3 id="profile-boards">Marcadores</h3>
-                <p>
-                  El tema de color es compartido. Los diseños exclusivos (como Arena LED)
-                  se eligen por deporte.
-                </p>
+            <section v-else-if="section === 'marcadores'" class="profile__pane" aria-labelledby="profile-boards">
+              <header class="profile__pane-head">
+                <h2 id="profile-boards">Marcadores</h2>
+                <p>Un tema compartido para todos. Los diseños exclusivos se eligen por deporte.</p>
               </header>
 
-              <div class="profile__pref-card profile__pref-card--stack">
-                <div class="profile__pref-card-copy">
-                  <h4>Tema TV (todos los deportes)</h4>
-                  <p>
-                    Clásico u claro para salas oscuras o iluminadas. Afecta fútbol, futsal,
-                    básquet y hockey (si no usan un diseño exclusivo).
-                  </p>
-                </div>
-                <div class="profile__theme-toggle" role="tablist" aria-label="Deporte de vista previa">
-                  <a-button
+              <div class="profile__toolbar">
+                <div class="profile__segment" role="tablist" aria-label="Vista previa del deporte">
+                  <button
                     v-for="sport in sports"
                     :key="sport.id"
-                    size="small"
-                    :type="boardSport === sport.id ? 'primary' : 'default'"
-                    @click="boardSport = sport.id"
+                    type="button"
+                    role="tab"
+                    class="profile__segment-btn"
+                    :class="{ 'profile__segment-btn--on': previewSport === sport.id }"
+                    :aria-selected="previewSport === sport.id"
+                    @click="previewSport = sport.id"
                   >
                     {{ sport.shortLabel }}
-                  </a-button>
+                  </button>
                 </div>
+                <div class="profile__segment" role="tablist" aria-label="Tipo de marcador">
+                  <button
+                    type="button"
+                    role="tab"
+                    class="profile__segment-btn"
+                    :class="{ 'profile__segment-btn--on': boardView === 'tv' }"
+                    :aria-selected="boardView === 'tv'"
+                    @click="boardView = 'tv'"
+                  >
+                    Tema TV
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    class="profile__segment-btn"
+                    :class="{ 'profile__segment-btn--on': boardView === 'sport' }"
+                    :aria-selected="boardView === 'sport'"
+                    @click="boardView = 'sport'"
+                  >
+                    Por deporte
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    class="profile__segment-btn"
+                    :class="{ 'profile__segment-btn--on': boardView === 'overlay' }"
+                    :aria-selected="boardView === 'overlay'"
+                    @click="boardView = 'overlay'"
+                  >
+                    Overlay
+                  </button>
+                </div>
+              </div>
+
+              <div v-if="boardView === 'tv'" class="profile__card">
+                <h3>Tema TV</h3>
+                <p>Clásico u claro para salas oscuras o iluminadas. Aplica a todos los deportes sin diseño exclusivo.</p>
                 <ScoreboardStylePicker
                   mode="tv"
                   filter="shared"
-                  :sport="boardSport"
+                  :sport="previewSport"
                   :model-value="sharedTvStyle"
                   @update:model-value="onSharedTvStyleChange"
                 />
               </div>
 
-              <div class="profile__pref-card profile__pref-card--stack">
-                <div class="profile__pref-card-copy">
-                  <h4>Diseños por deporte</h4>
-                  <p>
-                    Variantes con layout propio. Hoy solo hockey tiene Arena LED; el resto
-                    usa el tema compartido.
-                  </p>
-                </div>
-                <div class="profile__theme-toggle" role="tablist" aria-label="Deporte del diseño">
+              <div v-else-if="boardView === 'sport'" class="profile__card">
+                <div class="profile__card-top">
+                  <div>
+                    <h3>Diseño de {{ previewSportLabel }}</h3>
+                    <p>Variantes con layout propio. Hoy hockey tiene Arena LED.</p>
+                  </div>
                   <a-button
-                    v-for="sport in sports"
-                    :key="sport.id"
-                    :type="designSport === sport.id ? 'primary' : 'default'"
-                    @click="designSport = sport.id"
+                    v-if="designSportHasSpecific"
+                    :type="designSportUsesSpecific ? 'default' : 'primary'"
+                    @click="useSharedThemeForSport"
                   >
-                    {{ sport.shortLabel }}
+                    {{ designSportUsesSpecific ? 'Usar tema compartido' : 'Tema compartido (activo)' }}
                   </a-button>
                 </div>
-
-                <template v-if="designSportHasSpecific">
-                  <div class="profile__design-shared">
-                    <a-button
-                      block
-                      :type="designSportUsesSpecific ? 'default' : 'primary'"
-                      @click="useSharedThemeForSport"
-                    >
-                      Usar tema compartido
-                      <template v-if="!designSportUsesSpecific"> (activo)</template>
-                    </a-button>
-                  </div>
-                  <ScoreboardStylePicker
-                    mode="tv"
-                    filter="sport-specific"
-                    :sport="designSport"
-                    :model-value="currentTvStyle"
-                    @update:model-value="onSportTvStyleChange"
-                  />
-                </template>
-                <p v-else class="profile__design-empty">
-                  {{ sports.find((item) => item.id === designSport)?.label }}
-                  todavía no tiene un diseño exclusivo. Usa el tema TV compartido de arriba.
+                <ScoreboardStylePicker
+                  v-if="designSportHasSpecific"
+                  mode="tv"
+                  filter="sport-specific"
+                  :sport="previewSport"
+                  :model-value="currentTvStyle"
+                  @update:model-value="onSportTvStyleChange"
+                />
+                <p v-else class="profile__empty">
+                  {{ previewSportLabel }} todavía no tiene un diseño exclusivo. Usa el tema TV.
                 </p>
               </div>
 
-              <div class="profile__pref-card profile__pref-card--stack">
-                <div class="profile__pref-card-copy">
-                  <h4>Overlay OBS</h4>
-                  <p>Barra transparente de transmisión (compartida entre deportes).</p>
-                </div>
+              <div v-else class="profile__card">
+                <h3>Overlay OBS</h3>
+                <p>Barra transparente de transmisión, compartida entre deportes.</p>
                 <ScoreboardStylePicker
                   mode="overlay"
-                  :sport="boardSport"
+                  :sport="previewSport"
                   :model-value="prefs.overlayScoreboardStyle"
                   @update:model-value="onOverlayStyleChange"
                 />
               </div>
             </section>
-          </div>
-        </section>
 
-        <section class="profile__panel profile__panel--danger" aria-labelledby="profile-session">
-          <div class="profile__panel-head">
-            <div>
-              <h2 id="profile-session">Sesión</h2>
-              <p class="profile__desc">
-                Cierra la sesión en este dispositivo.
-              </p>
-            </div>
-            <a-button danger :loading="loggingOut" @click="handleLogout">
-              Cerrar sesión
-            </a-button>
-          </div>
-        </section>
+            <section v-else class="profile__pane" aria-labelledby="profile-session">
+              <header class="profile__pane-head">
+                <h2 id="profile-session">Sesión</h2>
+                <p>Acciones de este dispositivo y de la cuenta.</p>
+              </header>
 
-        <section
-          v-if="isSupabaseConfigured"
-          class="profile__panel profile__panel--danger"
-          aria-labelledby="profile-delete"
+              <div class="profile__grid">
+                <div class="profile__card">
+                  <h3>Cerrar sesión</h3>
+                  <p>Sales de ScoreDesk en este navegador. El marcador en vivo no se apaga.</p>
+                  <a-button danger :loading="loggingOut" @click="handleLogout">
+                    Cerrar sesión
+                  </a-button>
+                </div>
+                <div v-if="isSupabaseConfigured" class="profile__card profile__card--danger">
+                  <h3>Eliminar cuenta</h3>
+                  <p>Borra usuario, partidos sueltos y torneos. No se puede deshacer.</p>
+                  <a-button danger @click="openDeleteAccount">Eliminar cuenta</a-button>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <a-modal
+          v-model:open="showLogoModal"
+          title="Agregar logo"
+          ok-text="Guardar logo"
+          cancel-text="Cancelar"
+          :confirm-loading="savingLogo"
+          :ok-button-props="{ disabled: !canAddLogo }"
+          destroy-on-close
+          @ok="confirmAddLogo"
         >
-          <div class="profile__panel-head">
-            <div>
-              <h2 id="profile-delete">Eliminar cuenta</h2>
-              <p class="profile__desc">
-                Borra tu usuario, partidos sueltos y torneos de forma permanente.
-                Esta acción no se puede deshacer.
-              </p>
-            </div>
-            <a-button danger @click="openDeleteAccount">
-              Eliminar cuenta
-            </a-button>
+          <p class="profile__delete-copy">
+            El nombre identifica al equipo en la lista. La URL es la imagen que verá el marcador.
+          </p>
+          <a-form layout="vertical">
+            <a-form-item label="Nombre del equipo">
+              <a-input
+                v-model:value="logoForm.name"
+                :maxlength="MAX_SAVED_TEAM_LOGO_NAME"
+                show-count
+                placeholder="Tiburones"
+              />
+            </a-form-item>
+            <a-form-item label="URL del logo">
+              <a-input
+                v-model:value="logoForm.url"
+                placeholder="https://…"
+                @pressEnter="canAddLogo && confirmAddLogo()"
+              />
+            </a-form-item>
+          </a-form>
+          <div v-if="isHttpLogoUrl(logoForm.url.trim())" class="profile__logo-modal-preview">
+            <img :src="logoForm.url.trim()" alt="" />
           </div>
-        </section>
+          <a-alert
+            v-if="logoFormError"
+            type="error"
+            :message="logoFormError"
+            show-icon
+            class="profile__alert profile__alert--modal"
+          />
+        </a-modal>
 
         <a-modal
           v-model:open="showDeleteModal"
@@ -730,29 +945,43 @@ async function confirmDeleteAccount(): Promise<void> {
 
 <style scoped lang="scss">
 .profile {
-  max-width: min(780px, 100%);
+  max-width: min(1120px, 100%);
   width: 100%;
   margin: 0 auto;
-  padding: 2rem 1.5rem 3rem;
+  padding: 1.5rem 1.5rem 3rem;
   box-sizing: border-box;
+
+  :deep(.ant-spin-nested-loading),
+  :deep(.ant-spin-container) {
+    overflow: visible;
+  }
 }
 
 .profile__header {
-  margin-bottom: 1.75rem;
+  margin-bottom: 1.25rem;
 
   h1 {
     margin: 0;
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 2.4rem;
+    font-size: clamp(2rem, 4vw, 2.6rem);
     letter-spacing: 0.04em;
     line-height: 1;
   }
 
   p {
-    margin: 0.5rem 0 0;
+    margin: 0.4rem 0 0;
     font-size: 0.92rem;
     color: var(--app-text-muted);
   }
+}
+
+.profile__eyebrow {
+  margin: 0 0 0.3rem !important;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--app-link);
 }
 
 .profile__back {
@@ -767,15 +996,212 @@ async function confirmDeleteAccount(): Promise<void> {
   }
 }
 
-.profile__panel {
-  padding: 1.15rem 1.2rem;
-  border-radius: 12px;
-  background: var(--app-surface);
+.profile__shell {
+  display: grid;
+  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.profile__rail {
+  position: sticky;
+  top: 5.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.profile__id {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.95rem 1rem;
+  border-radius: 16px;
   border: 1px solid var(--app-border);
+  background:
+    linear-gradient(
+      155deg,
+      color-mix(in srgb, var(--app-primary) 16%, transparent),
+      transparent 55%
+    ),
+    var(--app-surface);
+}
+
+.profile__avatar {
+  flex-shrink: 0;
+  width: 2.7rem;
+  height: 2.7rem;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--app-bg);
+  background: var(--app-link);
+}
+
+.profile__id-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+
+  strong {
+    font-size: 0.95rem;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  > span {
+    font-size: 0.78rem;
+    color: var(--app-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.profile__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+}
+
+.profile__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--app-border);
+  background: var(--app-bg-elevated);
+  color: var(--app-text-soft);
+  font-size: 0.72rem;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.profile__chip--plan {
+  border-color: color-mix(in srgb, var(--app-primary) 40%, transparent);
+  background: color-mix(in srgb, var(--app-primary) 12%, transparent);
+  color: var(--app-link);
+}
+
+.profile__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.4rem;
+  border-radius: 16px;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface);
+}
+
+.profile__nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  width: 100%;
+  padding: 0.7rem 0.8rem;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--app-text);
+  text-align: left;
+  cursor: pointer;
+
+  strong {
+    font-size: 0.92rem;
+  }
+
+  span {
+    font-size: 0.75rem;
+    color: var(--app-text-muted);
+  }
+
+  &:hover {
+    background: var(--app-surface-strong);
+  }
+
+  &--active {
+    background: color-mix(in srgb, var(--app-link) 12%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-link) 35%, transparent);
+
+    span {
+      color: var(--app-text-soft);
+    }
+  }
+}
+
+.profile__pane {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.profile__pane-head {
+  margin-bottom: 0;
+
+  h2 {
+    margin: 0;
+    font-size: 1.2rem;
+  }
+
+  p {
+    margin: 0.3rem 0 0;
+    font-size: 0.88rem;
+    color: var(--app-text-muted);
+    line-height: 1.45;
+  }
+}
+
+.profile__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.profile__card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem 1.05rem;
+  border-radius: 16px;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface);
   color: var(--app-text);
 
-  & + & {
-    margin-top: 1rem;
+  h3 {
+    margin: 0;
+    font-size: 0.98rem;
+  }
+
+  > p {
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--app-text-muted);
+    line-height: 1.45;
+  }
+
+  :deep(.ant-form-item) {
+    margin-bottom: 0.85rem;
+  }
+
+  :deep(.style-picker) {
+    width: 100%;
+  }
+
+  &--row {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.85rem 1rem;
   }
 
   &--danger {
@@ -783,45 +1209,237 @@ async function confirmDeleteAccount(): Promise<void> {
   }
 }
 
-.profile__panel-head {
+.profile__card-top {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+}
+
+.profile__alerts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem 1.1rem;
+  width: 100%;
+}
+
+.profile__alert-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.profile__alert-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
+  gap: 0.75rem;
+  width: 100%;
 
-  h2 {
+  h4 {
     margin: 0;
-    font-size: 1.05rem;
+    font-size: 0.92rem;
+    font-weight: 650;
+  }
+
+  p {
+    margin: 0.2rem 0 0;
+    font-size: 0.78rem;
+    color: var(--app-text-muted);
+    line-height: 1.4;
+  }
+
+  :deep(.ant-switch) {
+    flex-shrink: 0;
+    align-self: center;
   }
 }
 
-.profile__desc {
-  margin: 0.35rem 0 0;
-  font-size: 0.85rem;
+.profile__card-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.65rem;
+  width: 100%;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--app-border);
+}
+
+.profile__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-bottom: 0.85rem;
+}
+
+.profile__segment {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  padding: 0.22rem;
+  border-radius: 12px;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface-inset);
+}
+
+.profile__segment-btn {
+  border: 0;
+  border-radius: 9px;
+  padding: 0.42rem 0.7rem;
+  background: transparent;
+  color: var(--app-text-muted);
+  font-size: 0.82rem;
+  font-weight: 650;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--app-text);
+  }
+
+  &--on {
+    background: var(--app-bg-elevated);
+    color: var(--app-text);
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--app-border) 80%, transparent);
+  }
+}
+
+.profile__disclosure {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  span {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.15rem;
+  }
+
+  em {
+    font-style: normal;
+    font-size: 0.8rem;
+    color: var(--app-text-muted);
+  }
+}
+
+.profile__disclosure-mark {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--app-link);
+}
+
+.profile__password {
+  width: 100%;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--app-border);
+}
+
+.profile__password-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 0.75rem;
+}
+
+.profile__role-hint {
+  margin: 0;
+  font-size: 0.82rem;
   color: var(--app-text-muted);
   line-height: 1.45;
 }
 
-.profile__form {
-  max-width: 28rem;
+.profile__text-link {
+  font-size: 0.86rem;
+  font-weight: 650;
+  color: var(--app-link);
+  text-decoration: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
 }
 
-.profile__role {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.4rem;
+.profile__logos {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+  width: 100%;
 }
 
-.profile__role-hint {
-  font-size: 0.8rem;
-  color: var(--app-text-muted);
-  line-height: 1.4;
+.profile__logo-preview {
+  width: 5.5rem;
+  height: 5.5rem;
+  border-radius: 12px;
+  border: 1px solid var(--app-border);
+  background:
+    repeating-conic-gradient(
+        rgba(128, 128, 128, 0.18) 0% 25%,
+        transparent 0% 50%
+      )
+      50% / 12px 12px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #fff;
+  }
+
+  span {
+    font-size: 0.68rem;
+    color: var(--app-text-muted);
+    text-align: center;
+    padding: 0.35rem;
+    line-height: 1.3;
+  }
+}
+
+.profile__logo-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.profile__logo-add {
+  white-space: nowrap;
+}
+
+.profile__logo-modal-preview {
+  width: 5.5rem;
+  height: 5.5rem;
+  margin: 0 0 0.75rem;
+  border-radius: 12px;
+  border: 1px solid var(--app-border);
+  overflow: hidden;
+  background: #fff;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
 }
 
 .profile__alert {
-  margin-bottom: 0.85rem;
+  width: 100%;
+  margin-bottom: 0.35rem;
 }
 
 .profile__alert--modal {
@@ -835,98 +1453,6 @@ async function confirmDeleteAccount(): Promise<void> {
   line-height: 1.45;
 }
 
-.profile__actions {
-  display: flex;
-  justify-content: flex-start;
-}
-
-.profile__pref-groups {
-  display: flex;
-  flex-direction: column;
-  gap: 1.35rem;
-}
-
-.profile__pref-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-}
-
-.profile__pref-group-head {
-  h3 {
-    margin: 0;
-    font-size: 0.78rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--app-text-muted);
-  }
-
-  p {
-    margin: 0.3rem 0 0;
-    font-size: 0.82rem;
-    color: var(--app-text-muted);
-    line-height: 1.4;
-  }
-}
-
-.profile__pref-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-  padding: 0.95rem 1rem;
-  border-radius: 10px;
-  background: var(--app-surface-inset);
-  border: 1px solid var(--app-border);
-
-  &--inline {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.85rem 1rem;
-  }
-
-  &--stack {
-    gap: 0.75rem;
-  }
-}
-
-.profile__pref-card-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.profile__pref-card-copy {
-  min-width: 0;
-  flex: 1;
-
-  h4 {
-    margin: 0;
-    font-size: 0.95rem;
-    font-weight: 650;
-    color: var(--app-text);
-  }
-
-  p {
-    margin: 0.3rem 0 0;
-    font-size: 0.8rem;
-    color: var(--app-text-muted);
-    line-height: 1.4;
-  }
-}
-
-.profile__pref-card-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.55rem 0.65rem;
-  padding-top: 0.15rem;
-  border-top: 1px solid var(--app-border);
-}
-
 .profile__field-label {
   font-size: 0.8rem;
   color: var(--app-text-muted);
@@ -936,21 +1462,7 @@ async function confirmDeleteAccount(): Promise<void> {
   width: 8.5rem;
 }
 
-.profile__theme-toggle {
-  display: flex;
-  gap: 0.45rem;
-  flex-wrap: wrap;
-}
-
-.profile__pref-group .profile__theme-toggle {
-  margin-bottom: 0.85rem;
-}
-
-.profile__design-shared {
-  margin-top: 0.15rem;
-}
-
-.profile__design-empty {
+.profile__empty {
   margin: 0;
   font-size: 0.88rem;
   line-height: 1.45;
@@ -959,21 +1471,100 @@ async function confirmDeleteAccount(): Promise<void> {
 
 @media (max-width: 900px) {
   .profile {
-    padding: 1.15rem 1rem 2.5rem;
+    padding: 1.1rem 1rem 2.5rem;
   }
 
-  .profile__header h1 {
-    font-size: 2rem;
+  .profile__shell {
+    grid-template-columns: 1fr;
+    gap: 1rem;
   }
 
-  .profile__panel-head {
+  .profile__rail {
+    position: static;
+  }
+
+  .profile__nav {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.2rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.2rem;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
+  .profile__nav-item {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 0;
+    padding: 0.36rem 0.58rem;
+    align-items: center;
+    border-radius: 9px;
+
+    strong {
+      font-size: 0.76rem;
+      font-weight: 650;
+      line-height: 1.15;
+      white-space: nowrap;
+    }
+
+    span {
+      display: none;
+    }
+  }
+
+  .profile__grid,
+  .profile__password-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .profile__pane {
+    gap: 1rem;
+  }
+
+  .profile__card-top {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .profile__pref-card-top {
-    flex-direction: column;
-    align-items: stretch;
+  .profile__alerts {
+    grid-template-columns: 1fr;
+    gap: 0.85rem;
+  }
+
+  .profile__alert-block + .profile__alert-block {
+    padding-top: 0.85rem;
+    border-top: 1px solid var(--app-border);
+  }
+
+  .profile__alert-head {
+    align-items: center;
+
+    :deep(.ant-switch) {
+      flex-shrink: 0;
+      width: auto;
+    }
+  }
+
+  .profile__logos {
+    grid-template-columns: 4.5rem minmax(0, 1fr);
+
+    .profile__logo-preview {
+      width: 4.5rem;
+      height: 4.5rem;
+    }
+
+    .profile__logo-add {
+      grid-column: 1 / -1;
+    }
   }
 }
 </style>

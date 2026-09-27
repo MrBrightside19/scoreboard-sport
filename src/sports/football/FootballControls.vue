@@ -5,6 +5,7 @@ import ControlsShell from '@/components/controls/ControlsShell.vue'
 import ControlsClockDock from '@/components/controls/ControlsClockDock.vue'
 import ControlsMatchEndCard from '@/components/controls/ControlsMatchEndCard.vue'
 import ControlsOperatorLinks from '@/components/controls/ControlsOperatorLinks.vue'
+import TeamLogoField from '@/components/TeamLogoField.vue'
 import { getSportModule } from '@/sports/registry'
 import { isPeriodPlayFinished, isStoppagePlay, periodEndClockSeconds } from '@/sports/clockRules'
 import { useMatchOperatorSession } from '@/composables/useMatchOperatorSession'
@@ -33,7 +34,7 @@ import {
   type FootballCardKind,
 } from '@/sports/football/types'
 import { isGoalPending } from '@/sports/scoreboardState'
-import { normalizeFootballPeriodLength } from '@/sports/football/state'
+import { normalizeFootballExtraTime, normalizeFootballPeriodLength } from '@/sports/football/state'
 import { formatSecondsToTime, parseTimeToSeconds } from '@/utils/clock'
 import { findPlayerById, playerLabel } from '@/utils/roster'
 import { message } from 'ant-design-vue'
@@ -109,6 +110,10 @@ const canEditPeriodLength = computed(
     !store.state.intermissionActive,
 )
 
+const canEditExtraTime = computed(
+  () => store.state.isPaused && !store.state.intermissionActive,
+)
+
 const periodLengthMinutes = computed(() =>
   Math.floor(
     parseTimeToSeconds(store.state.footballPeriodLength || FOOTBALL_HALF_TIME) /
@@ -116,13 +121,29 @@ const periodLengthMinutes = computed(() =>
   ),
 )
 
+const extraTimeMinutes = computed(() =>
+  Math.floor(
+    parseTimeToSeconds(store.state.footballExtraTimeLength || FOOTBALL_EXTRA_TIME) /
+      60,
+  ),
+)
+
 const periodLengthEditing = ref(false)
 const periodLengthDraft = ref(String(periodLengthMinutes.value))
+const extraTimeEditing = ref(false)
+const extraTimeDraft = ref(String(extraTimeMinutes.value))
 
 watch(
   periodLengthMinutes,
   (minutes) => {
     if (!periodLengthEditing.value) periodLengthDraft.value = String(minutes)
+  },
+)
+
+watch(
+  extraTimeMinutes,
+  (minutes) => {
+    if (!extraTimeEditing.value) extraTimeDraft.value = String(minutes)
   },
 )
 
@@ -174,8 +195,16 @@ watch(hydrated, (ready) => {
   void nextTick(setupClockObserver)
   const current = store.state.footballPeriodLength
   const normalized = normalizeFootballPeriodLength(current)
-  if (normalized !== current) {
-    store.patch(clampClockToPeriodEnd({ footballPeriodLength: normalized }))
+  const extraCurrent = store.state.footballExtraTimeLength
+  const extraNormalized = normalizeFootballExtraTime(extraCurrent)
+  const lengthPatch: Partial<{
+    footballPeriodLength: string
+    footballExtraTimeLength: string
+  }> = {}
+  if (normalized !== current) lengthPatch.footballPeriodLength = normalized
+  if (extraNormalized !== extraCurrent) lengthPatch.footballExtraTimeLength = extraNormalized
+  if (Object.keys(lengthPatch).length > 0) {
+    store.patch(clampClockToPeriodEnd(lengthPatch))
   }
 })
 
@@ -204,9 +233,20 @@ function setPeriodLengthMinutes(minutes: number | null): void {
   store.patch(clampClockToPeriodEnd({ footballPeriodLength: next }))
 }
 
+function setExtraTimeMinutes(minutes: number | null): void {
+  if (!canEditExtraTime.value || minutes == null) return
+  const next = normalizeFootballExtraTime(minutes)
+  store.patch(clampClockToPeriodEnd({ footballExtraTimeLength: next }))
+}
+
 function onPeriodLengthInput(raw: string): void {
   periodLengthEditing.value = true
   periodLengthDraft.value = raw.replace(/\D/g, '').slice(0, 2)
+}
+
+function onExtraTimeInput(raw: string): void {
+  extraTimeEditing.value = true
+  extraTimeDraft.value = raw.replace(/\D/g, '').slice(0, 2)
 }
 
 function onPeriodLengthKeydown(event: KeyboardEvent): void {
@@ -220,6 +260,13 @@ function commitPeriodLengthMinutes(): void {
   const parsed = Number.parseInt(periodLengthDraft.value, 10)
   if (Number.isFinite(parsed)) setPeriodLengthMinutes(parsed)
   periodLengthDraft.value = String(periodLengthMinutes.value)
+}
+
+function commitExtraTimeMinutes(): void {
+  extraTimeEditing.value = false
+  const parsed = Number.parseInt(extraTimeDraft.value, 10)
+  if (Number.isFinite(parsed)) setExtraTimeMinutes(parsed)
+  extraTimeDraft.value = String(extraTimeMinutes.value)
 }
 
 function setGamePeriod(period: number): void {
@@ -328,6 +375,7 @@ const footballDockLabel = computed(() => {
 function clampClockToPeriodEnd(
   extra: Partial<{
     footballPeriodLength: string
+    footballExtraTimeLength: string
     footballStoppageMinutes: number
     timeGame: string
   }>,
@@ -545,14 +593,14 @@ function adjustStoppage(delta: number): void {
                     <span class="controls__clock-hint">
                       Cada periodo: {{ periodLengthMinutes }}′ (Config).
                       El reloj se detiene al cumplir la duración más el descuento.
-                      Prórroga: {{ FOOTBALL_EXTRA_TIME }}.
+                      Prórroga: {{ extraTimeMinutes }}′.
                     </span>
                   </div>
                   <div
                     class="controls__clock-field controls__clock-field--adjust controls__clock-adjust"
                     :class="{ 'is-disabled': !canAdjustGameClock }"
                   >
-                    <label>Ajustar tiempo</label>
+                    <label>Ajustar reloj</label>
                     <TimeInput
                       compact
                       :value="clockDraft"
@@ -763,29 +811,49 @@ function adjustStoppage(delta: number): void {
       <a-tab-pane key="config" tab="Config">
         <div class="football-config">
           <a-card title="Periodo" class="controls__card controls__card--wide">
-            <label class="football-config__duration">
-              <span>Duración de cada periodo</span>
-              <a-input
-                :value="periodLengthDraft"
-                :disabled="!canEditPeriodLength"
-                inputmode="numeric"
-                pattern="[0-9]*"
-                autocomplete="off"
-                spellcheck="false"
-                maxlength="2"
-                addon-after="min"
-                class="football-config__duration-input"
-                @update:value="onPeriodLengthInput"
-                @keydown="onPeriodLengthKeydown"
-                @blur="commitPeriodLengthMinutes"
-                @pressEnter="commitPeriodLengthMinutes"
-              />
-            </label>
+            <div class="football-config__durations">
+              <label class="football-config__duration">
+                <span>Duración de cada periodo</span>
+                <a-input
+                  :value="periodLengthDraft"
+                  :disabled="!canEditPeriodLength"
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                  autocomplete="off"
+                  spellcheck="false"
+                  maxlength="2"
+                  addon-after="min"
+                  class="football-config__duration-input"
+                  @update:value="onPeriodLengthInput"
+                  @keydown="onPeriodLengthKeydown"
+                  @blur="commitPeriodLengthMinutes"
+                  @pressEnter="commitPeriodLengthMinutes"
+                />
+              </label>
+              <label class="football-config__duration">
+                <span>Duración de la prórroga</span>
+                <a-input
+                  :value="extraTimeDraft"
+                  :disabled="!canEditExtraTime"
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                  autocomplete="off"
+                  spellcheck="false"
+                  maxlength="2"
+                  addon-after="min"
+                  class="football-config__duration-input"
+                  @update:value="onExtraTimeInput"
+                  @keydown="onPeriodLengthKeydown"
+                  @blur="commitExtraTimeMinutes"
+                  @pressEnter="commitExtraTimeMinutes"
+                />
+              </label>
+            </div>
             <p class="football-config__hint">
               {{
                 canEditPeriodLength
-                  ? 'Solo minutos enteros (45, 40, 35…). El reloj parte de 00:00 y se detiene al cumplirlos más el descuento. La prórroga es 15′.'
-                  : `Cada periodo: ${periodLengthMinutes}′. Para cambiarlo, pausa en el 1.er periodo.`
+                  ? 'Solo minutos enteros. El reloj parte de 00:00 y se detiene al cumplir el periodo o la prórroga, más el descuento.'
+                  : `Cada periodo: ${periodLengthMinutes}′. Prórroga: ${extraTimeMinutes}′. El periodo se cambia en pausa en el 1.er tiempo; la prórroga, en cualquier pausa.`
               }}
             </p>
           </a-card>
@@ -795,11 +863,12 @@ function adjustStoppage(delta: number): void {
               <label class="football-config__team">
                 <span>Logo local</span>
                 <strong>{{ store.state.localTeam }}</strong>
-                <a-input
-                  :value="store.state.localLogo"
+                <TeamLogoField
+                  :model-value="store.state.localLogo"
+                  :alt="store.state.localTeam"
+                  preview-side="left"
                   placeholder="URL logo local"
-                  allow-clear
-                  @update:value="(v: string) => store.setTeamLogos(v, store.state.visitLogo)"
+                  @update:model-value="(v: string) => store.setTeamLogos(v, store.state.visitLogo)"
                 />
                 <a-input
                   :value="store.state.localColor"
@@ -812,11 +881,11 @@ function adjustStoppage(delta: number): void {
               <label class="football-config__team">
                 <span>Logo visita</span>
                 <strong>{{ store.state.visitTeam }}</strong>
-                <a-input
-                  :value="store.state.visitLogo"
+                <TeamLogoField
+                  :model-value="store.state.visitLogo"
+                  :alt="store.state.visitTeam"
                   placeholder="URL logo visita"
-                  allow-clear
-                  @update:value="(v: string) => store.setTeamLogos(store.state.localLogo, v)"
+                  @update:model-value="(v: string) => store.setTeamLogos(store.state.localLogo, v)"
                 />
                 <a-input
                   :value="store.state.visitColor"

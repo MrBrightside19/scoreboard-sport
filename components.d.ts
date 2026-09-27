@@ -61,6 +61,7 @@ declare module 'vue' {
     ScoreBoard: typeof import('./src/components/ScoreBoard.vue')['default']
     ScoreboardBrandMark: typeof import('./src/components/ScoreboardBrandMark.vue')['default']
     ScoreboardStylePicker: typeof import('./src/components/ScoreboardStylePicker.vue')['default']
+    TeamLogoField: typeof import('./src/components/TeamLogoField.vue')['default']
     TimeInput: typeof import('./src/components/controls/TimeInput.vue')['default']
     TournamentStandings: typeof import('./src/components/TournamentStandings.vue')['default']
     TournamentStatsPanel: typeof import('./src/components/TournamentStatsPanel.vue')['default']

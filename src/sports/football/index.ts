@@ -1,6 +1,6 @@
 import { createDefaultScoreboardState } from '@/sports/scoreboardState'
 import type { SportModule } from '@/sports/types'
-import { normalizeFootballPeriodLength } from '@/sports/football/state'
+import { normalizeFootballExtraTime, normalizeFootballPeriodLength } from '@/sports/football/state'
 import {
   FOOTBALL_BREAK_TIME,
   FOOTBALL_HALF_TIME,
@@ -53,6 +53,7 @@ export const footballSport: SportModule = {
     state.footballPeriodLength = normalizeFootballPeriodLength(
       periodLength ?? FOOTBALL_HALF_TIME,
     )
+    state.footballExtraTimeLength = normalizeFootballExtraTime(FOOTBALL_EXTRA_TIME)
     state.intermissionDuration = FOOTBALL_BREAK_TIME
     state.intermissionTime = FOOTBALL_BREAK_TIME
     state.localColor = '#0b6e4f'
