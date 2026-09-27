@@ -3,6 +3,7 @@
  */
 import { generateId } from '@/utils/id'
 import {
+  FOOTBALL_EXTRA_TIME,
   FOOTBALL_HALF_TIME,
   FOOTBALL_MAX_PERIOD_MINUTES,
   FOOTBALL_MIN_PERIOD_MINUTES,
@@ -19,16 +20,21 @@ export interface FootballStateSlice {
   footballStoppageMinutes: number
   /** Duración de cada tiempo reglamentario (p. ej. 45:00 o 35:00). */
   footballPeriodLength: string
+  /** Duración de cada tiempo de prórroga (p. ej. 15:00 o 10:00). */
+  footballExtraTimeLength: string
 }
 
-export function normalizeFootballPeriodLength(raw: unknown): string {
+export function normalizeFootballPeriodLength(
+  raw: unknown,
+  fallback: string = FOOTBALL_HALF_TIME,
+): string {
   const seconds =
     typeof raw === 'number' && Number.isFinite(raw)
       ? raw * 60
       : typeof raw === 'string' && raw.trim()
         ? parseTimeToSeconds(raw)
         : NaN
-  if (!Number.isFinite(seconds) || seconds <= 0) return FOOTBALL_HALF_TIME
+  if (!Number.isFinite(seconds) || seconds <= 0) return fallback
   const minutes = Math.round(seconds / 60)
   const clamped = Math.min(
     FOOTBALL_MAX_PERIOD_MINUTES,
@@ -37,11 +43,16 @@ export function normalizeFootballPeriodLength(raw: unknown): string {
   return formatSecondsToTime(clamped * 60)
 }
 
+export function normalizeFootballExtraTime(raw: unknown): string {
+  return normalizeFootballPeriodLength(raw, FOOTBALL_EXTRA_TIME)
+}
+
 export function createFootballStateSlice(): FootballStateSlice {
   return {
     footballCards: [],
     footballStoppageMinutes: 0,
     footballPeriodLength: FOOTBALL_HALF_TIME,
+    footballExtraTimeLength: FOOTBALL_EXTRA_TIME,
   }
 }
 
@@ -74,5 +85,6 @@ export function normalizeFootballStateSlice(
         ? Math.min(FOOTBALL_MAX_STOPPAGE_MINUTES, Math.floor(rawStoppage))
         : 0,
     footballPeriodLength: normalizeFootballPeriodLength(source.footballPeriodLength),
+    footballExtraTimeLength: normalizeFootballExtraTime(source.footballExtraTimeLength),
   }
 }

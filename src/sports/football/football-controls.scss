@@ -264,12 +264,19 @@ $football-short: 520px;
   color: var(--app-text-muted);
 }
 
+.football-config__durations {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.65rem 1.25rem;
+  margin-bottom: 0.65rem;
+}
+
 .football-config__duration {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.65rem 1rem;
-  margin-bottom: 0.65rem;
+  margin-bottom: 0;
 
   > span {
     font-size: 0.75rem;
@@ -289,7 +296,7 @@ $football-short: 520px;
   }
 }
 
-.football-config__duration + .football-config__hint {
+.football-config__durations + .football-config__hint {
   margin-bottom: 0;
 }
 
