@@ -360,6 +360,14 @@ export function getSavedTeamLogos(): SavedTeamLogo[] {
   return getUserPreferences().savedTeamLogos
 }
 
+export function cacheSavedTeamLogos(raw: unknown): UserPreferences {
+  return setUserPreferences({ savedTeamLogos: normalizeSavedTeamLogos(raw) })
+}
+
+export function clearSavedTeamLogosCache(): UserPreferences {
+  return setUserPreferences({ savedTeamLogos: [], selectedSavedLogoId: null })
+}
+
 export function addSavedTeamLogo(name: string, url: string): SavedTeamLogo {
   const current = getUserPreferences()
   const trimmedName = name.trim().slice(0, MAX_SAVED_TEAM_LOGO_NAME)

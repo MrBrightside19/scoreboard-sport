@@ -6,6 +6,7 @@ import {
   setSelectedSavedLogoId,
   type SavedTeamLogo,
 } from '@/utils/userPreferences'
+import { persistSavedTeamLogos } from '@/services/savedTeamLogosSync'
 
 export function useSavedTeamLogos() {
   const tick = ref(0)
@@ -33,11 +34,14 @@ export function useSavedTeamLogos() {
   }
 
   function addLogo(name: string, url: string): SavedTeamLogo {
-    return addSavedTeamLogo(name, url)
+    const logo = addSavedTeamLogo(name, url)
+    void persistSavedTeamLogos()
+    return logo
   }
 
   function removeLogo(id: string): void {
     removeSavedTeamLogo(id)
+    void persistSavedTeamLogos()
   }
 
   onMounted(() => {

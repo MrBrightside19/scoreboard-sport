@@ -116,7 +116,7 @@ const router = createRouter({
       path: '/perfil',
       name: 'profile',
       component: () => import('@/views/Profile.vue'),
-      meta: { requiresAuth: true, title: 'Perfil' },
+      meta: { requiresAuth: true, hideNavOnMobile: true, title: 'Perfil' },
     },
     {
       path: '/home',

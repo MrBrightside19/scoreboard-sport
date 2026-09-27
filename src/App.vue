@@ -8,9 +8,15 @@ import {
   getAppTheme,
   type AppTheme,
 } from '@/utils/userPreferences'
+import { isMobileMesaViewport, MOBILE_MESA_QUERY } from '@/utils/mobileMesa'
 
 const route = useRoute()
-const showNavbar = computed(() => !route.meta.hideNav)
+const mobileMesa = ref(isMobileMesaViewport())
+const showNavbar = computed(() => {
+  if (route.meta.hideNav) return false
+  if (!mobileMesa.value) return true
+  return !route.meta.hideNavOnMobile && !route.meta.requiresAuth && !route.meta.requiresStaff
+})
 const isTransparent = computed(() => Boolean(route.meta.transparent))
 const forceDarkShell = computed(
   () => Boolean(route.meta.bare || route.meta.transparent),
@@ -26,7 +32,16 @@ function syncThemeFromPrefs(): void {
 
 onMounted(() => {
   syncThemeFromPrefs()
+  mobileMesa.value = isMobileMesaViewport()
+  const media = window.matchMedia(MOBILE_MESA_QUERY)
+  const syncViewport = () => {
+    mobileMesa.value = media.matches
+  }
+  media.addEventListener('change', syncViewport)
   window.addEventListener('scoreboard:theme-change', syncThemeFromPrefs)
+  onUnmounted(() => {
+    media.removeEventListener('change', syncViewport)
+  })
 })
 
 onUnmounted(() => {

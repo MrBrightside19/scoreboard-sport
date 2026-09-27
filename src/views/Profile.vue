@@ -693,7 +693,7 @@ function confirmAddLogo(): Promise<void> {
                 <div class="profile__card-top">
                   <div>
                     <h3>Logos de equipos</h3>
-                    <p>Guarda las URLs que más usas y elígelas en la mesa del marcador.</p>
+                    <p>Se guardan en tu cuenta: los ves en PC y teléfono. Elígelos en la mesa del marcador.</p>
                   </div>
                 </div>
                 <div class="profile__logos">

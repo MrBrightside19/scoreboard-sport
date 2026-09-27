@@ -7,6 +7,8 @@ declare module 'vue-router' {
     /** Fondo transparente para OBS / Browser Source */
     transparent?: boolean
     hideNav?: boolean
+    /** Oculta el navbar en teléfono / mesa móvil. */
+    hideNavOnMobile?: boolean
     requiresStaff?: boolean
     requiresAuth?: boolean
     /** Hub de mesa: solo teléfonos / pantallas angostas. */

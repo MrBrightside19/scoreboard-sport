@@ -1,3 +1,5 @@
+import type { SavedTeamLogo } from '@/utils/userPreferences'
+
 export type UserRole = 'organizer' | 'spectator' | 'assistant'
 
 export interface Profile {
@@ -6,4 +8,5 @@ export interface Profile {
   display_name: string | null
   role: UserRole
   created_at: string
+  saved_team_logos?: SavedTeamLogo[] | null
 }

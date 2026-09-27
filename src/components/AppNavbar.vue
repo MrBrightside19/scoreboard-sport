@@ -13,6 +13,7 @@ import {
   readMatchIdFromStorage,
   writeMatchIdToStorage,
 } from '@/utils/localSync'
+import { isMobileMesaViewport } from '@/utils/mobileMesa'
 import AuthModal from '@/components/AuthModal.vue'
 import {
   getAppTheme,
@@ -159,6 +160,18 @@ async function refreshActiveFreeMatch(): Promise<void> {
 async function createMatchFlow(): Promise<void> {
   if (!auth.isAuthenticated && isSupabaseConfigured) {
     openAuth()
+    return
+  }
+
+  if (isMobileMesaViewport()) {
+    closeMobile()
+    const currentId = activeFreeMatchId.value || readMatchIdFromStorage()
+    if (currentId) {
+      writeMatchIdToStorage(currentId)
+      await router.push({ name: 'controls', query: { matchId: currentId } })
+      return
+    }
+    await router.push({ name: 'mobile-mesa' })
     return
   }
 
