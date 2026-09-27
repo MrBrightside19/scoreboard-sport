@@ -19,7 +19,14 @@ import {
 } from '@/sports/scoreboardState'
 import { getPenaltyType, secondsToClock } from '@/data/penaltyCatalog'
 import { getSportModule } from '@/sports/registry'
-import { clockDirection, isCountUpSport, kickoffClock, periodEndClockSeconds } from '@/sports/clockRules'
+import {
+  clockDirection,
+  countUpClockMaxSeconds,
+  countUpPausesAtPeriodEnd,
+  isCountUpSport,
+  kickoffClock,
+  periodEndClockSeconds,
+} from '@/sports/clockRules'
 import { fetchMatchState } from '@/services/matchSync'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
 import {
@@ -131,7 +138,7 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
       state.value.updatedAt,
       now,
       direction,
-      direction === 'up' ? periodEndClockSeconds(state.value) : undefined,
+      countUpClockMaxSeconds(state.value),
     )
   }
 
@@ -171,7 +178,7 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
       const direction = clockDirection(state.value.sport)
 
       if (
-        direction === 'up' &&
+        countUpPausesAtPeriodEnd(state.value.sport) &&
         !state.value.intermissionActive &&
         parseTimeToSeconds(state.value.timeGame) > periodEndClockSeconds(state.value)
       ) {
@@ -218,11 +225,11 @@ export const useScoreboardStore = defineStore('scoreboard', () => {
       const previousTime = state.value.timeGame
       const nextTime = interpolateGameClock(now)
       const playedSeconds = playedClockSeconds(previousTime, nextTime, direction)
-      const cap = direction === 'up' ? periodEndClockSeconds(state.value) : 0
       const periodEnded =
-        direction === 'up'
-          ? parseTimeToSeconds(nextTime) >= cap
-          : parseTimeToSeconds(nextTime) <= 0
+        direction === 'down'
+          ? parseTimeToSeconds(nextTime) <= 0
+          : countUpPausesAtPeriodEnd(state.value.sport) &&
+            parseTimeToSeconds(nextTime) >= periodEndClockSeconds(state.value)
 
       if (!periodEnded && !materialize) return false
       if (playedSeconds <= 0 && !periodEnded) return false

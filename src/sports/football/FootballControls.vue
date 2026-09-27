@@ -7,7 +7,7 @@ import ControlsMatchEndCard from '@/components/controls/ControlsMatchEndCard.vue
 import ControlsOperatorLinks from '@/components/controls/ControlsOperatorLinks.vue'
 import TeamLogoField from '@/components/TeamLogoField.vue'
 import { getSportModule } from '@/sports/registry'
-import { isPeriodPlayFinished, isStoppagePlay, periodEndClockSeconds } from '@/sports/clockRules'
+import { isPeriodPlayFinished, isStoppagePlay } from '@/sports/clockRules'
 import { useMatchOperatorSession } from '@/composables/useMatchOperatorSession'
 import { useControlsClockDock } from '@/composables/useControlsClockDock'
 import { useMatchClockAlerts } from '@/composables/useMatchClockAlerts'
@@ -35,7 +35,7 @@ import {
 } from '@/sports/football/types'
 import { isGoalPending } from '@/sports/scoreboardState'
 import { normalizeFootballExtraTime, normalizeFootballPeriodLength } from '@/sports/football/state'
-import { formatSecondsToTime, parseTimeToSeconds } from '@/utils/clock'
+import { parseTimeToSeconds } from '@/utils/clock'
 import { findPlayerById, playerLabel } from '@/utils/roster'
 import { message } from 'ant-design-vue'
 
@@ -91,16 +91,21 @@ const pendingGoalsCount = computed(
 
 const restBreakConsumed = ref(false)
 
+const livePlayClock = computed(() =>
+  store.state.intermissionActive ? store.state.timeGame : dockClockTime.value,
+)
+
 const showIntermissionControls = computed(() => {
   const restSeconds = parseTimeToSeconds(store.state.intermissionTime)
   if (store.state.intermissionActive) return restSeconds > 0
   if (restBreakConsumed.value) return false
   if (store.state.gamePeriod >= maxPeriods.value) return false
-  return isPeriodPlayFinished(store.state)
+  if (!store.state.isPaused) return false
+  return isPeriodPlayFinished({ ...store.state, timeGame: livePlayClock.value })
 })
 
 const canAdjustGameClock = computed(
-  () => store.state.isPaused && !showIntermissionControls.value,
+  () => store.state.isPaused && !store.state.intermissionActive,
 )
 
 const canEditPeriodLength = computed(
@@ -156,7 +161,14 @@ watch(
     ] as const,
   ([time]) => {
     if (!clockEditing.value) clockDraft.value = time
-    if (!isPeriodPlayFinished(store.state)) restBreakConsumed.value = false
+    if (
+      !isPeriodPlayFinished({
+        ...store.state,
+        timeGame: livePlayClock.value,
+      })
+    ) {
+      restBreakConsumed.value = false
+    }
   },
 )
 
@@ -204,7 +216,7 @@ watch(hydrated, (ready) => {
   if (normalized !== current) lengthPatch.footballPeriodLength = normalized
   if (extraNormalized !== extraCurrent) lengthPatch.footballExtraTimeLength = extraNormalized
   if (Object.keys(lengthPatch).length > 0) {
-    store.patch(clampClockToPeriodEnd(lengthPatch))
+    store.patch(lengthPatch)
   }
 })
 
@@ -230,13 +242,13 @@ function commitClockDraft(): void {
 function setPeriodLengthMinutes(minutes: number | null): void {
   if (!canEditPeriodLength.value || minutes == null) return
   const next = normalizeFootballPeriodLength(minutes)
-  store.patch(clampClockToPeriodEnd({ footballPeriodLength: next }))
+  store.patch({ footballPeriodLength: next })
 }
 
 function setExtraTimeMinutes(minutes: number | null): void {
   if (!canEditExtraTime.value || minutes == null) return
   const next = normalizeFootballExtraTime(minutes)
-  store.patch(clampClockToPeriodEnd({ footballExtraTimeLength: next }))
+  store.patch({ footballExtraTimeLength: next })
 }
 
 function onPeriodLengthInput(raw: string): void {
@@ -359,7 +371,9 @@ const recentCards = computed(() =>
 
 const stoppageMinutes = computed(() => footballStoppageMinutes(store.state))
 
-const inStoppagePlay = computed(() => isStoppagePlay(store.state))
+const inStoppagePlay = computed(() =>
+  isStoppagePlay({ ...store.state, timeGame: livePlayClock.value }),
+)
 
 const footballDockTime = computed(() => {
   if (!inStoppagePlay.value) return dockClockTime.value
@@ -372,49 +386,9 @@ const footballDockLabel = computed(() => {
   return store.state.isPaused ? `${period} · descuento · pausa` : `${period} · descuento`
 })
 
-function clampClockToPeriodEnd(
-  extra: Partial<{
-    footballPeriodLength: string
-    footballExtraTimeLength: string
-    footballStoppageMinutes: number
-    timeGame: string
-  }>,
-) {
-  const nextState = { ...store.state, ...extra }
-  const cap = periodEndClockSeconds(nextState)
-  const elapsed = parseTimeToSeconds(nextState.timeGame)
-  if (elapsed <= cap) return extra
-  return {
-    ...extra,
-    timeGame: formatSecondsToTime(cap),
-    isPaused: true,
-  }
-}
-
 function adjustStoppage(delta: number): void {
-  const nextMinutes = clampFootballStoppage(stoppageMinutes.value + delta)
-  const extra = { footballStoppageMinutes: nextMinutes }
-  const nextState = { ...store.state, ...extra }
-  const nextCap = periodEndClockSeconds(nextState)
-  const elapsed = parseTimeToSeconds(nextState.timeGame)
-
-  if (elapsed > nextCap) {
-    store.patch({
-      ...extra,
-      timeGame: formatSecondsToTime(nextCap),
-      isPaused: true,
-    })
-    return
-  }
-
-  const stoppedAtPreviousCap =
-    store.state.isPaused &&
-    !store.state.intermissionActive &&
-    elapsed >= periodEndClockSeconds(store.state)
-
   store.patch({
-    ...extra,
-    ...(stoppedAtPreviousCap && elapsed < nextCap ? { isPaused: false } : {}),
+    footballStoppageMinutes: clampFootballStoppage(stoppageMinutes.value + delta),
   })
 }
 </script>
@@ -561,7 +535,7 @@ function adjustStoppage(delta: number): void {
                       class="controls__clock-toggle"
                       size="large"
                       :type="store.state.isPaused ? 'primary' : 'default'"
-                      :disabled="showIntermissionControls"
+                      :disabled="store.state.intermissionActive"
                       @click="store.togglePause()"
                     >
                       {{ store.state.isPaused ? 'Reanudar' : 'Pausar' }}
@@ -592,7 +566,8 @@ function adjustStoppage(delta: number): void {
                     </div>
                     <span class="controls__clock-hint">
                       Cada periodo: {{ periodLengthMinutes }}′ (Config).
-                      El reloj se detiene al cumplir la duración más el descuento.
+                      El reloj sigue aunque se cumpla el tiempo o el descuento;
+                      tú lo pausas al silbato.
                       Prórroga: {{ extraTimeMinutes }}′.
                     </span>
                   </div>
@@ -612,7 +587,7 @@ function adjustStoppage(delta: number): void {
                     />
                     <span class="controls__clock-hint">
                       {{
-                        showIntermissionControls
+                        store.state.intermissionActive
                           ? 'Se desbloquea al terminar el descanso.'
                           : store.state.isPaused
                             ? 'Escribe minutos y segundos (solo números).'
@@ -626,7 +601,7 @@ function adjustStoppage(delta: number): void {
                 </div>
 
                 <div
-                  v-if="!showIntermissionControls"
+                  v-if="!store.state.intermissionActive"
                   class="football-match__stoppage"
                   :class="{ 'is-active': inStoppagePlay }"
                 >
@@ -649,8 +624,8 @@ function adjustStoppage(delta: number): void {
                     </a-button>
                   </div>
                   <span class="controls__clock-hint">
-                    Se puede corregir en cualquier momento. Si el reloj ya se detuvo y
-                    sumas minutos, continúa solo.
+                    Puedes cargarlo después del tiempo reglamentario: el reloj no se para solo.
+                    El +N se muestra en mesa y TV aunque el partido siga más allá.
                   </span>
                 </div>
 
@@ -689,8 +664,9 @@ function adjustStoppage(delta: number): void {
                     El marcador TV muestra la cuenta de descanso.
                     Beep en los últimos {{ countdownBeepSeconds() }} s
                     (configurable en Perfil).
-                    Al terminar (o al pulsar Terminar), pasa solo al siguiente periodo
-                    (salvo el último). El reloj vuelve a 00:00.
+                    Puedes reanudar el juego si el silbato aún no sonó.
+                    Al terminar el descanso (o al pulsar Terminar), pasa solo al siguiente
+                    periodo (salvo el último). El reloj vuelve a 00:00.
                   </span>
                 </div>
               </div>
@@ -852,7 +828,7 @@ function adjustStoppage(delta: number): void {
             <p class="football-config__hint">
               {{
                 canEditPeriodLength
-                  ? 'Solo minutos enteros. El reloj parte de 00:00 y se detiene al cumplir el periodo o la prórroga, más el descuento.'
+                  ? 'Solo minutos enteros. El reloj parte de 00:00 y no se detiene solo al cumplir el periodo, la prórroga o el descuento.'
                   : `Cada periodo: ${periodLengthMinutes}′. Prórroga: ${extraTimeMinutes}′. El periodo se cambia en pausa en el 1.er tiempo; la prórroga, en cualquier pausa.`
               }}
             </p>

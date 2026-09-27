@@ -5,7 +5,7 @@ import {
   FOOTBALL_MAX_STOPPAGE_MINUTES,
   type FootballCardKind,
 } from '@/sports/football/types'
-import { clockDirection, periodEndClockSeconds } from '@/sports/clockRules'
+import { clockDirection } from '@/sports/clockRules'
 import { interpolateClock } from '@/utils/clock'
 
 export function cardCount(
@@ -69,7 +69,6 @@ export function addFootballCard(
     state.updatedAt,
     Date.now(),
     clockDirection(state.sport),
-    periodEndClockSeconds(state),
   )
 
   if (playerId && isPlayerExpelled(state, team, playerId)) {
