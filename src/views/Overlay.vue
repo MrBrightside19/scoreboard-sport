@@ -4,7 +4,6 @@ import { useRoute } from 'vue-router'
 import { useRemoteScoreboard } from '@/composables/useRemoteScoreboard'
 import { createDefaultScoreboardState } from '@/sports/scoreboardState'
 import { getSportUi } from '@/sports/ui'
-import ScoreboardBrandMark from '@/components/ScoreboardBrandMark.vue'
 
 const route = useRoute()
 const matchId = computed(() => route.params.matchId as string)
@@ -32,7 +31,6 @@ const sportUi = computed(() => getSportUi(displayState.value.sport))
       :display-penalties-local="displayPenaltiesLocal"
       :display-penalties-visit="displayPenaltiesVisit"
     />
-    <ScoreboardBrandMark v-if="displayState.showBranding" compact />
   </div>
 </template>
 

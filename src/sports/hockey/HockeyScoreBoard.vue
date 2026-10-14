@@ -14,7 +14,7 @@ import {
   timeoutsUsedInPeriod,
 } from '@/sports/futsal/actions'
 import { FUTSAL_ACCUMULATED_FOUL_LIMIT } from '@/sports/futsal/types'
-import { footballStoppageLabel } from '@/sports/football/actions'
+import { cardCount, footballStoppageLabel } from '@/sports/football/actions'
 import { isInBonus, teamFoulsInPeriod } from '@/sports/basketball/actions'
 import { basketballPointsLabel } from '@/sports/basketball/types'
 
@@ -210,6 +210,15 @@ const localFootballCards = computed(() =>
 const visitFootballCards = computed(() =>
   footballCardsForLive('visit'),
 )
+
+const localOverlayCardCounts = computed(() => ({
+  yellow: cardCount(props.state, 'local', 'yellow'),
+  red: cardCount(props.state, 'local', 'red'),
+}))
+const visitOverlayCardCounts = computed(() => ({
+  yellow: cardCount(props.state, 'visit', 'yellow'),
+  red: cardCount(props.state, 'visit', 'red'),
+}))
 
 /** En Live: la 2.ª amarilla no se lista; se muestra solo la roja automática. */
 function footballCardsForLive(team: 'local' | 'visit') {
@@ -465,6 +474,7 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
         </div>
       </div>
 
+      <div class="nhl-bug__stack">
       <div class="nhl-bug__bar">
         <div class="nhl-bug__team nhl-bug__team--local">
           <span class="nhl-bug__accent nhl-bug__accent--local" />
@@ -522,19 +532,49 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
         </div>
       </div>
 
-      <div class="nhl-bug__side nhl-bug__side--visit">
-        <div v-if="visitPenalties.length" class="nhl-bug__timers">
+      <div
+        v-if="showFootballCards"
+        class="nhl-bug__cards-row"
+      >
+        <div class="nhl-bug__cards nhl-bug__cards--local">
           <span
-            v-for="(penalty, index) in visitPenalties"
-            :key="`visit-${index}`"
-            class="nhl-bug__timer"
+            v-if="localOverlayCardCounts.yellow > 0"
+            class="nhl-bug__card-chip"
+            :aria-label="`${localOverlayCardCounts.yellow} amarillas`"
           >
-            {{ formatPenaltyShort(penalty, 'visit') }}
+            <span class="nhl-bug__card-icon nhl-bug__card-icon--yellow" aria-hidden="true" />
+            <span class="nhl-bug__card-count">{{ localOverlayCardCounts.yellow }}</span>
+          </span>
+          <span
+            v-if="localOverlayCardCounts.red > 0"
+            class="nhl-bug__card-chip"
+            :aria-label="`${localOverlayCardCounts.red} rojas`"
+          >
+            <span class="nhl-bug__card-icon nhl-bug__card-icon--red" aria-hidden="true" />
+            <span class="nhl-bug__card-count">{{ localOverlayCardCounts.red }}</span>
+          </span>
+        </div>
+        <div class="nhl-bug__cards nhl-bug__cards--visit">
+          <span
+            v-if="visitOverlayCardCounts.yellow > 0"
+            class="nhl-bug__card-chip"
+            :aria-label="`${visitOverlayCardCounts.yellow} amarillas`"
+          >
+            <span class="nhl-bug__card-icon nhl-bug__card-icon--yellow" aria-hidden="true" />
+            <span class="nhl-bug__card-count">{{ visitOverlayCardCounts.yellow }}</span>
+          </span>
+          <span
+            v-if="visitOverlayCardCounts.red > 0"
+            class="nhl-bug__card-chip"
+            :aria-label="`${visitOverlayCardCounts.red} rojas`"
+          >
+            <span class="nhl-bug__card-icon nhl-bug__card-icon--red" aria-hidden="true" />
+            <span class="nhl-bug__card-count">{{ visitOverlayCardCounts.red }}</span>
           </span>
         </div>
       </div>
-    </div>
 
+      <div class="nhl-bug__banners">
     <Transition name="nhl-goal">
       <div
         v-if="goalBanner"
@@ -596,6 +636,21 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
         <span class="nhl-bug__goal-minute">{{ cardBanner.minute }}</span>
       </div>
     </Transition>
+      </div>
+      </div>
+
+      <div class="nhl-bug__side nhl-bug__side--visit">
+        <div v-if="visitPenalties.length" class="nhl-bug__timers">
+          <span
+            v-for="(penalty, index) in visitPenalties"
+            :key="`visit-${index}`"
+            class="nhl-bug__timer"
+          >
+            {{ formatPenaltyShort(penalty, 'visit') }}
+          </span>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- TV / cancha (pantalla grande) -->
@@ -1054,6 +1109,9 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   --bug-goal-assist: 0.77rem;
   --bug-goal-minute: 1.02rem;
   --bug-padding: 0.85rem 1rem 0;
+  --bug-card-icon-w: 0.55rem;
+  --bug-card-icon-h: 0.78rem;
+  --bug-card-count: 0.92rem;
 
   position: fixed;
   top: 0;
@@ -1112,19 +1170,26 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
 }
 
+.nhl-bug__stack {
+  position: relative;
+  flex: 0 0 auto;
+  width: var(--bug-width);
+  max-width: var(--bug-max-width);
+}
+
 .nhl-bug__bar {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: stretch;
-  flex: 0 0 auto;
-  width: var(--bug-width);
-  max-width: var(--bug-max-width);
+  width: 100%;
   height: var(--bug-height);
   background: var(--bug-bg);
   border: 1px solid var(--bug-border);
   border-radius: 4px;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
   overflow: hidden;
+  position: relative;
+  z-index: 2;
 }
 
 .nhl-bug__team {
@@ -1195,6 +1260,51 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   &--visit {
     text-align: right;
   }
+}
+
+.nhl-bug__cards-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 0 var(--bug-pad-x);
+  position: relative;
+  z-index: 1;
+}
+
+.nhl-bug__cards {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.28rem;
+  min-width: 0;
+
+  &--visit {
+    justify-content: flex-end;
+  }
+}
+
+.nhl-bug__card-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-top: -1px;
+  padding: 0.22rem 0.34rem 0.18rem 0.26rem;
+  background: var(--bug-bg);
+  border: 1px solid var(--bug-border);
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  line-height: 1;
+}
+
+.nhl-bug__banners {
+  position: absolute;
+  top: calc(var(--bug-height) + 0.28rem);
+  left: 0;
+  right: 0;
+  z-index: 4;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
 }
 
 .nhl-bug__score {
@@ -1287,7 +1397,6 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   gap: 0.55rem;
   width: var(--bug-goal-width);
   max-width: var(--bug-goal-max);
-  margin-top: 0.35rem;
   padding: 0.4rem 0.65rem;
   background: rgba(12, 16, 24, 0.94);
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -1342,6 +1451,21 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
   &--red {
     background: linear-gradient(160deg, #ff5a5f 0%, #c1121f 100%);
   }
+}
+
+.nhl-bug__cards .nhl-bug__card-icon {
+  width: var(--bug-card-icon-w);
+  height: var(--bug-card-icon-h);
+  border-radius: 0.08rem;
+}
+
+.nhl-bug__card-count {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: var(--bug-card-count);
+  letter-spacing: 0.04em;
+  line-height: 1;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
 }
 
 .nhl-bug__goal-team {
@@ -2062,6 +2186,9 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
     --bug-goal-assist: 0.68rem;
     --bug-goal-minute: 0.9rem;
     --bug-padding: 0.7rem 0.75rem 0;
+    --bug-card-icon-w: 0.42rem;
+    --bug-card-icon-h: 0.6rem;
+    --bug-card-count: 0.74rem;
   }
 }
 
@@ -2119,6 +2246,9 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
     --bug-goal-assist: 0.62rem;
     --bug-goal-minute: 0.82rem;
     --bug-padding: 0.55rem 0.5rem 0;
+    --bug-card-icon-w: 0.38rem;
+    --bug-card-icon-h: 0.54rem;
+    --bug-card-count: 0.68rem;
   }
 
   .nhl-bug__goal {
@@ -2149,6 +2279,9 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
     --bug-goal-assist: 0.56rem;
     --bug-goal-minute: 0.72rem;
     --bug-padding: 0.4rem 0.35rem 0;
+    --bug-card-icon-w: 0.34rem;
+    --bug-card-icon-h: 0.48rem;
+    --bug-card-count: 0.6rem;
   }
 
   .nhl-bug__row {

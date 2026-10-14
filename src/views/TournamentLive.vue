@@ -71,10 +71,7 @@ onUnmounted(() => {
       :event-title="isOverlay ? null : eventTitle"
       :event-date="isOverlay ? null : eventDate"
     />
-    <ScoreboardBrandMark
-      v-if="displayState.showBranding"
-      :compact="isOverlay"
-    />
+    <ScoreboardBrandMark v-if="!isOverlay && displayState.showBranding" />
   </div>
 </template>
 

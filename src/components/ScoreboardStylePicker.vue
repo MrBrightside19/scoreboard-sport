@@ -55,13 +55,43 @@ const previewState = computed(() => {
     state.footballStoppageMinutes = 4
     state.footballCards = [
       {
-        id: 'preview-yc',
+        id: 'preview-yc-local-1',
+        team: 'local',
+        playerId: '',
+        player: '4',
+        kind: 'yellow',
+        period: 1,
+        gameMinute: '18:00',
+        createdAt: '',
+      },
+      {
+        id: 'preview-yc-local-2',
+        team: 'local',
+        playerId: '',
+        player: '11',
+        kind: 'yellow',
+        period: 1,
+        gameMinute: '33:00',
+        createdAt: '',
+      },
+      {
+        id: 'preview-yc-visit',
         team: 'visit',
         playerId: '',
         player: '8',
         kind: 'yellow',
         period: 1,
         gameMinute: '22:00',
+        createdAt: '',
+      },
+      {
+        id: 'preview-rc-visit',
+        team: 'visit',
+        playerId: '',
+        player: '5',
+        kind: 'red',
+        period: 2,
+        gameMinute: '51:00',
         createdAt: '',
       },
     ]
@@ -234,7 +264,7 @@ function isSelected(id: string): boolean {
 }
 
 .style-picker__preview--overlay {
-  height: 128px;
+  height: 148px;
 }
 
 .style-picker__preview--light {
