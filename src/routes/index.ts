@@ -47,6 +47,18 @@ const router = createRouter({
       meta: { title: 'Planes', requiresAuth: true },
     },
     {
+      path: '/app/partidos',
+      name: 'saved-matches',
+      component: () => import('@/views/SavedMatches.vue'),
+      meta: { title: 'Partidos guardados', requiresAuth: true },
+    },
+    {
+      path: '/app/partidos/:id',
+      name: 'saved-match',
+      component: () => import('@/views/SavedMatch.vue'),
+      meta: { title: 'Partido guardado', requiresAuth: true },
+    },
+    {
       path: '/live/:matchId',
       name: 'live',
       component: () => import('@/views/Live.vue'),

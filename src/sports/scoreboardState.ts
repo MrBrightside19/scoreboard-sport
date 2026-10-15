@@ -6,9 +6,13 @@ import { DEFAULT_SPORT, parseSportId, type SportId } from '@/types/sport'
 import {
   createScoreboardCore,
   DEFAULT_GAME_TIME,
+  DEFAULT_INTERMISSION_TIME,
   normalizeScoreboardCore,
   type ScoreboardCore,
 } from '@/types/scoreboard'
+import { BASKETBALL_QUARTER_TIME } from '@/sports/basketball/types'
+import { FOOTBALL_BREAK_TIME } from '@/sports/football/types'
+import { FUTSAL_HALF_TIME } from '@/sports/futsal/types'
 import {
   createBasketballStateSlice,
   normalizeBasketballStateSlice,
@@ -48,6 +52,46 @@ export function createDefaultScoreboardState(
     ...createBasketballStateSlice(),
     ...createFutsalStateSlice(),
     ...createFootballStateSlice(),
+  }
+}
+
+function kickoffTimeForSport(sport: SportId): string {
+  if (sport === 'football') return '00:00'
+  if (sport === 'futsal') return FUTSAL_HALF_TIME
+  if (sport === 'basketball') return BASKETBALL_QUARTER_TIME
+  return DEFAULT_GAME_TIME
+}
+
+function breakTimeForSport(sport: SportId, configured: string): string {
+  if (configured) return configured
+  if (sport === 'football') return FOOTBALL_BREAK_TIME
+  return DEFAULT_INTERMISSION_TIME
+}
+
+/** Deja el marcador en 0 para un partido nuevo en la misma mesa. Conserva equipos, logos y nómina. */
+export function resetScoreboardPlay(state: ScoreboardState): Partial<ScoreboardState> {
+  return {
+    goalLocal: 0,
+    goalVisit: 0,
+    gamePeriod: 1,
+    timeGame: kickoffTimeForSport(state.sport),
+    goals: [],
+    isPaused: true,
+    intermissionActive: false,
+    intermissionTime: breakTimeForSport(state.sport, state.intermissionDuration),
+    matchSaveLocked: false,
+    shots: [],
+    penaltiesLocal: [],
+    penaltiesVisit: [],
+    footballCards: [],
+    footballStoppageMinutes: 0,
+    futsalAccumulatedFouls: [],
+    futsalCards: [],
+    futsalExclusions: [],
+    futsalTimeouts: [],
+    basketballScores: [],
+    rebounds: [],
+    basketballFouls: [],
   }
 }
 

@@ -44,7 +44,6 @@
   justify-content: flex-end;
 }
 
-.controls__link-switch-match,
 .controls__link-profile {
   display: none;
 }
@@ -54,7 +53,6 @@
     display: none !important;
   }
 
-  .controls__link-switch-match,
   .controls__link-profile {
     display: inline-flex;
   }
@@ -218,6 +216,23 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
+}
+
+.controls__end-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+
+  > * {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .ant-btn {
+    width: 100%;
+  }
 }
 
 .controls__card-btn {

@@ -44,11 +44,14 @@ const {
   hydrated,
   advancing,
   finishing,
+  saving,
   advanceError,
   tournamentContext,
   hasNextMatch,
   goToNextMatch,
   finishCurrentMatch,
+  saveCurrentMatch,
+  resetCurrentMatch,
   copyLink,
 } = useMatchOperatorSession()
 
@@ -514,9 +517,13 @@ const exclusions = computed(() => activeExclusions(store.state))
             :has-next-match="hasNextMatch"
             :advancing="advancing"
             :finishing="finishing"
+            :saving="saving"
+            :save-locked="store.state.matchSaveLocked"
             :advance-error="advanceError"
             @next="goToNextMatch"
             @finish="finishCurrentMatch"
+            @save="saveCurrentMatch"
+            @reset="resetCurrentMatch"
           />
         </div>
       </a-tab-pane>

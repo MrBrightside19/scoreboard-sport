@@ -29,3 +29,29 @@ export interface LiveMatchSummary {
   category: string | null
   court: string | null
 }
+
+export interface SavedMatchRecord {
+  id: string
+  organizer_id: string
+  source_match_id: string | null
+  sport: SportId
+  title: string | null
+  local_team: string
+  visit_team: string
+  goal_local: number
+  goal_visit: number
+  state: ScoreboardState
+  saved_at: string
+}
+
+export interface SavedMatchSummary {
+  id: string
+  title: string
+  localTeam: string
+  visitTeam: string
+  goalLocal: number
+  goalVisit: number
+  savedAt: string
+  sport: SportId
+  sportLabel: string
+}

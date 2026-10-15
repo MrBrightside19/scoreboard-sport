@@ -58,6 +58,8 @@ export interface ScoreboardCore {
   tableOfficial3: string
   updatedAt: string
   showBranding: boolean
+  /** Tras Guardar partido: no se puede volver a guardar hasta reiniciar el marcador. */
+  matchSaveLocked: boolean
 }
 
 export const DEFAULT_GAME_TIME = '20:00'
@@ -99,6 +101,7 @@ export function createScoreboardCore(
     tableOfficial3: '',
     updatedAt: new Date().toISOString(),
     showBranding: true,
+    matchSaveLocked: false,
   }
 }
 
@@ -177,6 +180,8 @@ export function normalizeScoreboardCore(
     updatedAt: (source.updatedAt as string) ?? base.updatedAt,
     showBranding:
       typeof source.showBranding === 'boolean' ? source.showBranding : base.showBranding,
+    matchSaveLocked:
+      typeof source.matchSaveLocked === 'boolean' ? source.matchSaveLocked : false,
     rosterLocal: normalizeRoster(source.rosterLocal),
     rosterVisit: normalizeRoster(source.rosterVisit),
     goals: normalizeGoals(source.goals),

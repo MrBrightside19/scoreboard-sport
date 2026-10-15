@@ -167,6 +167,9 @@ watch(
         <h1>Operar partido</h1>
       </div>
       <div v-if="auth.isAuthenticated" class="mobile-mesa__actions">
+        <router-link :to="{ name: 'saved-matches' }">
+          <a-button size="small">Partidos</a-button>
+        </router-link>
         <router-link :to="{ name: 'profile' }">
           <a-button size="small">Perfil</a-button>
         </router-link>

@@ -75,11 +75,18 @@ const navLinks = computed(() => {
   )
 
   if (auth.isAuthenticated) {
-    links.push({
-      name: 'app-home',
-      label: 'App',
-      to: { name: 'app-home' },
-    })
+    links.push(
+      {
+        name: 'app-home',
+        label: 'App',
+        to: { name: 'app-home' },
+      },
+      {
+        name: 'saved-matches',
+        label: 'Partidos',
+        to: { name: 'saved-matches' },
+      },
+    )
   }
 
   if (auth.isStaff) {
@@ -115,6 +122,7 @@ const roleLabel = computed(() => {
 function isActive(linkName: string): boolean {
   if (route.name === linkName) return true
   if (linkName === 'tournaments' && route.name === 'tournament-detail') return true
+  if (linkName === 'saved-matches' && route.name === 'saved-match') return true
   return false
 }
 

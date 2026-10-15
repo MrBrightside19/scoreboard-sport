@@ -66,9 +66,6 @@ const route = useRoute()
           : 'Copiar TV'
     }}
   </a-button>
-  <router-link class="controls__link-switch-match" :to="{ name: 'mobile-mesa' }">
-    <a-button>Otro partido</a-button>
-  </router-link>
   <router-link class="controls__link-profile" :to="{ name: 'profile' }">
     <a-button>Perfil</a-button>
   </router-link>

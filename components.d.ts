@@ -58,6 +58,7 @@ declare module 'vue' {
     MatchReportDrawer: typeof import('./src/components/MatchReportDrawer.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    SavedMatchCard: typeof import('./src/components/SavedMatchCard.vue')['default']
     ScoreBoard: typeof import('./src/components/ScoreBoard.vue')['default']
     ScoreboardBrandMark: typeof import('./src/components/ScoreboardBrandMark.vue')['default']
     ScoreboardStylePicker: typeof import('./src/components/ScoreboardStylePicker.vue')['default']

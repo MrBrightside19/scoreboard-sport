@@ -8,9 +8,13 @@ import { getPlanDefinition } from '@/config/plans'
 import { listAvailableSports, getSportModule } from '@/sports/registry'
 import { writeMatchIdToStorage } from '@/utils/localSync'
 import { createOrResumeFreeMatch } from '@/utils/createFreeMatch'
+import { deleteSavedMatch, fetchSavedMatches } from '@/services/savedMatchesService'
+import { message } from 'ant-design-vue'
 import type { Entitlement } from '@/types/billing'
 import type { SportId } from '@/types/sport'
+import type { SavedMatchSummary } from '@/types/match'
 import { EntitlementError } from '@/types/billing'
+import SavedMatchCard from '@/components/SavedMatchCard.vue'
 
 type CreateMode = 'match' | 'tournament'
 
@@ -22,6 +26,10 @@ const mode = ref<CreateMode | null>(null)
 const selectedSport = ref<SportId | null>(null)
 const error = ref<string | null>(null)
 const sports = listAvailableSports()
+const savedMatches = ref<SavedMatchSummary[]>([])
+const loadingSaved = ref(false)
+const deletingSavedId = ref<string | null>(null)
+const recentSavedMatches = computed(() => savedMatches.value.slice(0, 4))
 
 const plan = computed(() => getPlanDefinition(resolvePlan(entitlement.value)))
 const selectedSportModule = computed(() =>
@@ -32,6 +40,21 @@ const canContinue = computed(() => Boolean(mode.value && selectedSport.value))
 async function loadPlan(): Promise<void> {
   if (!auth.profile || !isSupabaseConfigured) return
   entitlement.value = await fetchEntitlement(auth.profile.id)
+}
+
+async function loadSavedMatches(): Promise<void> {
+  if (!auth.profile?.id) {
+    savedMatches.value = []
+    return
+  }
+  loadingSaved.value = true
+  try {
+    savedMatches.value = await fetchSavedMatches(auth.profile.id)
+  } catch {
+    savedMatches.value = []
+  } finally {
+    loadingSaved.value = false
+  }
 }
 
 function selectMode(next: CreateMode): void {
@@ -91,8 +114,26 @@ async function createMatchFlow(sportId: SportId): Promise<void> {
   }
 }
 
+async function removeSavedMatch(id: string): Promise<void> {
+  const organizerId = auth.profile?.id
+  if (!organizerId || deletingSavedId.value) return
+  deletingSavedId.value = id
+  try {
+    await deleteSavedMatch(organizerId, id)
+    savedMatches.value = savedMatches.value.filter((match) => match.id !== id)
+    message.success('Partido eliminado del registro.')
+  } catch (err) {
+    message.error(
+      err instanceof Error ? err.message : 'No se pudo eliminar el partido.',
+    )
+  } finally {
+    deletingSavedId.value = null
+  }
+}
+
 onMounted(() => {
   void loadPlan()
+  void loadSavedMatches()
 })
 </script>
 
@@ -201,10 +242,38 @@ onMounted(() => {
       </template>
     </section>
 
+    <section class="app-home__saved">
+      <div class="app-home__saved-head">
+        <div>
+          <p class="app-home__eyebrow">Registro</p>
+          <h2>Partidos guardados</h2>
+        </div>
+        <RouterLink :to="{ name: 'saved-matches' }">Ver todos</RouterLink>
+      </div>
+      <a-spin :spinning="loadingSaved">
+        <div v-if="recentSavedMatches.length" class="app-home__saved-grid">
+          <SavedMatchCard
+            v-for="match in recentSavedMatches"
+            :key="match.id"
+            :match="match"
+            :deleting="deletingSavedId === match.id"
+            @delete="removeSavedMatch(match.id)"
+          />
+        </div>
+        <p v-else class="app-home__saved-empty">
+          Cuando termines un partido suelto, en Config pulsa
+          <strong>Guardar partido</strong>. Así queda el marcador aunque después
+          cambies los equipos en la misma mesa.
+        </p>
+      </a-spin>
+    </section>
+
     <p class="app-home__secondary">
       <RouterLink :to="{ name: 'live-now' }">Ver partidos en vivo</RouterLink>
       <span aria-hidden="true">·</span>
       <RouterLink :to="{ name: 'tournaments' }">Mis torneos</RouterLink>
+      <span aria-hidden="true">·</span>
+      <RouterLink :to="{ name: 'saved-matches' }">Partidos guardados</RouterLink>
     </p>
   </div>
 </template>
@@ -386,6 +455,51 @@ onMounted(() => {
   margin: 0;
   color: var(--app-text-muted);
   font-size: 0.88rem;
+}
+
+.app-home__saved {
+  margin-top: 1.75rem;
+  padding: 1.35rem 1.25rem 1.45rem;
+  border-radius: 18px;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface);
+}
+
+.app-home__saved-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1rem;
+  margin-bottom: 1rem;
+
+  h2 {
+    margin: 0;
+    font-size: 1.35rem;
+  }
+
+  a {
+    color: var(--app-link);
+    text-decoration: none;
+    font-size: 0.88rem;
+    font-weight: 600;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+}
+
+.app-home__saved-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.85rem;
+}
+
+.app-home__saved-empty {
+  margin: 0;
+  color: var(--app-text-muted);
+  font-size: 0.92rem;
+  line-height: 1.5;
 }
 
 .app-home__secondary {

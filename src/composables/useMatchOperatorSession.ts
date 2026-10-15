@@ -1,9 +1,10 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
-import { Modal } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useScoreboardStore } from '@/stores/scoreboard'
 import { fetchMatchState, finishMatch, publishMatchState } from '@/services/matchSync'
+import { saveMatchSnapshot } from '@/services/savedMatchesService'
 import {
   advanceToNextTournamentMatch,
   fetchTournament,
@@ -18,6 +19,7 @@ import {
   writeCourtActiveMatch,
 } from '@/utils/localSync'
 import { normalizeGameTime } from '@/utils/clock'
+import { resetScoreboardPlay } from '@/sports/scoreboardState'
 import { getLiveClockUpdateMs } from '@/config/poll'
 import { buildAppUrl, tournamentBoardPath } from '@/utils/appUrl'
 import { operatorHomeRouteName } from '@/utils/mobileMesa'
@@ -52,6 +54,7 @@ export function useMatchOperatorSession() {
   const hydrated = ref(false)
   const advancing = ref(false)
   const finishing = ref(false)
+  const saving = ref(false)
   const advanceError = ref<string | null>(null)
   const tournamentContext = ref<{ tournamentId: string; court: string } | null>(null)
   const hasNextMatch = ref(false)
@@ -242,6 +245,39 @@ export function useMatchOperatorSession() {
     }
   }
 
+  async function saveCurrentMatch(): Promise<void> {
+    if (!hydrated.value || saving.value || store.state.matchSaveLocked) return
+    const organizerId = auth.profile?.id
+    if (!organizerId) {
+      message.warning('Inicia sesión para guardar el partido.')
+      return
+    }
+    saving.value = true
+    try {
+      const liveClock = store.currentDisplayClock()
+      const snapshot = store.state.intermissionActive
+        ? { ...store.state, intermissionTime: liveClock, isPaused: true, matchSaveLocked: false }
+        : { ...store.state, timeGame: liveClock, isPaused: true, matchSaveLocked: false }
+      await saveMatchSnapshot(organizerId, snapshot, matchId.value || null)
+      store.patch({ matchSaveLocked: true })
+      message.success(
+        'Partido guardado. Reinicia el marcador para empezar otro en esta mesa.',
+      )
+    } catch (err) {
+      message.error(
+        err instanceof Error ? err.message : 'No se pudo guardar el partido.',
+      )
+    } finally {
+      saving.value = false
+    }
+  }
+
+  function resetCurrentMatch(): void {
+    if (!hydrated.value || saving.value || finishing.value) return
+    store.patch(resetScoreboardPlay(store.state))
+    message.success('Marcador en 0. Ya puedes jugar y guardar un partido nuevo.')
+  }
+
   function copyLink(type: 'live' | 'overlay' | 'board' | 'board-torneo'): void {
     let path = ''
     if (type === 'board-torneo' && tournamentContext.value) {
@@ -349,11 +385,14 @@ export function useMatchOperatorSession() {
     hydrated,
     advancing,
     finishing,
+    saving,
     advanceError,
     tournamentContext,
     hasNextMatch,
     goToNextMatch,
     finishCurrentMatch,
+    saveCurrentMatch,
+    resetCurrentMatch,
     copyLink,
   }
 }

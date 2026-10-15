@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
-import { Modal } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import { useScoreboardStore } from '@/stores/scoreboard'
 import { useAnimationNow } from '@/composables/useAnimationNow'
 import { useAuthStore } from '@/stores/auth'
 import { fetchMatchState, finishMatch, publishMatchState } from '@/services/matchSync'
+import { saveMatchSnapshot } from '@/services/savedMatchesService'
 import {
   advanceToNextTournamentMatch,
   fetchTournament,
@@ -20,7 +21,11 @@ import { useMatchClockAlerts } from '@/composables/useMatchClockAlerts'
 import { buildAppUrl, tournamentBoardPath } from '@/utils/appUrl'
 import { operatorHomeRouteName } from '@/utils/mobileMesa'
 import { getLiveClockUpdateMs } from '@/config/poll'
-import { isGoalPending, DEFAULT_INTERMISSION_TIME } from '@/sports/scoreboardState'
+import {
+  isGoalPending,
+  DEFAULT_INTERMISSION_TIME,
+  resetScoreboardPlay,
+} from '@/sports/scoreboardState'
 import { getSportModule } from '@/sports/registry'
 import type { TeamPenalty } from '@/sports/scoreboardState'
 import { penaltyTypeLabel } from '@/data/penaltyCatalog'
@@ -60,6 +65,7 @@ const copied = ref<string | null>(null)
 const hydrated = ref(false)
 const advancing = ref(false)
 const finishing = ref(false)
+const saving = ref(false)
 const advanceError = ref<string | null>(null)
 const tournamentContext = ref<{ tournamentId: string; court: string } | null>(null)
 const hasNextMatch = ref(false)
@@ -605,6 +611,39 @@ async function goToNextMatch(): Promise<void> {
   } finally {
     advancing.value = false
   }
+}
+
+async function saveCurrentMatch(): Promise<void> {
+  if (!hydrated.value || saving.value || store.state.matchSaveLocked) return
+  const organizerId = auth.profile?.id
+  if (!organizerId) {
+    message.warning('Inicia sesión para guardar el partido.')
+    return
+  }
+  saving.value = true
+  try {
+    const liveClock = store.currentDisplayClock()
+    const snapshot = store.state.intermissionActive
+      ? { ...store.state, intermissionTime: liveClock, isPaused: true, matchSaveLocked: false }
+      : { ...store.state, timeGame: liveClock, isPaused: true, matchSaveLocked: false }
+    await saveMatchSnapshot(organizerId, snapshot, matchId.value || null)
+    store.patch({ matchSaveLocked: true })
+    message.success(
+      'Partido guardado. Reinicia el marcador para empezar otro en esta mesa.',
+    )
+  } catch (err) {
+    message.error(
+      err instanceof Error ? err.message : 'No se pudo guardar el partido.',
+    )
+  } finally {
+    saving.value = false
+  }
+}
+
+function resetCurrentMatch(): void {
+  if (!hydrated.value || saving.value || finishing.value) return
+  store.patch(resetScoreboardPlay(store.state))
+  message.success('Marcador en 0. Ya puedes jugar y guardar un partido nuevo.')
 }
 
 async function finishCurrentMatch(): Promise<void> {
@@ -1257,9 +1296,13 @@ onUnmounted(() => {
               :has-next-match="hasNextMatch"
               :advancing="advancing"
               :finishing="finishing"
+              :saving="saving"
+              :save-locked="store.state.matchSaveLocked"
               :advance-error="advanceError"
               @next="goToNextMatch"
               @finish="finishCurrentMatch"
+              @save="saveCurrentMatch"
+              @reset="resetCurrentMatch"
             />
           </div>
         </a-tab-pane>
