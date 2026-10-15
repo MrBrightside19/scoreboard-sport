@@ -274,6 +274,8 @@ onMounted(() => {
       <RouterLink :to="{ name: 'tournaments' }">Mis torneos</RouterLink>
       <span aria-hidden="true">·</span>
       <RouterLink :to="{ name: 'saved-matches' }">Partidos guardados</RouterLink>
+      <span aria-hidden="true">·</span>
+      <RouterLink :to="{ name: 'overlay-playground' }">Playground overlay</RouterLink>
     </p>
   </div>
 </template>

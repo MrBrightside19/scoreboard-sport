@@ -13,6 +13,10 @@ import {
   isInDoublePenalty,
   timeoutsUsedInPeriod,
 } from '@/sports/futsal/actions'
+import {
+  formatPowerPlay,
+  hockeyTimeoutsUsedInPeriod,
+} from '@/sports/hockey/actions'
 import { FUTSAL_ACCUMULATED_FOUL_LIMIT } from '@/sports/futsal/types'
 import { cardCount, footballStoppageLabel } from '@/sports/football/actions'
 import { isInBonus, teamFoulsInPeriod } from '@/sports/basketball/actions'
@@ -109,6 +113,7 @@ const showGoalList = computed(() => sport.value.scoringUnit === 'goal')
 const showBasketScores = computed(() => sport.value.scoringUnit === 'point')
 const showFootballCards = computed(() => sport.value.id === 'football')
 const showFutsalMeta = computed(() => sport.value.id === 'futsal')
+const showHockeyMeta = computed(() => sport.value.id === 'hockey')
 const showBasketFouls = computed(() => sport.value.id === 'basketball')
 const scoringTitle = computed(() =>
   sport.value.scoringUnit === 'point' ? 'Anotaciones' : 'Goles',
@@ -195,6 +200,14 @@ function sportMetaLine(team: 'local' | 'visit'): string {
     if (timeoutsUsedInPeriod(props.state, team)) parts.push('TM')
     const excl = activeExclusions(props.state, team).length
     if (excl) parts.push(`2′×${excl}`)
+    return parts.join(' · ')
+  }
+  if (showHockeyMeta.value) {
+    const pp = formatPowerPlay(props.state, team)
+    const tm = hockeyTimeoutsUsedInPeriod(props.state, team)
+    if (pp === '0/0' && !tm) return ''
+    const parts = [`PP ${pp}`]
+    if (tm) parts.push('TM')
     return parts.join(' · ')
   }
   if (showBasketFouls.value) {
@@ -906,7 +919,13 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
             class="scoreboard__detail-block"
           >
             <span class="scoreboard__detail-title">
-              {{ showFutsalMeta ? 'Faltas / TM' : 'Faltas' }}
+              {{
+                showFutsalMeta
+                  ? 'Faltas / TM'
+                  : showHockeyMeta
+                    ? 'PP / TM'
+                    : 'Faltas'
+              }}
             </span>
             <p class="scoreboard__shot-line">{{ sportMetaLine('local') }}</p>
           </div>
@@ -1045,7 +1064,13 @@ function formatPenaltyLive(penalty: TeamPenalty, team: 'local' | 'visit'): strin
             class="scoreboard__detail-block"
           >
             <span class="scoreboard__detail-title">
-              {{ showFutsalMeta ? 'Faltas / TM' : 'Faltas' }}
+              {{
+                showFutsalMeta
+                  ? 'Faltas / TM'
+                  : showHockeyMeta
+                    ? 'PP / TM'
+                    : 'Faltas'
+              }}
             </span>
             <p class="scoreboard__shot-line">{{ sportMetaLine('visit') }}</p>
           </div>

@@ -6,14 +6,15 @@ import type { SportModule } from '@/sports/types'
 
 /** UI: ControlsShell + HockeyControls (reglas Worldskate), HockeyScoreBoard, HockeyTvBoard, HockeyOverlayBoard. */
 
-export const HOCKEY_STATE_VERSION = 1
+export const HOCKEY_STATE_VERSION = 2
 
 export const hockeySport: SportModule = {
   id: 'hockey',
   label: 'Hockey en línea',
   shortLabel: 'Hockey',
   available: true,
-  description: '3 periodos, faltas Worldskate, goles, tiros y nómina con arquero.',
+  description:
+    '3 periodos, faltas Worldskate, goles, tiros, power play y 1 tiempo muerto por periodo.',
   stateVersion: HOCKEY_STATE_VERSION,
   clock: {
     direction: 'down',

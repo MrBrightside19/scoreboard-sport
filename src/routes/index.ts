@@ -59,10 +59,31 @@ const router = createRouter({
       meta: { title: 'Partido guardado', requiresAuth: true },
     },
     {
+      path: '/playground',
+      name: 'overlay-playground',
+      component: () => import('@/views/OverlayPlayground.vue'),
+      meta: { title: 'Playground overlay' },
+    },
+    {
+      path: '/app/playground',
+      redirect: { name: 'overlay-playground' },
+    },
+    {
       path: '/live/:matchId',
       name: 'live',
       component: () => import('@/views/Live.vue'),
       meta: { title: 'En vivo' },
+    },
+    {
+      path: '/overlay/playground',
+      name: 'overlay-playground-obs',
+      component: () => import('@/views/OverlayPlaygroundObs.vue'),
+      meta: {
+        bare: true,
+        hideNav: true,
+        transparent: true,
+        title: 'Overlay playground',
+      },
     },
     {
       path: '/overlay/:matchId',

@@ -72,6 +72,11 @@ const navLinks = computed(() => {
       label: 'Torneos públicos',
       to: { name: 'public-tournaments' },
     },
+    {
+      name: 'overlay-playground',
+      label: 'Playground',
+      to: { name: 'overlay-playground' },
+    },
   )
 
   if (auth.isAuthenticated) {

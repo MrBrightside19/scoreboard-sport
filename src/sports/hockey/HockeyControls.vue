@@ -38,6 +38,17 @@ import TeamLogoField from '@/components/TeamLogoField.vue'
 import ControlsRosterPanel from '@/sports/hockey/controls/HockeyRosterPanel.vue'
 import ControlsGoalsPanel from '@/sports/hockey/controls/HockeyGoalsPanel.vue'
 import ControlsPenaltiesPanel from '@/sports/hockey/controls/HockeyPenaltiesPanel.vue'
+import {
+  addHockeyTimeout,
+  canUseHockeyTimeout,
+  formatPowerPlay,
+  hockeyTimeoutsUsedInPeriod,
+  opportunitiesFromPenaltyChange,
+  recordPowerPlayGoal,
+  retractPowerPlayGoal,
+  undoLastHockeyTimeout,
+} from '@/sports/hockey/actions'
+import { HOCKEY_TIMEOUTS_PER_PERIOD } from '@/sports/hockey/state'
 
 const route = useRoute()
 const router = useRouter()
@@ -417,7 +428,9 @@ function penaltyPlayerLabel(team: 'local' | 'visit', penalty: TeamPenalty): stri
 }
 
 function markGoal(team: 'local' | 'visit'): void {
-  store.markGoal(team)
+  const goalId = store.markGoal(team)
+  const powerPlayGoal = recordPowerPlayGoal(store.state, team, goalId)
+  if (powerPlayGoal) store.patch(powerPlayGoal)
 
   const against = team === 'local' ? 'visit' : 'local'
   const penalties =
@@ -429,6 +442,53 @@ function markGoal(team: 'local' | 'visit'): void {
   selectedPenaltyId.value = penalties[0]?.id ?? ''
   powerPlayModalOpen.value = true
 }
+
+function undoGoal(team: 'local' | 'visit'): void {
+  const lastGoal = [...store.state.goals].reverse().find((goal) => goal.team === team)
+  store.removeLastGoal(team)
+  if (!lastGoal) return
+  const retracted = retractPowerPlayGoal(store.state, lastGoal.id)
+  if (retracted) store.patch(retracted)
+}
+
+function takeTimeout(team: 'local' | 'visit'): void {
+  const next = addHockeyTimeout(store.state, team)
+  if (next) store.patch(next)
+}
+
+function undoTimeout(team: 'local' | 'visit'): void {
+  const next = undoLastHockeyTimeout(store.state, team)
+  if (next) store.patch(next)
+}
+
+const prevPenaltyCounts = ref<{ local: number; visit: number } | null>(null)
+
+watch(
+  () =>
+    [
+      store.state.penaltiesLocal.length,
+      store.state.penaltiesVisit.length,
+      hydrated.value,
+      store.state.sport,
+    ] as const,
+  ([local, visit, isHydrated, sport]) => {
+    if (!isHydrated || sport !== 'hockey') {
+      prevPenaltyCounts.value = isHydrated ? { local, visit } : null
+      return
+    }
+    const prev = prevPenaltyCounts.value
+    prevPenaltyCounts.value = { local, visit }
+    if (!prev) return
+    const next = opportunitiesFromPenaltyChange(
+      store.state,
+      prev.local,
+      prev.visit,
+      local,
+      visit,
+    )
+    if (next) store.patch(next)
+  },
+)
 
 function keepPowerPlayPenalties(): void {
   powerPlayModalOpen.value = false
@@ -756,6 +816,9 @@ watch(
     rosterVisit: store.state.rosterVisit,
     penaltiesLocal: penaltySignature(store.state.penaltiesLocal),
     penaltiesVisit: penaltySignature(store.state.penaltiesVisit),
+    hockeyTimeouts: store.state.hockeyTimeouts,
+    hockeyPowerPlayOpportunities: store.state.hockeyPowerPlayOpportunities,
+    hockeyPowerPlayGoals: store.state.hockeyPowerPlayGoals,
     manualClock: store.state.isPaused ? store.state.timeGame : null,
   }),
   () => {
@@ -877,11 +940,45 @@ onUnmounted(() => {
                     @update:value="(v: string) => store.setTeamColors(v, store.state.visitColor)"
                   />
                   <div class="controls__score-controls">
-                    <a-button size="large" @click="store.removeLastGoal('local')">−</a-button>
+                    <a-button size="large" @click="undoGoal('local')">−</a-button>
                     <span class="controls__score">{{ store.state.goalLocal }}</span>
                     <a-button type="primary" size="large" @click="markGoal('local')">+</a-button>
                   </div>
                   <div v-if="sportModule.features.shots" class="controls__shot-rows">
+                    <div class="controls__shot-row">
+                      <span class="controls__shot-label">PP</span>
+                      <span
+                        class="controls__shot-count"
+                        title="Goles en superioridad / oportunidades"
+                      >
+                        {{ formatPowerPlay(store.state, 'local') }}
+                      </span>
+                    </div>
+                    <div class="controls__shot-row">
+                      <span class="controls__shot-label">TM</span>
+                      <div class="controls__shot-controls">
+                        <a-button
+                          size="small"
+                          :disabled="hockeyTimeoutsUsedInPeriod(store.state, 'local') === 0"
+                          @click="undoTimeout('local')"
+                        >
+                          −
+                        </a-button>
+                        <span class="controls__shot-count">
+                          {{ hockeyTimeoutsUsedInPeriod(store.state, 'local') }}/{{
+                            HOCKEY_TIMEOUTS_PER_PERIOD
+                          }}
+                        </span>
+                        <a-button
+                          size="small"
+                          type="primary"
+                          :disabled="!canUseHockeyTimeout(store.state, 'local')"
+                          @click="takeTimeout('local')"
+                        >
+                          +
+                        </a-button>
+                      </div>
+                    </div>
                     <div class="controls__shot-row">
                       <span class="controls__shot-label">Tiro</span>
                       <div class="controls__shot-controls">
@@ -973,11 +1070,45 @@ onUnmounted(() => {
                     @update:value="(v: string) => store.setTeamColors(store.state.localColor, v)"
                   />
                   <div class="controls__score-controls">
-                    <a-button size="large" @click="store.removeLastGoal('visit')">−</a-button>
+                    <a-button size="large" @click="undoGoal('visit')">−</a-button>
                     <span class="controls__score">{{ store.state.goalVisit }}</span>
                     <a-button type="primary" size="large" @click="markGoal('visit')">+</a-button>
                   </div>
                   <div v-if="sportModule.features.shots" class="controls__shot-rows">
+                    <div class="controls__shot-row">
+                      <span class="controls__shot-label">PP</span>
+                      <span
+                        class="controls__shot-count"
+                        title="Goles en superioridad / oportunidades"
+                      >
+                        {{ formatPowerPlay(store.state, 'visit') }}
+                      </span>
+                    </div>
+                    <div class="controls__shot-row">
+                      <span class="controls__shot-label">TM</span>
+                      <div class="controls__shot-controls">
+                        <a-button
+                          size="small"
+                          :disabled="hockeyTimeoutsUsedInPeriod(store.state, 'visit') === 0"
+                          @click="undoTimeout('visit')"
+                        >
+                          −
+                        </a-button>
+                        <span class="controls__shot-count">
+                          {{ hockeyTimeoutsUsedInPeriod(store.state, 'visit') }}/{{
+                            HOCKEY_TIMEOUTS_PER_PERIOD
+                          }}
+                        </span>
+                        <a-button
+                          size="small"
+                          type="primary"
+                          :disabled="!canUseHockeyTimeout(store.state, 'visit')"
+                          @click="takeTimeout('visit')"
+                        >
+                          +
+                        </a-button>
+                      </div>
+                    </div>
                     <div class="controls__shot-row">
                       <span class="controls__shot-label">Tiro</span>
                       <div class="controls__shot-controls">
@@ -1050,6 +1181,8 @@ onUnmounted(() => {
                 <strong>Tiro</strong> = al arco sin contacto del arquero.
                 <strong>Atajada</strong> = el arquero de ese equipo detuvo el tiro.
                 Si el rival tiene una penalidad activa, se te preguntará si corresponde liberar al jugador.
+                <strong>PP</strong> = goles en superioridad / oportunidades.
+                <strong>TM</strong> = 1 tiempo muerto por periodo (pausa el reloj).
               </p>
               <div
                 v-if="store.state.shots.length"
